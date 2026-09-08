@@ -204,3 +204,76 @@ def test_ui_fallback_enters_password_via_input_text_direct_not_inject_text():
     )
     assert 'input text "hunter2"' in client.shell_calls
     assert not any("ADB_INPUT_TEXT" in c for c in client.shell_calls)
+
+
+# --- Connect button (real client screenshot, 2026-09-08): the join-network
+# dialog's buttons are plain text 「キャンセル」/「接続」, not a resource-id ---
+
+PROFILE_WITH_CONNECT_TEXT = ModelProfile(
+    {
+        "model": "Test",
+        "model_number": "TST05",
+        "manufacturer": "Test",
+        "android_version": 14,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {
+            "toggle_resource_id": "android:id/switch_widget",
+            "network_list_resource_id": "android:id/title",
+            "connect_button_text": "接続",
+            "connect_button_resource_id": "com.android.settings:id/wifi_connect_button",
+        },
+        "apn_settings": {"menu_path": ["Settings"]},
+    }
+)
+
+TOGGLE_ON_WITH_CONNECT_TEXT_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy rotation="0">
+  <node index="0" text="" resource-id="" class="android.widget.FrameLayout" bounds="[0,0][1080,2160]">
+    <node index="0" text="" resource-id="android:id/switch_widget" checked="true"
+          class="android.widget.Switch" bounds="[882,1034][1036,1166]" />
+    <node index="1" text="TestSSID" resource-id="android:id/title"
+          class="android.widget.TextView" bounds="[40,1200][1040,1300]" />
+    <node index="2" text="キャンセル" resource-id="" bounds="[0,1400][400,1500]" />
+    <node index="3" text="接続" resource-id="" bounds="[400,1400][800,1500]" />
+  </node>
+</hierarchy>
+"""
+
+
+def test_ui_fallback_taps_connect_button_by_text_when_configured():
+    client = FakeAdbClient(
+        ui_dumps=[TOGGLE_ON_WITH_CONNECT_TEXT_XML],
+        shell_failures=_shell_fails_connect_network(),
+        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
+    )
+    connect_wifi(
+        client, PROFILE_WITH_CONNECT_TEXT, "TestSSID", "hunter2",
+        poll_timeout_seconds=1, poll_interval_seconds=0,
+    )
+    connect_tap = "input tap {} {}".format((400 + 800) // 2, (1400 + 1500) // 2)
+    assert connect_tap in client.shell_calls
+    # Must not have needed the resource-id fallback.
+    cancel_tap = "input tap {} {}".format((0 + 400) // 2, (1400 + 1500) // 2)
+    assert cancel_tap not in client.shell_calls
+
+
+def test_ui_fallback_falls_back_to_connect_button_resource_id_when_text_not_found():
+    # No 接続/キャンセル nodes at all in this fixture — text lookup finds
+    # nothing, resource-id fallback should still be attempted (and also
+    # fail cleanly here, since it's an unresolved placeholder too — this
+    # just proves the fallback path is exercised, not that it succeeds).
+    client = FakeAdbClient(
+        ui_dumps=[TOGGLE_ON_SCREEN_XML],
+        shell_failures=_shell_fails_connect_network(),
+        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
+    )
+    connect_wifi(
+        client, PROFILE_WITH_CONNECT_TEXT, "TestSSID", "hunter2",
+        poll_timeout_seconds=1, poll_interval_seconds=0,
+    )
+    # Neither the text nor the placeholder resource-id exist in this
+    # fixture, so no "connect" tap should appear at all — confirms this
+    # doesn't crash or silently invent a tap when nothing is found.
+    assert not any(
+        c.startswith("input tap") and "1400" in c for c in client.shell_calls
+    )

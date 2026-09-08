@@ -119,14 +119,24 @@ wifi_settings:
   # be used with `text=<SSID>` to disambiguate; find_resource_id() raises
   # AmbiguousResourceIdError otherwise, by design.
   network_list_resource_id: "android:id/title"
-  # NOT resolved — the captured dump only covers the network *list* screen.
-  # Tapping an unsaved SSID opens a separate "Connect to network" dialog
-  # that was never dumped, so these two remain Stage A placeholders.
+  # NOT resolved — no XML dump of the "Connect to network" dialog exists
+  # (tapping an unsaved SSID opens it; only the network *list* screen was
+  # ever dumped). Kept as a fallback in wifi_setup.py's _tap_connect_button()
+  # in case a future model needs it, but on real testing (2026-09-08) the
+  # tap against this placeholder id silently found nothing — see
+  # connect_button_text below for what actually works on this device.
   # TODO(real-device): replace with captured resource-id (password entry field
   # in the "Connect to network" dialog)
   password_field_resource_id: "com.android.settings:id/wifi_password"
   # TODO(real-device): replace with captured resource-id (dialog "Connect" button)
   connect_button_resource_id: "com.android.settings:id/wifi_connect_button"
+  # RESOLVED (real — direct observation via screenshot, 2026-09-08, not an
+  # XML dump): the dialog's two buttons render as plain text 「キャンセル」/
+  # 「接続」, same pattern as the APN save dialog's 保存/キャンセル pair.
+  # wifi_setup.py's _tap_connect_button() tries this first (tap_by_text),
+  # falling back to connect_button_resource_id above only if this isn't
+  # configured or isn't found.
+  connect_button_text: "接続"
 
 apn_settings:
   # Real navigation path confirmed (docs/record.md): 設定 →

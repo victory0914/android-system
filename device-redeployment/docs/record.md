@@ -116,8 +116,17 @@ accumulates.
   PENDING_REAL_DEVICE_DATA.md ("Resolved — text input mechanism") for the
   full writeup, which also covers broadening the same fix to APN's
   Name/APN fields (same device, same underlying dependency, so almost
-  certainly the same silent failure waiting there too). **Not yet
-  re-verified against real hardware** — next run is the check.
+  certainly the same silent failure waiting there too).
+- *2026-09-08 (second live test, after the `input_text_direct()` fix):*
+  Password entry now works — confirmed by the client screenshot showing
+  「接続」/「キャンセル」 as the join-network dialog's two buttons. But
+  `wifi_setup.py` still couldn't tap Connect: `connect_button_resource_id`
+  was (like `password_field_resource_id`) an unconfirmed Stage A
+  placeholder, and the tap's return value was never even checked. Fixed by
+  adding `connect_button_text: "接続"` — plain text, same 保存/キャンセル
+  pattern already proven for the APN save dialog — tried first, with the
+  placeholder resource-id kept only as a secondary fallback. **Not yet
+  re-verified against real hardware.**
 
 ### APN settings — relevant to `apn_setup.py`
 - *2026-09-04:* Navigation path confirmed:

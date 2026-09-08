@@ -20,6 +20,7 @@ from src.device.ui_automator import (
     input_text_direct,
     navigate_menu_path,
     node_is_checked,
+    tap_by_text,
     tap_resource_id,
 )
 
@@ -97,6 +98,36 @@ def _ensure_wifi_toggle_on(client: AdbClientProtocol, toggle_resource_id: str) -
         logger.debug("wifi toggle %r already on; not tapping it", toggle_resource_id)
         return
     tap_resource_id(client, toggle_resource_id)
+
+
+def _tap_connect_button(client: AdbClientProtocol, wifi: dict) -> bool:
+    """Tap the join-network dialog's "Connect" button.
+
+    Prefers `connect_button_text` (plain visible text — real client
+    screenshot, 2026-09-08, showed this dialog's two buttons as plain text
+    「キャンセル」/「接続」, same pattern already confirmed for the APN save
+    dialog's 保存/キャンセル) over `connect_button_resource_id` (a Stage A
+    placeholder never confirmed against real hardware — the tap almost
+    certainly did nothing on the real device, since nothing checked its
+    return value). Falls back to the resource-id if no text is configured
+    or the text tap doesn't find anything, in case a future model needs it.
+    """
+    connect_text = wifi.get("connect_button_text")
+    if connect_text:
+        if tap_by_text(client, connect_text):
+            return True
+        logger.warning("wifi connect button (text %r) not found on screen", connect_text)
+
+    connect_button = wifi.get("connect_button_resource_id")
+    if connect_button:
+        if tap_resource_id(client, connect_button):
+            return True
+        logger.warning(
+            "wifi connect button %r (unresolved/best-guess id) not found either",
+            connect_button,
+        )
+
+    return False
 
 
 def _looks_like_wifi_settings_screen(client: AdbClientProtocol, wifi: dict) -> bool:
@@ -188,9 +219,7 @@ def _try_ui_connect(
     # (APN's MCC/MNC entry) and needs no extra app installed.
     input_text_direct(client, password)
 
-    connect_button = wifi.get("connect_button_resource_id")
-    if connect_button:
-        tap_resource_id(client, connect_button)
+    _tap_connect_button(client, wifi)
 
 
 def connect_wifi(
