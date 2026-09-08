@@ -76,25 +76,60 @@ class ForbiddenTapTargetError(Exception):
     flow and must never be tapped programmatically, even by mistake."""
 
 
-def dump_ui(client: AdbClientProtocol) -> str:
-    """Run `uiautomator dump`, pull the resulting XML via the client, and
-    return it as a string. Clean up the on-device temp file afterward."""
+_DUMP_MAX_ATTEMPTS = 3
+_DUMP_RETRY_DELAY_SECONDS = 1.0
+
+
+def _dump_ui_once(client: AdbClientProtocol) -> str:
+    """Single dump+pull attempt, no retry. Raises AdbCommandError if the
+    pull fails — real-hardware testing (2026-09-08) found this used to be
+    silently unchecked, so a failed pull (uiautomator dump not having
+    written the file yet — a known intermittent issue right after a screen
+    transition) crashed with a raw FileNotFoundError from reading a file
+    that was never created, instead of a clear, retriable error."""
     remote_path = f"{_REMOTE_DUMP_DIR}/window_dump_{uuid.uuid4().hex}.xml"
     client.shell(f"uiautomator dump {remote_path}")
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        local_path = str(Path(tmp_dir) / "window_dump.xml")
-        client.pull(remote_path, local_path)
-        xml_text = Path(local_path).read_text(encoding="utf-8")
-
-    # Best-effort cleanup of the on-device temp file — don't fail the whole
-    # dump just because cleanup couldn't run.
     try:
-        client.shell(f"rm -f {remote_path}")
-    except Exception:
-        pass
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            local_path = str(Path(tmp_dir) / "window_dump.xml")
+            if not client.pull(remote_path, local_path):
+                raise AdbCommandError(
+                    f"pull {remote_path}",
+                    "uiautomator dump pull failed (file may not have been "
+                    "ready yet — uiautomator dump is known to intermittently "
+                    "fail right after a screen transition)",
+                )
+            return Path(local_path).read_text(encoding="utf-8")
+    finally:
+        # Best-effort cleanup of the on-device temp file — don't fail the
+        # whole dump just because cleanup couldn't run.
+        try:
+            client.shell(f"rm -f {remote_path}")
+        except Exception:
+            pass
 
-    return xml_text
+
+def dump_ui(client: AdbClientProtocol) -> str:
+    """Run `uiautomator dump`, pull the resulting XML via the client, and
+    return it as a string. Cleans up the on-device temp file afterward.
+
+    Retries a few times on failure: `uiautomator dump` is known to
+    intermittently fail to produce a readable file (e.g. right after a
+    screen transition) — confirmed on real hardware, 2026-09-08 (APN menu
+    navigation, immediately after a screen change). Most calls succeed on
+    the first try; this only adds latency on the rare failure.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, _DUMP_MAX_ATTEMPTS + 1):
+        try:
+            return _dump_ui_once(client)
+        except (AdbCommandError, OSError) as exc:
+            last_error = exc
+            if attempt < _DUMP_MAX_ATTEMPTS:
+                time.sleep(_DUMP_RETRY_DELAY_SECONDS)
+    raise AdbCommandError(
+        "uiautomator dump", f"failed after {_DUMP_MAX_ATTEMPTS} attempts: {last_error}"
+    )
 
 
 def _raise_if_hazardous(ui_xml: str) -> None:

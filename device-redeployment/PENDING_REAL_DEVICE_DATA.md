@@ -6,47 +6,49 @@ outstanding. See `docs/record.md` for the full session notes (test logs,
 navigation paths, capture methodology, judgment calls) behind every entry
 here — this file is the checklist; that one is the evidence.
 
-**Status as of 2026-09-08 (Stage B, ongoing):** SHG10 has real Wi-Fi + full
-APN data resolved, **including the Save flow**. Real Wi-Fi credentials
-(`earth5_1` / `earth5_1`) were supplied by the client and are in
-`config/network.yaml` (gitignored, local to the client PC only). The
-shell-command connect path is confirmed blocked by device permissions
-(`SecurityException`); the UI fallback path reaches the join-network
-dialog correctly, but a live test caught `inject_text()`'s ADB Keyboard
-broadcast silently not entering the password at all — fixed by switching
-to `input_text_direct()` (see "Resolved — text input mechanism" below).
-**Not yet re-verified against real hardware after that fix** — next run
-is the thing to watch. SHG10's wizard is on a photograph-derived,
-text-matching config — real dumps for the wizard are **not obtainable on
-any model, ever** (structural ADB/factory-reset constraint, see
-docs/record.md). **SOG08, SOG07, and SHG07 are entirely untouched** — still
-100% Stage A placeholders, not started.
+**Status as of 2026-09-08 (Stage B, ongoing):** **Wi-Fi connects
+end-to-end on real hardware** — confirmed by a client screenshot showing
+`earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. This is the first
+Phase 2 step proven working on a real device against a real network, not
+just structurally exercised. SHG10 also has full APN data resolved,
+including the Save flow, but APN itself has not yet completed
+successfully end-to-end — the most recent blocker was a `dump_ui()` crash
+(now fixed, not yet re-verified; see "Highest priority" below).
+SHG10's wizard is on a photograph-derived, text-matching config — real
+dumps for the wizard are **not obtainable on any model, ever** (structural
+ADB/factory-reset constraint, see docs/record.md). **SOG08, SOG07, and
+SHG07 are entirely untouched** — still 100% Stage A placeholders, not
+started.
 
 ## Highest priority
 
-### Re-verify Wi-Fi connection against real hardware after the input-mechanism fix
+### Re-verify APN configuration against real hardware after the dump_ui() fix
 
-Not yet confirmed working end-to-end. Real credentials are in place
-(`earth5_1`); the code now uses `input_text_direct()` for password entry
-instead of the ADB Keyboard broadcast that was silently failing. Next real
-run against `earth5_1` (or whichever network is actually in range at the
-time) is what confirms or refutes this.
+Not yet confirmed working end-to-end. The most recent real run got through
+Wi-Fi (confirmed connected) and into APN menu navigation, then crashed
+with a raw `FileNotFoundError` from `ui_automator.dump_ui()` never
+checking whether its `pull()` call actually succeeded — fixed with a
+clear error + automatic retry (uiautomator dump is known to intermittently
+fail right after a screen transition, which is exactly what had just
+happened). Next real run is what confirms or refutes this actually gets
+APN entry (and the save flow) working end-to-end.
 
-Separately, worth keeping in mind: a real client-PC scan (2026-09-08)
-showed the device's *actual* in-range networks were, at that moment,
-different from both `wifi_list_SHG10.xml`'s original capture and from
-`earth5_1` (`cityroam`, `JBCshoji`, `GatewayIkebukuro5fWifi1`,
-`USPOT_7407541_2.4G`, `FREE_Wi-Fi_and_TOKYO`, `USPOT02_MESH_132119436_001`,
-`rv440m-34a2c1-1/-2`, `iPhone`) — Wi-Fi scan results can clearly vary
-run to run at this location; a "not found in scanned list" result doesn't
-automatically mean the credentials are wrong.
+### Wi-Fi scan results vary run to run at this location
+
+Not a bug, just worth remembering: a real client-PC scan (2026-09-08)
+showed the device's in-range networks were, at that moment, different from
+both `wifi_list_SHG10.xml`'s original capture and from `earth5_1`
+(`cityroam`, `JBCshoji`, `GatewayIkebukuro5fWifi1`, `USPOT_7407541_2.4G`,
+`FREE_Wi-Fi_and_TOKYO`, `USPOT02_MESH_132119436_001`, `rv440m-34a2c1-1/-2`,
+`iPhone`) — a "not found in scanned list" result doesn't automatically mean
+the credentials are wrong.
 
 **Wi-Fi passwords cannot be extracted via adb, ever, on a non-rooted
 device** (confirmed: the shell user lacks the wifi permissions needed even
 to reconnect a saved network — same `SecurityException` blocks
 `cmd wifi connect-network` entirely, and reading `WifiConfigStore.xml`
 needs root) — noted here in case a *different* network needs credentials
-later; this doesn't apply now that real ones are in hand for `earth5_1`.
+later; real ones are already in hand for `earth5_1`.
 
 ### Two wizard button labels — still the only wizard gap
 
@@ -71,7 +73,7 @@ gaps are closed.
 (`[SHARP] KDDI SHG10 (Android 14)`), not Android 12 as the original task
 spec assumed. Config and tests now reflect 14.
 
-### Resolved — Wi-Fi (`tests/fixtures/wifi_list_SHG10.xml`)
+### Resolved — Wi-Fi (`tests/fixtures/wifi_list_SHG10.xml`, plus live testing 2026-09-08)
 - `wifi_settings.toggle_resource_id` = `android:id/switch_widget` (unambiguous,
   single match) — checked via `node_is_checked()` before tapping (see
   "Toggle-tap safety" below)
@@ -83,6 +85,19 @@ spec assumed. Config and tests now reflect 14.
   hardware: reaches the screen regardless of starting point, including from
   a bare home screen via `--skip-wizard`), falling back to this menu_path
   only if that intent doesn't land correctly
+- `wifi_settings.connect_button_text` = `接続` (real — confirmed via
+  screenshot, not a dump) — join-network dialog buttons are plain text
+  (`キャンセル`/`接続`), tried before the still-unresolved
+  `connect_button_resource_id` placeholder
+- **Password entry mechanism**: real testing found `inject_text()` (ADB
+  Keyboard broadcast) silently does nothing on this device — switched to
+  `input_text_direct()` (`adb shell input text`); see "Resolved — text
+  input mechanism" below
+- **End-to-end connection confirmed on real hardware** (2026-09-08):
+  `earth5_1` / 接続済み, WPA3-Personal, 5GHz — the full chain (shell attempt
+  fails as expected → UI fallback → intent navigation → SSID tap → toggle
+  check → password entry → connect tap → `dumpsys wifi` poll confirms) all
+  worked together against a real network
 
 ### Resolved — APN navigation & fields (`tests/fixtures/apn_entry_{top,middle,bottom,filled}_SHG10.xml`)
 - `apn_settings.menu_path`: same as Wi-Fi's, then the gear icon
@@ -219,14 +234,26 @@ handling the *last* configured screen (`aquos_notify` /
 「AQUOS Homeの通知アクセス」) as completion. Deliberate simplification, not
 an oversight.
 
-### `--skip-wizard` testing flag (infrastructure, not device data)
-Added 2026-09-08 after discovering the SHG10 test unit was already
-provisioned from an earlier session (landed on the home screen instead of
-any wizard screen). `main_phase2.py --skip-wizard` bypasses `run_wizard()`
-entirely for manual testing against an already-provisioned device.
-Deliberately **not** exposed on `run_phase2_batch()` (the production batch
-path) — only `Slot.run_init_apn()` and `scheduler.run_slot_with_retries()`
-accept it, both requiring an explicit, per-call opt-in.
+### `--skip-wizard` / `--skip-wifi` testing flags (infrastructure, not device data)
+`--skip-wizard` added 2026-09-08 after discovering the SHG10 test unit was
+already provisioned from an earlier session (landed on the home screen
+instead of any wizard screen). Bypasses `run_wizard()` entirely for manual
+testing against an already-provisioned device. Deliberately **not**
+exposed on `run_phase2_batch()` (the production batch path) — only
+`Slot.run_init_apn()` and `scheduler.run_slot_with_retries()` accept it,
+both requiring an explicit, per-call opt-in. (`--skip-wifi` was proposed
+the same day, same pattern, but wasn't ultimately needed once Wi-Fi
+started working — not wired up.)
+
+### `dump_ui()` retry on transient pull failure (infrastructure, not device data)
+Added 2026-09-08 after a real crash: `uiautomator dump`'s pull is known to
+intermittently fail right after a screen transition, and `dump_ui()` never
+checked `client.pull()`'s return value — a failed pull crashed with a raw
+`FileNotFoundError` from reading a file that was never written. Now raises
+a clear `AdbCommandError` and retries up to 3 times (1s delay) before
+giving up. Fixed in the shared `dump_ui()`, so it protects every
+tap/find call across wizard, Wi-Fi, and APN — not specific to where it
+happened to first surface (APN menu navigation).
 
 ## SOG08 (Xperia Ace III), SOG07 (Xperia 10 IV), SHG07 (AQUOS sense6s) —
 ## entirely untouched, out of scope for this pass

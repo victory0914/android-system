@@ -125,8 +125,16 @@ accumulates.
   placeholder, and the tap's return value was never even checked. Fixed by
   adding `connect_button_text: "接続"` — plain text, same 保存/キャンセル
   pattern already proven for the APN save dialog — tried first, with the
-  placeholder resource-id kept only as a secondary fallback. **Not yet
-  re-verified against real hardware.**
+  placeholder resource-id kept only as a secondary fallback.
+- *2026-09-08 (third live test, after the connect-button fix):* **Wi-Fi
+  connects end-to-end on real hardware** — client screenshot confirmed
+  `earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. First fully
+  working Phase 2 step, real device to real network. (The connect-button
+  tap only worked on the first of three attempts in that run — later
+  retries saw a "connect button not found" warning, but that's correct:
+  once already connected, the same network's row opens a "network
+  details" screen instead of the join dialog, which has no 接続 button at
+  all — nothing to fix there.)
 
 ### APN settings — relevant to `apn_setup.py`
 - *2026-09-04:* Navigation path confirmed:
@@ -222,6 +230,20 @@ accumulates.
   (confirmed working — reaches the screen regardless of starting point),
   with a read-only landing check before committing to skip any menu_path
   steps, falling back to the original behavior unchanged otherwise.
+- *2026-09-08:* First real run to reach APN navigation crashed with
+  `[Errno 2] No such file or directory` on a local temp path, immediately
+  after `apn_setup.py` logged a successful screen transition. Root cause:
+  `ui_automator.dump_ui()` never checked `client.pull()`'s return value —
+  when the pull silently failed (uiautomator dump is known to
+  intermittently fail to produce a readable file right after a screen
+  transition, which is exactly what had just happened), the code read a
+  local file that was never written, crashing with a raw
+  `FileNotFoundError` instead of a clear, retriable error. Fixed: `pull()`
+  failure now raises `AdbCommandError` with a clear message, and the whole
+  dump+pull is retried up to 3 times with a 1s delay before giving up —
+  this is a well-known class of `uiautomator dump` flakiness, not specific
+  to this device, so the fix is in the shared `dump_ui()` used by every
+  tap/find call, not just the APN path that happened to surface it.
 
 ### Windows/client-PC environment — relevant to deployment & setup docs
 - *2026-09-04:* Freshly-extracted executables on the client PC are **silently

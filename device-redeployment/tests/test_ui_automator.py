@@ -9,6 +9,7 @@ PENDING_REAL_DEVICE_DATA.md).
 
 import pytest
 
+from src.device.adb_client import AdbCommandError
 from src.device.ui_automator import (
     AmbiguousResourceIdError,
     ForbiddenTapTargetError,
@@ -126,6 +127,40 @@ def test_dump_ui_returns_pulled_xml():
     assert xml == SIMPLE_SCREEN_XML
     assert any(call.startswith("uiautomator dump") for call in client.shell_calls)
     assert any(call.startswith("rm -f") for call in client.shell_calls)
+
+
+class FlakyPullClient(FakeAdbClient):
+    """pull() fails the first `fail_count` calls, then behaves normally.
+    Models a real bug: uiautomator dump's pull can intermittently fail
+    right after a screen transition (confirmed on real hardware,
+    2026-09-08) — dump_ui() used to not check pull()'s return value at
+    all, crashing with a raw FileNotFoundError instead of retrying or
+    failing clearly."""
+
+    def __init__(self, *, fail_count: int, **kwargs):
+        super().__init__(**kwargs)
+        self.fail_count = fail_count
+        self._pull_calls = 0
+
+    def pull(self, remote_path, local_path):
+        self._pull_calls += 1
+        if self._pull_calls <= self.fail_count:
+            return False
+        return super().pull(remote_path, local_path)
+
+
+def test_dump_ui_retries_transient_pull_failure_and_succeeds(monkeypatch):
+    monkeypatch.setattr("src.device.ui_automator.time.sleep", lambda _s: None)
+    client = FlakyPullClient(fail_count=1, ui_dumps=[SIMPLE_SCREEN_XML])
+    xml = dump_ui(client)
+    assert xml == SIMPLE_SCREEN_XML
+
+
+def test_dump_ui_raises_clear_error_after_exhausting_retries(monkeypatch):
+    monkeypatch.setattr("src.device.ui_automator.time.sleep", lambda _s: None)
+    client = FlakyPullClient(fail_count=99, ui_dumps=[SIMPLE_SCREEN_XML])
+    with pytest.raises(AdbCommandError):
+        dump_ui(client)
 
 
 def test_tap_resource_id_taps_center_when_found():
