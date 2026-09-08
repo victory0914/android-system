@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -67,6 +68,35 @@ def _configure_logging(level_name: str, log_dir: str) -> None:
             logging.FileHandler(Path(log_dir) / "main_phase2.log", encoding="utf-8"),
         ],
     )
+
+
+def _resolve_adb_path(adb_cfg: dict) -> str:
+    """Turn config/settings.yaml's `adb.platform_tools_path` — a *directory*
+    (e.g. "C:\\platform-tools") — into the actual `adb` executable path to
+    invoke. Passing the directory itself straight through used to be handed
+    to subprocess as the command, which fails with OSError on every single
+    call; AdbClient.is_connected() swallows that and returns False, which
+    then misleadingly looks exactly like "device not connected" even when
+    `adb devices` works fine in a normal shell. Falls back to bare "adb"
+    (resolved via PATH) if platform_tools_path isn't configured or doesn't
+    actually contain an adb executable, logging a clear warning either way
+    rather than failing silently like the bug this replaces."""
+    platform_tools_path = adb_cfg.get("platform_tools_path")
+    if not platform_tools_path:
+        return "adb"
+
+    exe_name = "adb.exe" if os.name == "nt" else "adb"
+    candidate = Path(platform_tools_path) / exe_name
+    if candidate.is_file():
+        return str(candidate)
+
+    logger.warning(
+        "adb.platform_tools_path (%r) does not contain %r; falling back to "
+        "'adb' resolved via PATH. If that's not found either, every ADB "
+        "call will fail with a misleading error.",
+        platform_tools_path, exe_name,
+    )
+    return "adb"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -124,8 +154,8 @@ def main(argv: list[str] | None = None) -> int:
 
     network_config = _load_network_config(logger)
 
-    adb_path = adb_cfg.get("platform_tools_path")
-    client = AdbClient(args.serial, adb_path=str(adb_path) if adb_path else "adb")
+    adb_path = _resolve_adb_path(adb_cfg)
+    client = AdbClient(args.serial, adb_path=adb_path)
 
     slot = Slot(args.serial, client, max_retry=max_retry)
     logger.info(

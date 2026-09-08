@@ -44,6 +44,9 @@ class AdbClientProtocol(Protocol):
         ...
 
     def is_connected(self) -> bool:
+        """May raise AdbCommandError if adb itself can't be invoked at all
+        (e.g. a misconfigured adb_path) — that's distinct from a normal
+        False (adb ran fine, this serial just isn't listed)."""
         ...
 
     def push(self, local_path: str, remote_path: str) -> bool:
@@ -60,8 +63,16 @@ class AdbClient:
         self.serial = serial
         self.adb_path = adb_path
 
-    def _run(self, args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
-        full_command = [self.adb_path, "-s", self.serial, *args]
+    def _run_raw(self, args: list[str], timeout: int) -> subprocess.CompletedProcess:
+        """Run `adb <args>` with no `-s <serial>` prefix — some commands
+        (like `devices`) are global, not per-device. Raises AdbCommandError
+        if adb itself can't be executed at all (e.g. adb_path points at a
+        directory instead of the actual executable — a real bug this
+        guards against: that used to silently look identical to "device not
+        connected" rather than the config problem it actually is), or on
+        timeout. Non-zero exit is NOT an error here — callers interpret
+        stdout/returncode themselves."""
+        full_command = [self.adb_path, *args]
         try:
             return subprocess.run(
                 full_command,
@@ -75,8 +86,16 @@ class AdbClient:
                 " ".join(full_command), f"timed out after {timeout}s"
             ) from exc
         except OSError as exc:
-            # e.g. adb binary not found on PATH
-            raise AdbCommandError(" ".join(full_command), str(exc)) from exc
+            raise AdbCommandError(
+                " ".join(full_command),
+                f"could not execute adb at {self.adb_path!r}: {exc}. Is "
+                "adb_path correct? (pointing at a directory instead of the "
+                "adb executable itself is a common mistake — see "
+                "config/settings.yaml's adb.platform_tools_path)",
+            ) from exc
+
+    def _run(self, args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
+        return self._run_raw(["-s", self.serial, *args], timeout)
 
     def shell(self, command: str, timeout: int = 30) -> str:
         """Run `adb -s <serial> shell <command>` and return stdout.
@@ -101,17 +120,12 @@ class AdbClient:
         return result.returncode == 0 and "Success" in result.stdout
 
     def is_connected(self) -> bool:
-        """Return True if `adb devices` currently lists this serial as 'device'."""
-        try:
-            result = subprocess.run(
-                [self.adb_path, "devices"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-        except (subprocess.TimeoutExpired, OSError):
-            return False
+        """Return True if `adb devices` currently lists this serial as
+        'device'. Raises AdbCommandError if adb itself couldn't be run at
+        all (bad adb_path, timeout) — that's a setup problem, not "device
+        not connected", and callers/logs should be able to tell the
+        difference rather than both looking like the same failure."""
+        result = self._run_raw(["devices"], timeout=10)
         for line in result.stdout.splitlines():
             parts = line.split()
             if len(parts) == 2 and parts[0] == self.serial and parts[1] == "device":
