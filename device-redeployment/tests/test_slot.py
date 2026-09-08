@@ -95,6 +95,50 @@ def test_run_init_apn_device_prep_failure_does_not_block_success():
     assert slot.state == SlotState.LOGIN_INSTALL
 
 
+def test_run_init_apn_skip_wizard_bypasses_wizard_entirely():
+    """--skip-wizard (main_phase2.py) is for testing against a device that's
+    already past OOBE — e.g. a home screen with none of the wizard's
+    resource-ids present at all. If skip_wizard didn't actually bypass
+    run_wizard(), this would fail (required step "wiz:next" not found);
+    since it succeeds, the wizard step was genuinely never invoked."""
+    home_screen_no_wizard_elements_xml = """<hierarchy>
+  <node text="Settings" bounds="[0,200][100,300]" />
+  <node text="Network" bounds="[0,300][100,400]" />
+  <node resource-id="apn:name" bounds="[0,400][100,500]" />
+  <node resource-id="apn:apn" bounds="[0,500][100,600]" />
+  <node resource-id="apn:save" bounds="[0,600][100,700]" />
+</hierarchy>"""
+    client = FakeAdbClient(
+        ui_dumps=[home_screen_no_wizard_elements_xml],
+        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
+        connected=True,
+    )
+    slot = Slot("slot-skip", client, max_retry=3)
+
+    result = slot.run_init_apn(_profile(), NETWORK_CONFIG, skip_wizard=True)
+
+    assert result is True
+    assert slot.state == SlotState.LOGIN_INSTALL
+
+
+def test_run_init_apn_without_skip_wizard_fails_on_same_screen(monkeypatch):
+    """Sanity check for the test above: the same home-screen dump, without
+    skip_wizard, must fail at the wizard step (proving the previous test's
+    success really did come from bypassing it, not from the wizard
+    tolerating a missing element some other way)."""
+    monkeypatch.setattr("src.phase2.wizard_walkthrough.time.sleep", lambda _s: None)
+    home_screen_no_wizard_elements_xml = """<hierarchy>
+  <node text="Settings" bounds="[0,200][100,300]" />
+</hierarchy>"""
+    client = FakeAdbClient(ui_dumps=[home_screen_no_wizard_elements_xml], connected=True)
+    slot = Slot("slot-no-skip", client, max_retry=3)
+
+    result = slot.run_init_apn(_profile(), NETWORK_CONFIG, skip_wizard=False)
+
+    assert result is False
+    assert slot.state == SlotState.FAILED
+
+
 def test_run_init_apn_step_fails_then_succeeds_on_retry(monkeypatch):
     # Skip the real backoff sleep so the test stays fast.
     monkeypatch.setattr("src.phase2.wizard_walkthrough.time.sleep", lambda _seconds: None)
@@ -179,3 +223,26 @@ def test_run_slot_with_retries_recovers_after_a_transient_failure(monkeypatch):
 
     assert final_state == SlotState.LOGIN_INSTALL
     assert slot.retry_count == 1
+
+
+def test_run_slot_with_retries_forwards_skip_wizard():
+    """main_phase2.py --skip-wizard flows through run_slot_with_retries()
+    down to Slot.run_init_apn() — a home-screen dump with no wizard
+    elements at all must still succeed when skip_wizard=True."""
+    home_screen_xml = """<hierarchy>
+  <node text="Settings" bounds="[0,200][100,300]" />
+  <node text="Network" bounds="[0,300][100,400]" />
+  <node resource-id="apn:name" bounds="[0,400][100,500]" />
+  <node resource-id="apn:apn" bounds="[0,500][100,600]" />
+  <node resource-id="apn:save" bounds="[0,600][100,700]" />
+</hierarchy>"""
+    client = FakeAdbClient(
+        ui_dumps=[home_screen_xml],
+        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
+    )
+    slot = Slot("slot-7", client, max_retry=3)
+
+    final_state = run_slot_with_retries(slot, _profile(), NETWORK_CONFIG, skip_wizard=True)
+
+    assert final_state == SlotState.LOGIN_INSTALL
+    assert slot.retry_count == 0

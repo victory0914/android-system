@@ -18,15 +18,23 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_WORKERS = 10
 
 
-def run_slot_with_retries(slot: Slot, profile: ModelProfile, network_config: dict) -> SlotState:
+def run_slot_with_retries(
+    slot: Slot, profile: ModelProfile, network_config: dict, *, skip_wizard: bool = False
+) -> SlotState:
     """Run one slot to completion: call Slot.run_init_apn() and, on failure,
     increment slot.retry_count and retry up to slot.max_retry, then mark
     ESCALATED and log it. Never lets an exception escape — callers
     (run_phase2_batch, or a test driving a single slot directly) rely on
-    this to keep one bad slot from taking down anything else."""
+    this to keep one bad slot from taking down anything else.
+
+    `skip_wizard` is forwarded to Slot.run_init_apn() — see its docstring.
+    Only main_phase2.py's `--skip-wizard` flag sets this; run_phase2_batch()
+    has no equivalent parameter on purpose, so it can never reach a
+    production batch run by accident.
+    """
     while True:
         try:
-            success = slot.run_init_apn(profile, network_config)
+            success = slot.run_init_apn(profile, network_config, skip_wizard=skip_wizard)
         except Exception as exc:  # noqa: BLE001 - deliberately broad: one slot
             # must never crash the batch for the others.
             success = False

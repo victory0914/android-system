@@ -63,11 +63,23 @@ class Slot:
         self.max_retry = max_retry
         self.last_error: str | None = None
 
-    def run_init_apn(self, profile: ModelProfile, network_config: dict) -> bool:
+    def run_init_apn(
+        self, profile: ModelProfile, network_config: dict, *, skip_wizard: bool = False
+    ) -> bool:
         """Execute the Phase 2 flow (wizard, Wi-Fi, APN) for this slot's
         device via the phase2/ module functions. Update self.state as it
         progresses. Return True on success, False on failure (and set
-        self.last_error with a human-readable reason)."""
+        self.last_error with a human-readable reason).
+
+        `skip_wizard`: bypass the setup-wizard step entirely and go straight
+        to Wi-Fi/APN. For manual testing against a device that's already
+        past OOBE (e.g. re-testing the same unit repeatedly without a fresh
+        factory reset each time) — never intended for a production batch
+        run, since it removes the "did the device actually finish setup"
+        check. `main_phase2.py --skip-wizard` is the only place this is
+        wired up to an explicit, deliberate opt-in; `run_phase2_batch()`
+        has no equivalent knob on purpose.
+        """
         self.state = SlotState.INIT_APN
         self.last_error = None
 
@@ -80,9 +92,18 @@ class Slot:
 
             _prep_device(self.client, self.slot_id)
 
-            logger.info("slot %s: running setup wizard", self.slot_id)
-            if not run_wizard(self.client, profile):
-                raise RuntimeError("setup wizard did not complete (required step missing)")
+            if skip_wizard:
+                logger.warning(
+                    "slot %s: skip_wizard=True - assuming the device is "
+                    "already past setup (e.g. re-testing an already-"
+                    "provisioned unit). This bypasses a real safety check; "
+                    "never use this for a production batch run.",
+                    self.slot_id,
+                )
+            else:
+                logger.info("slot %s: running setup wizard", self.slot_id)
+                if not run_wizard(self.client, profile):
+                    raise RuntimeError("setup wizard did not complete (required step missing)")
 
             logger.info("slot %s: connecting wifi", self.slot_id)
             if not connect_wifi(

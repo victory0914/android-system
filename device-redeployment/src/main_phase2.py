@@ -122,6 +122,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=str(DEFAULT_SETTINGS_PATH),
         help="path to config/settings.yaml (default: %(default)s)",
     )
+    parser.add_argument(
+        "--skip-wizard",
+        action="store_true",
+        help="Skip the setup-wizard step and go straight to Wi-Fi/APN. For "
+        "manual testing against a device that's already past OOBE (e.g. "
+        "re-testing the same already-provisioned unit repeatedly without a "
+        "fresh factory reset each time). Never use this for a real "
+        "redeployment run — it removes the check that the device actually "
+        "finished setup.",
+    )
     return parser
 
 
@@ -159,11 +169,14 @@ def main(argv: list[str] | None = None) -> int:
 
     slot = Slot(args.serial, client, max_retry=max_retry)
     logger.info(
-        "starting Phase 2 run: serial=%s model=%s (%s)",
+        "starting Phase 2 run: serial=%s model=%s (%s)%s",
         args.serial, args.model, profile.model,
+        " [skip_wizard]" if args.skip_wizard else "",
     )
 
-    final_state = run_slot_with_retries(slot, profile, network_config)
+    final_state = run_slot_with_retries(
+        slot, profile, network_config, skip_wizard=args.skip_wizard
+    )
 
     if final_state == SlotState.LOGIN_INSTALL:
         logger.info("SUCCESS: device %s reached LOGIN_INSTALL", args.serial)
