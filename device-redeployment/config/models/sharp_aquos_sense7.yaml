@@ -1,0 +1,211 @@
+# Model profile: AQUOS sense7 (SHG10), SHARP (KDDI branding), Android 14
+#
+# STAGE B: this file has real data resolved from actual uiautomator dumps
+# captured on unit serial 352063910272451 (2026-09-04/08). See docs/record.md
+# for the full session notes and tests/fixtures/*_SHG10.xml for the raw
+# captures these values were extracted from, plus
+# tests/test_real_shg10_fixtures.py which exercises the disambiguation logic
+# directly against those real files. PENDING_REAL_DEVICE_DATA.md tracks
+# everything still outstanding for this model.
+#
+# NOTE: the real device's Android version is 14 (confirmed via `adb` —
+# `[SHARP] KDDI SHG10 (Android 14)`), correcting the android_version: 12
+# assumed in the original Stage A placeholder for this model.
+model: "AQUOS sense7"
+model_number: "SHG10"
+manufacturer: "SHARP"
+android_version: 14
+
+# Wizard automation uses the screen-driven, text-matching schema (not the
+# legacy resource-id `wizard_steps` sequence used by the other 3 models) —
+# see docs/record.md, "IMPLEMENTATION SPEC — wizard via text matching".
+#
+# This is a HARD CONSTRAINT, not a temporary gap: there are no XML dumps for
+# these screens and there never will be. ADB authorization is wiped by
+# factory reset, and `uiautomator dump` requires ADB — so ADB access and
+# wizard visibility cannot coexist on this device (4 separate remote
+# workarounds were tried and all failed; see docs/record.md, "Wizard capture
+# — RESOLVED AS NOT REMOTELY POSSIBLE"). Screen order, labels, and button
+# positions below come from the client's photographed factory-reset session
+# instead of a dump — visible text is reliable, resource-ids are not
+# available at all for this part of the flow.
+wizard:
+  screens:
+    # Screen 1 (SIM/microSD tray warning) is transient/auto-dismissing per
+    # the client's photos and isn't represented here — see docs/record.md's
+    # photographed sequence, item 1.
+    - name: welcome
+      identify_by_text: "ようこそ"
+      action: tap_by_text
+      # TODO(verify-on-device): button label not legible in the client's
+      # photo. Language is already 日本語(日本) by default so no language
+      # picker step is needed first. Do not invent a plausible label here —
+      # confirm on the next factory-reset session.
+      target_text: "TODO(verify-on-device)"
+    - name: carrier_setup
+      identify_by_text: "キャリア設定中"
+      action: wait_for_disappear
+      timeout_sec: 120
+      # SHARP/carrier-specific screen; no stable resource-id exists to
+      # cross-check against — text-only detection is all that's available.
+    - name: wifi_connect
+      identify_by_text: "Wi-Fiに接続"
+      action: tap_by_text
+      target_text: "オフラインで設定"
+      # This is the branch point that keeps the flow offline. Confirmed by
+      # the client's photos: Google account sign-in never appeared after
+      # taking this path (see docs/record.md — "account sign-in is NOT a
+      # blocking screen" — matches the client's real workflow of logging in
+      # manually ~5 days after initialization). CONFIRM WITH CLIENT that the
+      # offline path is standard for all devices before relying on this.
+    - name: offline_confirm
+      identify_by_text: "オフラインで設定しますか?"
+      action: tap_by_text
+      target_text: "続行"
+      # The OTHER button on this dialog is 戻る — never tap it (enforced at
+      # the ui_automator layer too, see _NEVER_TAP_TEXT).
+    - name: continue_setup
+      identify_by_text: "セットアップを続けますか?"
+      action: tap_by_text
+      target_text: "続行"
+      # The OTHER button is 中断し、リマインダーを受け取る (abort/remind-later)
+      # — never tap it (also enforced at the ui_automator layer).
+    - name: google_terms
+      identify_by_text: "同意する"
+      action: scroll_then_tap_by_text
+      target_text: "同意する"
+      # Scrollable — the accept button may be below the fold on first render.
+    - name: software_update
+      identify_by_text: "ソフトウェア更新について"
+      action: tap_by_text
+      # TODO(verify-on-device): SHARP-specific screen; button label not
+      # legible in the client's photo. Do not invent a plausible label.
+      target_text: "TODO(verify-on-device)"
+    - name: provisioning
+      identify_by_text: "スマートフォンを設定しています"
+      action: wait_for_disappear
+      timeout_sec: 300
+    - name: aquos_notify
+      identify_by_text: "AQUOS Homeの通知アクセス"
+      action: tap_by_text
+      target_text: "OK"
+      # SHARP-specific dialog. This is the configured *terminal* screen —
+      # wizard_walkthrough.py treats handling this screen as "wizard done"
+      # (there's no reliable captured signal for "reached the home screen"
+      # itself; see that module's docstring and PENDING_REAL_DEVICE_DATA.md).
+
+wifi_settings:
+  # Real navigation path confirmed via live scrcpy mirroring, not a dump
+  # (docs/record.md): 設定 → ネットワークとインターネット →
+  # Wi-Fi とモバイルネットワーク. This combined screen shows both Wi-Fi status
+  # and mobile-network status (SHARP's variant of the generic AOSP layout).
+  menu_path:
+    - type: text
+      value: "設定"
+    - type: text
+      value: "ネットワークとインターネット"
+    - type: text
+      value: "Wi-Fi とモバイルネットワーク"
+  # RESOLVED (real: tests/fixtures/wifi_list_SHG10.xml) — plain Switch widget,
+  # unambiguous (only one on this screen). Was ON in the captured dump.
+  # IMPORTANT: the SSID list only renders once this is confirmed ON — check
+  # its `checked` state (wifi_setup.py does, via node_is_checked()) before
+  # tapping it; a blind tap risks turning Wi-Fi OFF instead of on.
+  toggle_resource_id: "android:id/switch_widget"
+  # RESOLVED (real) — NOT a Wi-Fi-specific id: this is the generic
+  # AOSP/Settings list-item title id, shared by every row on this screen
+  # (the connected-carrier summary row, the "Wi-Fi" toggle's own label, and
+  # every scanned SSID — 9 matches total in the captured dump). Must always
+  # be used with `text=<SSID>` to disambiguate; find_resource_id() raises
+  # AmbiguousResourceIdError otherwise, by design.
+  network_list_resource_id: "android:id/title"
+  # NOT resolved — the captured dump only covers the network *list* screen.
+  # Tapping an unsaved SSID opens a separate "Connect to network" dialog
+  # that was never dumped, so these two remain Stage A placeholders.
+  # TODO(real-device): replace with captured resource-id (password entry field
+  # in the "Connect to network" dialog)
+  password_field_resource_id: "com.android.settings:id/wifi_password"
+  # TODO(real-device): replace with captured resource-id (dialog "Connect" button)
+  connect_button_resource_id: "com.android.settings:id/wifi_connect_button"
+
+apn_settings:
+  # Real navigation path confirmed (docs/record.md): 設定 →
+  # ネットワークとインターネット → Wi-Fi とモバイルネットワーク → (gear icon
+  # next to the carrier name) → アクセスポイント名. The gear icon step is
+  # reached via an icon, not a text menu item — it has a real app-specific
+  # resource-id though (unlike the icons in apn_settings below), resolved
+  # directly from tests/fixtures/wifi_list_SHG10.xml.
+  menu_path:
+    - type: text
+      value: "設定"
+    - type: text
+      value: "ネットワークとインターネット"
+    - type: text
+      value: "Wi-Fi とモバイルネットワーク"
+    - type: resource_id
+      value: "com.android.settings:id/settings_button"
+    - type: text
+      value: "アクセスポイント名"
+
+  # RESOLVED (real: tests/fixtures/apn_entry_{top,middle,bottom}_SHG10.xml).
+  # The edit form is a PreferenceScreen list, not a flat set of EditTexts:
+  # every field row shares this one generic id and is disambiguated only by
+  # its visible Japanese label (same "android:id/title" pattern as the
+  # Wi-Fi list above). Tapping a row opens a small edit dialog.
+  field_row_resource_id: "android:id/title"
+  name_field_label: "名前"
+  apn_field_label: "APN"
+  # RESOLVED (real) — settles the open question from docs/record.md: MCC/MNC
+  # fields DO exist on this build (visible once scrolled to the middle
+  # position — NOT in the top portion, which is why the first-look
+  # assumption in docs/record.md was wrong). Both were pre-filled: MCC=440
+  # (Japan), MNC=11 (Rakuten Mobile) — the SIM actually installed in this
+  # unit, matching the "Rakuten SIM in a KDDI-branded unit" finding
+  # elsewhere in docs/record.md. Do NOT delete these fields.
+  mcc_field_label: "MCC"
+  mnc_field_label: "MNC"
+  # NOT resolved from any capture — the per-field edit dialog itself (opened
+  # by tapping a row above) was never dumped, only the underlying list was.
+  # These two are BEST-GUESS standard AOSP/AndroidX framework ids (the same
+  # ids every EditTextPreference dialog in the entire OS uses), not
+  # app-specific and not invented to look plausible — tagged per
+  # docs/record.md's established convention. Verify on-device.
+  # TODO(real-device, best-guess-standard-id)
+  dialog_edit_field_resource_id: "android:id/edit"
+  # TODO(real-device, best-guess-standard-id)
+  dialog_confirm_button_resource_id: "android:id/button1"
+
+  # NOT resolved — genuinely absent from available data, not an oversight.
+  # The "+ add new APN" control (icon-only, no visible text label per
+  # docs/record.md) lives on the APN *list* screen, which was never
+  # captured — only the edit *form* (3 scroll positions) was dumped.
+  # apn_setup.py handles this being null: it logs and assumes a blank entry
+  # is already open rather than guessing a tap target.
+  add_button_resource_id: null
+
+  # NOT resolved — confirmed absent from the form (checked in top, middle,
+  # AND bottom scroll positions; no Save button exists at all). Per
+  # docs/record.md Task 2: "if the dumps don't contain it, say so explicitly
+  # rather than guessing, and leave it marked TODO" — apn_setup.py therefore
+  # fails loudly (returns False, logs clearly) rather than guessing a save
+  # action, so configure_apn() will not silently claim success on this model
+  # until this is resolved on-site.
+  save_button_resource_id: null
+  # Two candidates were found in the captured dumps for what might trigger
+  # Save — recorded here as leads for the next on-site session, NOT wired
+  # into any code path (neither has a resource-id; both are content-desc
+  # only, and functionally UNCONFIRMED — this is not a working
+  # implementation, just what was observed):
+  #   - overflow "..." menu (content-desc "その他のオプション", top-right).
+  #     Contents not captured; unknown if it contains a Save item.
+  #   - toolbar "navigate up" arrow (content-desc "上へ移動", top-left).
+  #     Matches stock AOSP ApnEditor's known behavior of validating and
+  #     saving on up-navigation, but this SHARP-skinned build's actual
+  #     behavior here is NOT confirmed.
+  save_action_candidates:
+    - type: content_desc
+      value: "その他のオプション"
+      note: "overflow menu — contents not captured"
+    - type: content_desc
+      value: "上へ移動"
+      note: "matches stock AOSP ApnEditor save-on-up-navigation behavior, unconfirmed on this build"

@@ -1,0 +1,4 @@
+pyyaml
+
+# dev-only (testing)
+pytest

@@ -1,0 +1,7 @@
+adb:
+  platform_tools_path: "C:\\platform-tools"
+retry:
+  max_retries: 3
+logging:
+  level: "INFO"
+  log_dir: "./logs"

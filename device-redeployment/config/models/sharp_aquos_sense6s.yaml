@@ -1,0 +1,75 @@
+# Model profile: AQUOS sense6s (SHG07), SHARP, Android 13
+#
+# All resource-id values below are PLACEHOLDERS invented to match a plausible
+# AOSP-derived setup-wizard and Settings-app shape. None of them have been
+# captured from a real device yet. SHARP devices are expected to differ from
+# the Sony models in wizard screen sequence and possibly package names
+# (e.g. a SHARP-branded setup-wizard APK instead of the stock AOSP one) — this
+# is unconfirmed until a real UI dump is captured. See
+# PENDING_REAL_DEVICE_DATA.md at the repo root for the full list.
+model: "AQUOS sense6s"
+model_number: "SHG07"
+manufacturer: "SHARP"
+android_version: 13
+
+wizard_steps:
+  # TODO(real-device): replace with captured resource-id (language select "Next").
+  # Package name may not be "com.google.android.setupwizard" on SHARP devices —
+  # confirm against a real dump rather than assuming the Sony/AOSP value applies.
+  - screen: "language_select"
+    resource_id: "com.google.android.setupwizard:id/next_button"
+    action: "tap"
+  # TODO(real-device): replace with captured resource-id (terms of service accept)
+  - screen: "terms_of_service"
+    resource_id: "com.sharp.android.setupwizard:id/accept_button"
+    action: "tap"
+  # TODO(real-device): replace with captured resource-id (skip SIM check) and
+  # confirm whether this screen actually appears on this model at all.
+  - screen: "skip_sim_check"
+    resource_id: "com.sharp.android.setupwizard:id/skip_button"
+    action: "tap"
+    optional: true   # not every model shows this screen
+  # TODO(real-device): replace with captured resource-id (final "finish setup")
+  - screen: "finish_setup"
+    resource_id: "com.sharp.android.setupwizard:id/finish_button"
+    action: "tap"
+
+wifi_settings:
+  # TODO(real-device): replace with captured resource-id (Wi-Fi on/off toggle).
+  # SHARP's Settings app may use a different package than "com.android.settings" —
+  # confirm against a real dump.
+  toggle_resource_id: "com.android.settings:id/wifi_toggle"
+  # TODO(real-device): replace with captured resource-id (scanned network list container)
+  network_list_resource_id: "com.android.settings:id/wifi_network_list"
+  # Fields below are additions beyond the contract's illustrative schema —
+  # needed for the UI-fallback path in phase2/wifi_setup.py when the
+  # `cmd wifi connect-network` shell command is unavailable/fails. See
+  # PENDING_REAL_DEVICE_DATA.md.
+  # TODO(real-device): replace with captured resource-id (password entry field
+  # in the "Connect to network" dialog)
+  password_field_resource_id: "com.android.settings:id/wifi_password"
+  # TODO(real-device): replace with captured resource-id (dialog "Connect" button)
+  connect_button_resource_id: "com.android.settings:id/wifi_connect_button"
+
+apn_settings:
+  menu_path:
+    - "Settings"
+    - "Network & internet"
+    - "Mobile network"
+    - "Access Point Names"
+  # TODO(real-device): replace with captured resource-id (APN "Name" field)
+  name_field_resource_id: "com.android.phone:id/apn_name_edit"
+  # TODO(real-device): replace with captured resource-id (APN "APN" value field)
+  apn_field_resource_id: "com.android.phone:id/apn_apn_edit"
+  # TODO(real-device): replace with captured resource-id (save/checkmark button)
+  save_button_resource_id: "com.android.phone:id/save"
+  # Fields below are additions beyond the contract's illustrative schema —
+  # configure_apn() takes mcc/mnc parameters and must create a new blank APN
+  # entry before name/apn/mcc/mnc fields exist, none of which the illustrative
+  # schema had fields for. See PENDING_REAL_DEVICE_DATA.md.
+  # TODO(real-device): replace with captured resource-id (list-screen "+ Add" button)
+  add_button_resource_id: "com.android.phone:id/menu_new"
+  # TODO(real-device): replace with captured resource-id (APN "MCC" field)
+  mcc_field_resource_id: "com.android.phone:id/apn_mcc_edit"
+  # TODO(real-device): replace with captured resource-id (APN "MNC" field)
+  mnc_field_resource_id: "com.android.phone:id/apn_mnc_edit"

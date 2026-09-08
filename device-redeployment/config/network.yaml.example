@@ -1,0 +1,10 @@
+# Copy this file to config/network.yaml and fill in real values.
+# config/network.yaml is gitignored — never commit real credentials.
+wifi:
+  ssid: "<client-provided SSID>"
+  password: "<client-provided password>"
+apn:
+  carrier: "<carrier name>"
+  apn_name: "<APN value from client>"
+  mcc: "<mobile country code>"
+  mnc: "<mobile network code>"
