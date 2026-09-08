@@ -131,10 +131,31 @@ accumulates.
   `earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. First fully
   working Phase 2 step, real device to real network. (The connect-button
   tap only worked on the first of three attempts in that run — later
-  retries saw a "connect button not found" warning, but that's correct:
-  once already connected, the same network's row opens a "network
-  details" screen instead of the join dialog, which has no 接続 button at
-  all — nothing to fix there.)
+  retries saw a "connect button not found" warning, correctly: once
+  already connected, the same network's row opens a "Network Details"
+  screen instead of the join dialog, which has no 接続 button at all.)
+- *2026-09-08 (fourth live test — safety issue, corrects the note above):*
+  "Nothing to fix there" was wrong. On the retries where the device was
+  already connected, the client caught the automation via screen-share
+  repeatedly tapping near **削除** (Forget) on that Network Details screen —
+  a live screenshot with the tap location visible confirmed it. Root
+  cause: `connect_wifi()` never checked whether the device was already
+  connected before running the whole UI flow. It tapped the SSID's row
+  (landing on Network Details, not the join dialog), found no password
+  field or 接続 button (both correctly logged as "not found"), but had
+  already called `input_text_direct()` to type the password — with
+  nothing actually focused as a text field on that screen, those
+  keystrokes went to whatever had default focus instead, consistent with
+  landing on 削除. Deleting the just-established connection would have
+  been actively destructive, not just a wasted retry. Fixed:
+  `connect_wifi()` now checks `_is_wifi_connected()` FIRST, before
+  touching the UI (or even attempting the shell command) at all — if
+  already connected, it returns immediately and touches nothing.
+  `削除`/`接続を解除` also added to `ui_automator._NEVER_TAP_TEXT` as
+  defense-in-depth (doesn't address this specific root cause, since
+  `input_text_direct()` doesn't go through `tap_by_text()`'s guard, but
+  costs nothing and blocks any future path that might target them
+  explicitly).
 
 ### APN settings — relevant to `apn_setup.py`
 - *2026-09-04:* Navigation path confirmed:

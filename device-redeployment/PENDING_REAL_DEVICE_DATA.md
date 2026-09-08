@@ -22,16 +22,36 @@ started.
 
 ## Highest priority
 
+### Re-verify against real hardware after a safety fix (destructive-tap risk)
+
+Not yet re-verified. A real run's retry loop (Wi-Fi succeeds, a later APN
+step fails, the whole flow retries from the top) showed `connect_wifi()`
+re-running its full UI flow even though the device was already connected
+— tapping the SSID's row opened "Network Details" (already-connected
+state) instead of the join dialog the code assumed, and with no password
+field actually present to focus, the password got typed as raw keystrokes
+into whatever had default focus. The client caught it via screen-share:
+repeated taps landing on **削除** (Forget) — which would have deleted the
+just-established connection. Fixed: `connect_wifi()` now checks connection
+state first and touches nothing at all if already connected; `削除`/
+`接続を解除` also added to the permanent do-not-tap list as defense in
+depth. See docs/record.md for the full account. **Next real run is what
+confirms this is actually closed** — test the retry path specifically
+(e.g. let APN fail once on purpose, or just run it twice in a row) so this
+scenario is provably exercised, not just no longer reachable.
+
 ### Re-verify APN configuration against real hardware after the dump_ui() fix
 
-Not yet confirmed working end-to-end. The most recent real run got through
-Wi-Fi (confirmed connected) and into APN menu navigation, then crashed
-with a raw `FileNotFoundError` from `ui_automator.dump_ui()` never
-checking whether its `pull()` call actually succeeded — fixed with a
-clear error + automatic retry (uiautomator dump is known to intermittently
-fail right after a screen transition, which is exactly what had just
-happened). Next real run is what confirms or refutes this actually gets
-APN entry (and the save flow) working end-to-end.
+Also not yet confirmed working end-to-end (should now be reachable, given
+the fix above no longer aborts wifi's retry into the wrong screen). The
+most recent real run got through Wi-Fi (confirmed connected) and into APN
+menu navigation, then crashed with a raw `FileNotFoundError` from
+`ui_automator.dump_ui()` never checking whether its `pull()` call actually
+succeeded — fixed with a clear error + automatic retry (uiautomator dump
+is known to intermittently fail right after a screen transition, which is
+exactly what had just happened). Next real run is what confirms or
+refutes this actually gets APN entry (and the save flow) working
+end-to-end.
 
 ### Wi-Fi scan results vary run to run at this location
 

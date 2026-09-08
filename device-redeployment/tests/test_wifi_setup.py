@@ -79,6 +79,33 @@ def _shell_fails_connect_network():
     return {'cmd wifi connect-network "TestSSID" wpa2 "hunter2"'}
 
 
+class EventuallyConnectedClient(FakeAdbClient):
+    """`dumpsys wifi` reports NOT connected until at least one `input tap`
+    has happened, then reports connected afterward.
+
+    connect_wifi() now checks connection state *before* touching the UI at
+    all (added 2026-09-08, after a real bug where a retry against an
+    already-connected device skipped straight past the UI flow's own
+    assumptions and injected text into the wrong screen). A fixed
+    "always connected" shell_responses value would make that check exit
+    immediately, before any of the UI mechanics these tests exist to
+    verify ever run — this fake instead models a connection actually
+    resulting from the UI actions taken, the same way a real device would.
+    """
+
+    def __init__(self, *, connected_response: str = DUMPSYS_WIFI_CONNECTED, **kwargs):
+        super().__init__(**kwargs)
+        self.connected_response = connected_response
+        self._tapped = False
+
+    def shell(self, command, timeout=30):
+        if command.startswith("input tap"):
+            self._tapped = True
+        if command == "dumpsys wifi":
+            return self.connected_response if self._tapped else ""
+        return super().shell(command, timeout=timeout)
+
+
 def test_ui_fallback_does_not_tap_toggle_when_already_on():
     client = FakeAdbClient(
         ui_dumps=[TOGGLE_ON_SCREEN_XML],
@@ -98,10 +125,9 @@ def test_ui_fallback_taps_toggle_when_off():
     # 1st dump: WIFI_SETTINGS-intent landing check (toggle present -> menu_path
     # skipped). 2nd: toggle state check (off). 3rd (repeats): toggle tap's own
     # dump + the SSID list tap afterward.
-    client = FakeAdbClient(
+    client = EventuallyConnectedClient(
         ui_dumps=[TOGGLE_OFF_SCREEN_XML, TOGGLE_OFF_SCREEN_XML, TOGGLE_ON_SCREEN_XML],
         shell_failures=_shell_fails_connect_network(),
-        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
     )
     connect_wifi(
         client, PROFILE_NO_MENU_PATH, "TestSSID", "hunter2",
@@ -115,10 +141,9 @@ def test_ui_fallback_skips_menu_path_when_wifi_settings_intent_lands_correctly()
     """The android.settings.WIFI_SETTINGS intent, when it lands somewhere
     showing the configured toggle, should make menu_path navigation
     unnecessary entirely — no "設定" tap should happen."""
-    client = FakeAdbClient(
+    client = EventuallyConnectedClient(
         ui_dumps=[TOGGLE_ON_SCREEN_XML],
         shell_failures=_shell_fails_connect_network(),
-        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
     )
     result = connect_wifi(
         client, PROFILE_WITH_MENU_PATH, "TestSSID", "hunter2",
@@ -134,11 +159,10 @@ def test_ui_fallback_falls_back_to_menu_path_when_intent_command_fails():
     """If the WIFI_SETTINGS intent itself fails (e.g. blocked on a
     locked-down OEM build), menu_path navigation must still be tried —
     exactly Stage A's original fallback behavior."""
-    client = FakeAdbClient(
+    client = EventuallyConnectedClient(
         ui_dumps=[MENU_THEN_TOGGLE_XML],
         shell_failures=_shell_fails_connect_network()
         | {"am start -a android.settings.WIFI_SETTINGS"},
-        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
     )
     result = connect_wifi(
         client, PROFILE_WITH_MENU_PATH, "TestSSID", "hunter2",
@@ -154,12 +178,11 @@ def test_ui_fallback_falls_back_to_menu_path_when_intent_lands_elsewhere():
     the configured toggle (e.g. it silently no-oped, or landed on an
     unrelated screen), menu_path navigation must still be tried rather than
     assuming the intent worked."""
-    client = FakeAdbClient(
+    client = EventuallyConnectedClient(
         # 1st dump: intent-landing check — no toggle here, so it must fall
         # back. 2nd+ (repeats): the actual navigable screen.
         ui_dumps=["<hierarchy><node text=\"Home\" bounds=\"[0,0][10,10]\" /></hierarchy>", MENU_THEN_TOGGLE_XML],
         shell_failures=_shell_fails_connect_network(),
-        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
     )
     result = connect_wifi(
         client, PROFILE_WITH_MENU_PATH, "TestSSID", "hunter2",
@@ -193,10 +216,9 @@ def test_ui_fallback_enters_password_via_input_text_direct_not_inject_text():
     being installed/active on that device. input_text_direct() (`adb shell
     input text`, already confirmed working for APN's MCC/MNC on the same
     device) must be used instead."""
-    client = FakeAdbClient(
+    client = EventuallyConnectedClient(
         ui_dumps=[TOGGLE_ON_SCREEN_XML],
         shell_failures=_shell_fails_connect_network(),
-        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
     )
     connect_wifi(
         client, PROFILE_NO_MENU_PATH, "TestSSID", "hunter2",
@@ -241,10 +263,9 @@ TOGGLE_ON_WITH_CONNECT_TEXT_XML = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 def test_ui_fallback_taps_connect_button_by_text_when_configured():
-    client = FakeAdbClient(
+    client = EventuallyConnectedClient(
         ui_dumps=[TOGGLE_ON_WITH_CONNECT_TEXT_XML],
         shell_failures=_shell_fails_connect_network(),
-        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
     )
     connect_wifi(
         client, PROFILE_WITH_CONNECT_TEXT, "TestSSID", "hunter2",
@@ -277,3 +298,29 @@ def test_ui_fallback_falls_back_to_connect_button_resource_id_when_text_not_foun
     assert not any(
         c.startswith("input tap") and "1400" in c for c in client.shell_calls
     )
+
+
+# --- Already-connected early exit (real bug, 2026-09-08) -------------------
+
+
+def test_connect_wifi_skips_everything_when_already_connected():
+    """Regression test for a real, potentially destructive bug: a retry
+    against an already-connected device used to barrel through the whole
+    UI flow anyway, tapping the SSID's row (which — now already
+    connected — opens "Network Details": 削除/接続を解除/共有, not the join
+    dialog this code assumes) and injecting the password as raw keystrokes
+    with nothing actually focused as a text field. Observed on real
+    hardware as repeated taps landing on 削除 (Forget), which would have
+    deleted the very connection this function exists to establish.
+    connect_wifi() must now check connection state first and touch
+    NOTHING — not even the shell connect-network attempt — if already
+    connected."""
+    client = FakeAdbClient(shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED})
+
+    result = connect_wifi(
+        client, PROFILE_NO_MENU_PATH, "TestSSID", "hunter2",
+        poll_timeout_seconds=1, poll_interval_seconds=0,
+    )
+
+    assert result is True
+    assert client.shell_calls == ["dumpsys wifi"]

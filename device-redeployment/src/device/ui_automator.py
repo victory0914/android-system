@@ -47,11 +47,19 @@ _HAZARD_TEXT_MARKERS = (
 )
 
 # Text that must never be tapped, no matter what config says to look for —
-# these reverse or abort the flow (docs/record.md wizard spec). Kept here
-# (not just in wizard config) as a last-resort guard at the tap layer itself.
+# either they reverse/abort a flow (the wizard's 戻る/中断し...) or they're
+# destructive actions found near where automation operates (Wi-Fi's
+# 削除/接続を解除 — real testing, 2026-09-08, showed a retry that landed on an
+# already-connected network's "Network Details" screen instead of the
+# expected join dialog; nothing there was explicitly tap_by_text()'d, but
+# this list is kept as a last-resort guard at the tap layer itself in case
+# any future path does target these). Kept here, not just in per-model
+# config, so it can't be configured away by mistake.
 _NEVER_TAP_TEXT = (
     "戻る",
     "中断し、リマインダーを受け取る",
+    "削除",
+    "接続を解除",
 )
 
 

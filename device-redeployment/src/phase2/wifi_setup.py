@@ -235,7 +235,26 @@ def connect_wifi(
     (works on Android 10+ in many cases). If that fails or is unavailable,
     fall back to UI Automator against profile.wifi_settings() resource-ids.
     Return True once connected — confirmed by polling `dumpsys wifi`, not
-    just by assuming the command succeeded."""
+    just by assuming the command succeeded.
+
+    Checks whether the device is already connected to `ssid` FIRST, before
+    touching the UI at all. This matters beyond avoiding redundant work: a
+    real run (2026-09-08) showed that when this function is retried after
+    an earlier step already connected successfully (e.g. wifi succeeded but
+    a later APN step failed, triggering a full retry from the top), tapping
+    the now-already-connected SSID's row opens a *different* dialog
+    ("Network Details": 削除/接続を解除/共有 — Forget/Disconnect/Share) than
+    the join-network dialog this function assumes. With nothing actually
+    focused as a text field there, the password got typed as raw keystrokes
+    into whatever had default focus instead — observed on-device as
+    repeated taps on 削除 (Forget), which would delete the very network
+    connection this function exists to establish. Checking first avoids
+    ever reaching that screen when there's nothing to do.
+    """
+    if _is_wifi_connected(client, ssid):
+        logger.info("already connected to %r; nothing to do", ssid)
+        return True
+
     try:
         client.shell("svc wifi enable")
     except AdbCommandError as exc:
