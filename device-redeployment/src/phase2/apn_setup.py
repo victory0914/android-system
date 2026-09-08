@@ -1,6 +1,8 @@
 """Configures a mobile APN entry by navigating Settings via UI Automator and
-injecting text via ADB Keyboard (or, for numeric fields — see below —
-Android's built-in `input text` command).
+injecting text. Labeled-shape models (SHG10) use Android's built-in `input
+text` command (input_text_direct()) for every field — confirmed necessary
+on real hardware, see below. Legacy-shape models (the 3 untouched by Stage
+B) still use the ADB Keyboard broadcast (inject_text()).
 
 Stage B note (see docs/record.md, PENDING_REAL_DEVICE_DATA.md): real SHG10
 captures showed the APN edit form does NOT expose a per-field resource-id —
@@ -86,7 +88,7 @@ def _fill_legacy_field(client: AdbClientProtocol, resource_id: str, value: str) 
 
 
 def _fill_labeled_field(
-    client: AdbClientProtocol, apn: dict, label: str, value: str, *, numeric: bool = False
+    client: AdbClientProtocol, apn: dict, label: str, value: str
 ) -> bool:
     """Stage B shape: tap the row identified by (field_row_resource_id,
     text=label) to open its edit dialog, then type into the dialog's
@@ -95,11 +97,15 @@ def _fill_labeled_field(
     tap_resource_id() simply returns False rather than mistapping, and this
     function surfaces that as a failure rather than pretending it worked.
 
-    `numeric=True` uses input_text_direct() (Android's built-in `input
-    text`) instead of inject_text() (ADB Keyboard) — confirmed necessary on
-    real hardware for MCC/MNC: the device's default IME is Japanese kana
-    mode, and the on-screen keyboard can't reach digits without a mode
-    switch UI automation has no reliable way to trigger.
+    Uses input_text_direct() (Android's built-in `input text`), not
+    inject_text() (ADB Keyboard broadcast) — confirmed necessary on real
+    hardware, and not just for MCC/MNC as first thought: MCC/MNC needed it
+    because the default IME (Japanese kana mode) can't reach digits without
+    a mode switch, but a *second* real run (2026-09-08, Wi-Fi password
+    entry — same device, same inject_text() call) showed the ADB Keyboard
+    broadcast does nothing at all here, consistent with that app not
+    actually being installed/active. So this now applies to every field on
+    this device, not just numeric ones.
     """
     row_resource_id = apn["field_row_resource_id"]
     if not tap_resource_id(client, row_resource_id, text=label):
@@ -113,8 +119,7 @@ def _fill_labeled_field(
             label, edit_field,
         )
 
-    entry_fn = input_text_direct if numeric else inject_text
-    if not entry_fn(client, value):
+    if not input_text_direct(client, value):
         return False
 
     confirm_button = apn.get("dialog_confirm_button_resource_id")
@@ -269,9 +274,10 @@ def configure_apn(
     mnc: str,
 ) -> bool:
     """Navigate profile.apn_settings()['menu_path'] via UI Automator, then
-    use inject_text() (ADB Keyboard) to enter the APN name and value fields
-    — never simulate individual keystrokes for this. Tap save. Return True
-    on success.
+    type the APN name and value fields directly (input_text_direct() for
+    labeled-shape/SHG10, inject_text() for legacy-shape models) — never
+    simulate individual keystrokes for this. Tap save. Return True on
+    success.
 
     mcc/mnc are required, not optional (confirmed on real SHG10 hardware,
     2026-09-08) — the device itself validates them (MCC exactly 3 digits,
@@ -318,13 +324,13 @@ def configure_apn(
         # hardware that validation is sequential and blocking, so a partial
         # save attempt just wastes a round-trip on a guaranteed failure.
         fields = [
-            (apn["name_field_label"], apn_name, False),
-            (apn["apn_field_label"], apn_name, False),
-            (apn["mcc_field_label"], mcc, True),
-            (apn["mnc_field_label"], mnc, True),
+            (apn["name_field_label"], apn_name),
+            (apn["apn_field_label"], apn_name),
+            (apn["mcc_field_label"], mcc),
+            (apn["mnc_field_label"], mnc),
         ]
-        for label, value, numeric in fields:
-            if not _fill_labeled_field(client, apn, label, value, numeric=numeric):
+        for label, value in fields:
+            if not _fill_labeled_field(client, apn, label, value):
                 logger.error("apn field labeled %r not found/could not be filled", label)
                 return False
     else:

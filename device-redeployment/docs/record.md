@@ -98,6 +98,26 @@ accumulates.
   hypothetical example in `PENDING_REAL_DEVICE_DATA.md` with these.
 - Note: the PC's own active network is `earth5_6` (Windows classifies it as
   a **Public** network — see Windows environment section below).
+- *2026-09-08:* Client supplied real credentials for one of the above:
+  `earth5_1` / `earth5_1` (SSID/password identical). Set in
+  `config/network.yaml` (gitignored, local to the client PC).
+- *2026-09-08:* First live test with real credentials — the shell path
+  (`cmd wifi connect-network`) confirmed blocked by the same
+  `SecurityException` as every prior attempt (shell user, uid 2000, lacks
+  the wifi permission on this build). The UI fallback correctly navigated
+  (`WIFI_SETTINGS` intent) and reached the real join-network dialog for
+  `earth5_1` — but the password field stayed **completely empty**, no
+  errors logged. Root cause: `inject_text()`'s ADB Keyboard broadcast was
+  going nowhere — consistent with ADB Keyboard not actually being
+  installed/set as the active IME on this device (always a manual,
+  unautomated prerequisite — see README.md). Since `input_text_direct()`
+  (`adb shell input text`) was already proven working on this same device
+  for APN's MCC/MNC, switched Wi-Fi password entry to it too — see
+  PENDING_REAL_DEVICE_DATA.md ("Resolved — text input mechanism") for the
+  full writeup, which also covers broadening the same fix to APN's
+  Name/APN fields (same device, same underlying dependency, so almost
+  certainly the same silent failure waiting there too). **Not yet
+  re-verified against real hardware** — next run is the check.
 
 ### APN settings — relevant to `apn_setup.py`
 - *2026-09-04:* Navigation path confirmed:

@@ -95,15 +95,18 @@ def test_configure_apn_labeled_shape_fills_name_apn_mcc_mnc():
 
 
 def test_configure_apn_labeled_shape_injects_correct_values_before_failing_at_save():
-    """Name/APN go through inject_text() (ADB Keyboard broadcast); MCC/MNC
-    go through input_text_direct() (`input text`) — confirmed necessary on
-    real hardware since the default IME can't reach digits without a mode
-    switch (docs/record.md, 2026-09-08)."""
+    """All four labeled fields go through input_text_direct() (`input
+    text`), not inject_text() (ADB Keyboard broadcast) — confirmed
+    necessary on real hardware for two independent reasons (docs/record.md,
+    2026-09-08): MCC/MNC need it because the default IME can't reach digits
+    without a mode switch; a second real run then showed inject_text()'s
+    broadcast does nothing at all on this device (a Wi-Fi password field
+    stayed empty despite no errors), so it applies to every field now."""
     client = FakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
     configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
-    keyboard_injected = [c for c in client.shell_calls if "ADB_INPUT_TEXT" in c]
     direct_injected = [c for c in client.shell_calls if c.startswith("input text ")]
-    assert any("rakuten.jp" in c for c in keyboard_injected)
+    assert not any("ADB_INPUT_TEXT" in c for c in client.shell_calls)
+    assert 'input text "rakuten.jp"' in direct_injected
     assert 'input text "440"' in direct_injected
     assert 'input text "11"' in direct_injected
 

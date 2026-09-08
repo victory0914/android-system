@@ -17,7 +17,7 @@ from src.device.ui_automator import (
     AmbiguousResourceIdError,
     dump_ui,
     find_resource_id,
-    inject_text,
+    input_text_direct,
     navigate_menu_path,
     node_is_checked,
     tap_resource_id,
@@ -172,9 +172,21 @@ def _try_ui_connect(
         return
 
     password_field = wifi.get("password_field_resource_id")
-    if password_field:
-        tap_resource_id(client, password_field)
-    inject_text(client, password)
+    if password_field and not tap_resource_id(client, password_field):
+        logger.warning(
+            "wifi password field %r (unresolved/best-guess id) not found; "
+            "attempting text entry anyway in case it's already focused — "
+            "the join-network dialog typically auto-focuses the password "
+            "field itself",
+            password_field,
+        )
+    # input_text_direct(), not inject_text(): a real run (2026-09-08) showed
+    # inject_text()'s ADB Keyboard broadcast silently does nothing on this
+    # device (password field stayed empty, no errors) — consistent with
+    # ADB Keyboard not actually being installed/active. input_text_direct()
+    # (adb shell input text) is already confirmed working on this device
+    # (APN's MCC/MNC entry) and needs no extra app installed.
+    input_text_direct(client, password)
 
     connect_button = wifi.get("connect_button_resource_id")
     if connect_button:

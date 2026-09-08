@@ -544,18 +544,30 @@ def input_text_direct(client: AdbClientProtocol, text: str) -> bool:
     Unlike inject_text() (broadcasts to ADB Keyboard, which needs that app
     installed and set as the active input method), this needs no extra app.
     Real-device testing (docs/record.md, 2026-09-08) found it necessary
-    specifically for numeric fields (APN's MCC/MNC): the device's default
-    IME is in Japanese kana mode, and the on-screen keyboard can't reach
-    digits without an explicit mode switch, which UI automation has no
-    reliable way to trigger. `input text` bypasses the on-screen keyboard
-    entirely.
+    for APN's MCC/MNC fields specifically: the device's default IME is in
+    Japanese kana mode, and the on-screen keyboard can't reach digits
+    without an explicit mode switch UI automation has no reliable way to
+    trigger. A second real run (2026-09-08, Wi-Fi password entry) found
+    inject_text()'s ADB Keyboard broadcast silently does nothing at all on
+    this device — the password field stayed empty despite no errors,
+    consistent with ADB Keyboard not actually being installed/active —
+    so this is now the primary text-entry mechanism for this device, not
+    just a numeric-field workaround.
 
-    Not a general replacement for inject_text() — kept narrowly scoped to
-    where it's actually been confirmed necessary. `input text` requires
-    `%s` in place of literal spaces; not handled generally here since the
-    known use (MCC/MNC) is pure digits, but callers passing space-containing
-    text should be aware.
+    `adb shell <command>` runs `<command>` through the *device's* shell, so
+    the value is escaped for a POSIX-ish shell inside a double-quoted
+    string: backslash, double-quote, `$`, and backtick (which would
+    otherwise trigger escaping/expansion inside double quotes) are escaped,
+    and literal spaces become `%s` (`input text`'s own convention). This
+    matters more here than it did for MCC/MNC (pure digits) — passwords
+    routinely contain exactly these characters.
     """
-    escaped = text.replace(" ", "%s")
+    escaped = (
+        text.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+        .replace("`", "\\`")
+        .replace(" ", "%s")
+    )
     client.shell(f'input text "{escaped}"')
     return True

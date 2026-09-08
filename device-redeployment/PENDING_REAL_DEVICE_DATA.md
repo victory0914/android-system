@@ -7,35 +7,46 @@ navigation paths, capture methodology, judgment calls) behind every entry
 here — this file is the checklist; that one is the evidence.
 
 **Status as of 2026-09-08 (Stage B, ongoing):** SHG10 has real Wi-Fi + full
-APN data resolved, **including the Save flow** — the previous blocker.
-`config/network.yaml` still has no real Wi-Fi credentials, so an actual
-connection has not been achieved end-to-end yet, but the automation code
-itself is exercised and working up through APN save on real hardware.
-SHG10's wizard is on a photograph-derived, text-matching config — real dumps
-for the wizard are **not obtainable on any model, ever** (structural
-ADB/factory-reset constraint, see docs/record.md). **SOG08, SOG07, and
-SHG07 are entirely untouched** — still 100% Stage A placeholders, not started.
+APN data resolved, **including the Save flow**. Real Wi-Fi credentials
+(`earth5_1` / `earth5_1`) were supplied by the client and are in
+`config/network.yaml` (gitignored, local to the client PC only). The
+shell-command connect path is confirmed blocked by device permissions
+(`SecurityException`); the UI fallback path reaches the join-network
+dialog correctly, but a live test caught `inject_text()`'s ADB Keyboard
+broadcast silently not entering the password at all — fixed by switching
+to `input_text_direct()` (see "Resolved — text input mechanism" below).
+**Not yet re-verified against real hardware after that fix** — next run
+is the thing to watch. SHG10's wizard is on a photograph-derived,
+text-matching config — real dumps for the wizard are **not obtainable on
+any model, ever** (structural ADB/factory-reset constraint, see
+docs/record.md). **SOG08, SOG07, and SHG07 are entirely untouched** — still
+100% Stage A placeholders, not started.
 
 ## Highest priority
 
-### Real Wi-Fi credentials — nothing is testable end-to-end without this
+### Re-verify Wi-Fi connection against real hardware after the input-mechanism fix
 
-`config/network.yaml` doesn't exist yet (only `.example` placeholders).
-Every real run so far correctly reaches Wi-Fi settings (the
-`android.settings.WIFI_SETTINGS` intent works) and correctly reports the
-placeholder SSID isn't in range — the code path is proven, it just has no
-real target yet. A real client-PC scan (2026-09-08) showed the device's
-*actual* in-range networks are different from the ones in the original
-`wifi_list_SHG10.xml` capture (`cityroam`, `JBCshoji`,
-`GatewayIkebukuro5fWifi1`, `USPOT_7407541_2.4G`, `FREE_Wi-Fi_and_TOKYO`,
-`USPOT02_MESH_132119436_001`, `rv440m-34a2c1-1/-2`, `iPhone`) — the device
-has likely moved since that capture, or those networks are simply out of
-range now. **Wi-Fi passwords cannot be extracted via adb, ever, on a
-non-rooted device** (confirmed: the shell user lacks the wifi permissions
-needed even to reconnect a saved network — same `SecurityException` blocks
-`cmd wifi connect-network` entirely, and reading
-`WifiConfigStore.xml` needs root). This needs a real SSID+password from
-whoever administers one of the networks actually in range right now.
+Not yet confirmed working end-to-end. Real credentials are in place
+(`earth5_1`); the code now uses `input_text_direct()` for password entry
+instead of the ADB Keyboard broadcast that was silently failing. Next real
+run against `earth5_1` (or whichever network is actually in range at the
+time) is what confirms or refutes this.
+
+Separately, worth keeping in mind: a real client-PC scan (2026-09-08)
+showed the device's *actual* in-range networks were, at that moment,
+different from both `wifi_list_SHG10.xml`'s original capture and from
+`earth5_1` (`cityroam`, `JBCshoji`, `GatewayIkebukuro5fWifi1`,
+`USPOT_7407541_2.4G`, `FREE_Wi-Fi_and_TOKYO`, `USPOT02_MESH_132119436_001`,
+`rv440m-34a2c1-1/-2`, `iPhone`) — Wi-Fi scan results can clearly vary
+run to run at this location; a "not found in scanned list" result doesn't
+automatically mean the credentials are wrong.
+
+**Wi-Fi passwords cannot be extracted via adb, ever, on a non-rooted
+device** (confirmed: the shell user lacks the wifi permissions needed even
+to reconnect a saved network — same `SecurityException` blocks
+`cmd wifi connect-network` entirely, and reading `WifiConfigStore.xml`
+needs root) — noted here in case a *different* network needs credentials
+later; this doesn't apply now that real ones are in hand for `earth5_1`.
 
 ### Two wizard button labels — still the only wizard gap
 
@@ -127,15 +138,32 @@ This was the previous highest-priority blocker — now closed:
   (though still not directly proven) that the same id is correct for the
   per-field entry dialog's own confirm button too.
 
-### Resolved — numeric field input mechanism
-Real testing found the device's default IME is Japanese kana mode, and the
+### Resolved — text input mechanism (broadened twice, both from real evidence)
+First finding: the device's default IME is Japanese kana mode, and the
 on-screen keyboard can't reach digits without an explicit mode switch that
-UI automation has no reliable way to trigger. `apn_setup.py` now uses
-`input_text_direct()` (Android's built-in `adb shell input text`,
-bypassing the IME entirely) for MCC/MNC specifically, keeping the existing
-`inject_text()` (ADB Keyboard broadcast) for Name/APN string values. Not
-generalized further than this — scoped to where it's actually been
-confirmed necessary.
+UI automation has no reliable way to trigger — `input_text_direct()`
+(Android's built-in `adb shell input text`, bypassing the IME entirely)
+fixed APN's MCC/MNC entry.
+
+Second finding, same day: a live test of Wi-Fi password entry (SSID
+`earth5_1`) showed the join-network dialog's password field stayed
+**completely empty** after `wifi_setup.py` ran, with no errors logged —
+`inject_text()`'s ADB Keyboard broadcast was silently going nowhere,
+consistent with ADB Keyboard not actually being installed/set as the
+active IME on this device (a prerequisite that was always manual/
+unautomated — see README.md). Since `input_text_direct()` needs no extra
+app and is already proven working on this device, both `wifi_setup.py`'s
+password entry and **all four** of `apn_setup.py`'s labeled fields (not
+just MCC/MNC) now use it — not because Name/APN specifically needed the
+IME workaround, but because the ADB Keyboard path itself can't be trusted
+on this device at all. `input_text_direct()`'s escaping was also hardened
+at the same time (backslash/quote/`$`/backtick, not just spaces) since
+passwords are far more likely than "440" to contain shell-special
+characters.
+
+Legacy-shape models (the 3 untouched by Stage B) still default to
+`inject_text()` — this finding is specific to this real device, not
+generalized to models with no data of their own yet.
 
 ### Not resolved (genuinely absent from available data — not guessed)
 - `apn_settings.add_button_resource_id` — the "+ add new APN" icon lives on

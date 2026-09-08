@@ -378,3 +378,11 @@ def test_input_text_direct_escapes_spaces():
     client = FakeAdbClient()
     input_text_direct(client, "a b")
     assert 'input text "a%sb"' in client.shell_calls
+
+
+def test_input_text_direct_escapes_shell_special_characters():
+    """Passwords routinely contain these — matters more here than for the
+    original MCC/MNC use case (pure digits)."""
+    client = FakeAdbClient()
+    input_text_direct(client, 'P@ss"w$ord`!\\')
+    assert 'input text "P@ss\\"w\\$ord\\`!\\\\"' in client.shell_calls

@@ -184,3 +184,23 @@ def test_ui_fallback_stops_if_both_intent_and_menu_path_fail():
         poll_timeout_seconds=0, poll_interval_seconds=0,
     )
     assert result is False
+
+
+def test_ui_fallback_enters_password_via_input_text_direct_not_inject_text():
+    """Regression test for a real bug: inject_text()'s ADB Keyboard
+    broadcast silently did nothing on real SHG10 hardware (password field
+    stayed empty, no errors) — consistent with ADB Keyboard not actually
+    being installed/active on that device. input_text_direct() (`adb shell
+    input text`, already confirmed working for APN's MCC/MNC on the same
+    device) must be used instead."""
+    client = FakeAdbClient(
+        ui_dumps=[TOGGLE_ON_SCREEN_XML],
+        shell_failures=_shell_fails_connect_network(),
+        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
+    )
+    connect_wifi(
+        client, PROFILE_NO_MENU_PATH, "TestSSID", "hunter2",
+        poll_timeout_seconds=1, poll_interval_seconds=0,
+    )
+    assert 'input text "hunter2"' in client.shell_calls
+    assert not any("ADB_INPUT_TEXT" in c for c in client.shell_calls)
