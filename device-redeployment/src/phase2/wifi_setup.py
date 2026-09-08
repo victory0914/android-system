@@ -14,7 +14,9 @@ import time
 from src.device.adb_client import AdbClientProtocol, AdbCommandError
 from src.device.model_profile import ModelProfile
 from src.device.ui_automator import (
+    AmbiguousResourceIdError,
     dump_ui,
+    find_resource_id,
     inject_text,
     navigate_menu_path,
     node_is_checked,
@@ -97,18 +99,65 @@ def _ensure_wifi_toggle_on(client: AdbClientProtocol, toggle_resource_id: str) -
     tap_resource_id(client, toggle_resource_id)
 
 
+def _looks_like_wifi_settings_screen(client: AdbClientProtocol, wifi: dict) -> bool:
+    """Best-effort check that the current screen is (probably) the Wi-Fi
+    settings screen, by looking for the configured toggle. Used to confirm
+    the `android.settings.WIFI_SETTINGS` intent actually landed somewhere
+    useful before skipping menu_path navigation entirely."""
+    try:
+        ui_xml = dump_ui(client)
+        return find_resource_id(ui_xml, wifi["toggle_resource_id"]) is not None
+    except AmbiguousResourceIdError:
+        return True  # present, just ambiguous without text/index — good enough as a landing signal
+    except Exception:
+        return False
+
+
+def _navigate_to_wifi_settings(client: AdbClientProtocol, wifi: dict) -> bool:
+    """Reach the Wi-Fi settings screen.
+
+    Tries the standard Android `android.settings.WIFI_SETTINGS` intent
+    first — a real client-PC run showed menu_path text navigation
+    (profile-configured, e.g. tapping "設定") fails whenever the device
+    isn't already sitting on a screen where that text is visible (e.g. the
+    home screen, or anywhere reached via `--skip-wizard` testing rather
+    than a fresh wizard walkthrough). The intent works regardless of the
+    current foreground screen, as long as the device is unlocked. Falls
+    back to menu_path navigation (as before) if the intent isn't available
+    or doesn't land somewhere recognizable — e.g. a heavily locked-down
+    OEM build that blocks it. Unverified against this specific SHARP build;
+    it's a standard, long-established AOSP intent action, not a guess at an
+    app-specific mechanism.
+    """
+    try:
+        client.shell("am start -a android.settings.WIFI_SETTINGS")
+    except AdbCommandError as exc:
+        logger.info("am start WIFI_SETTINGS intent failed: %s", exc)
+    else:
+        if _looks_like_wifi_settings_screen(client, wifi):
+            logger.info("reached Wi-Fi settings via android.settings.WIFI_SETTINGS intent")
+            return True
+        logger.info(
+            "WIFI_SETTINGS intent didn't land on a recognizable Wi-Fi "
+            "screen; falling back to menu_path navigation"
+        )
+
+    menu_path = wifi.get("menu_path")
+    if not menu_path:
+        return False
+    return navigate_menu_path(client, menu_path)
+
+
 def _try_ui_connect(
     client: AdbClientProtocol, profile: ModelProfile, ssid: str, password: str
 ) -> None:
     """Best-effort UI Automator fallback: navigate to the Wi-Fi settings
-    screen (if a menu_path is configured), ensure Wi-Fi is on (without
-    blindly tapping the toggle — see _ensure_wifi_toggle_on), select the
-    network row matching `ssid` by text, enter the password, and tap
-    connect."""
+    screen, ensure Wi-Fi is on (without blindly tapping the toggle — see
+    _ensure_wifi_toggle_on), select the network row matching `ssid` by
+    text, enter the password, and tap connect."""
     wifi = profile.wifi_settings()
 
-    menu_path = wifi.get("menu_path")
-    if menu_path and not navigate_menu_path(client, menu_path):
+    if not _navigate_to_wifi_settings(client, wifi):
         logger.warning("wifi UI fallback: could not navigate to Wi-Fi settings screen")
         return
 

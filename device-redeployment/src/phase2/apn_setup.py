@@ -25,9 +25,18 @@ from __future__ import annotations
 
 import logging
 
-from src.device.adb_client import AdbClientProtocol
+from src.device.adb_client import AdbClientProtocol, AdbCommandError
 from src.device.model_profile import ModelProfile
-from src.device.ui_automator import inject_text, navigate_menu_path, tap_resource_id
+from src.device.ui_automator import (
+    AmbiguousResourceIdError,
+    dump_ui,
+    find_by_content_desc,
+    find_by_text,
+    find_resource_id,
+    inject_text,
+    navigate_menu_path,
+    tap_resource_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +89,78 @@ def _fill_labeled_field(
     return True
 
 
+def _step_target_present(ui_xml: str, step) -> bool:
+    """Read-only check (no tap) for whether a single navigate_menu_path()
+    step's target is visible in an already-taken dump."""
+    if isinstance(step, str):
+        step_type, value = "text", step
+    else:
+        step_type, value = step.get("type", "text"), step["value"]
+    try:
+        if step_type == "text":
+            return find_by_text(ui_xml, value) is not None
+        if step_type == "resource_id":
+            return find_resource_id(ui_xml, value) is not None
+        if step_type == "content_desc":
+            return find_by_content_desc(ui_xml, value) is not None
+    except AmbiguousResourceIdError:
+        return True  # present, just ambiguous — good enough as a landing signal
+    return False
+
+
+def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
+    """Reach the APN entry screen via profile.apn_settings()['menu_path'].
+
+    A real client-PC run showed the leading text steps of menu_path (e.g.
+    tapping "設定") fail whenever the device isn't already on a screen where
+    that text is visible — e.g. reached via --skip-wizard testing rather
+    than a fresh wizard walkthrough. SHG10's confirmed path (and plausibly
+    other models following the same "APN lives under Wi-Fi settings"
+    pattern) reaches the same combined Wi-Fi/mobile-network screen that
+    wifi_setup.py's android.settings.WIFI_SETTINGS intent goes to directly,
+    before continuing with APN-specific steps (an icon, then a menu item).
+
+    So: try that same intent, then do a **read-only** check (dump + find,
+    no tap) of whether it landed somewhere the first non-text menu_path
+    step is already reachable. Only then commit to skipping the leading
+    text steps — never tap partway down one path and fall back to another,
+    which could leave the UI in a state neither path recovers from
+    correctly. Falls back to the full menu_path from the start otherwise —
+    exactly Stage A's original behavior, zero regression risk if the
+    intent doesn't help.
+    """
+    menu_path = apn["menu_path"]
+
+    leading_text_steps = 0
+    for step in menu_path:
+        step_type = "text" if isinstance(step, str) else step.get("type", "text")
+        if step_type != "text":
+            break
+        leading_text_steps += 1
+    remaining_steps = menu_path[leading_text_steps:]
+
+    if remaining_steps and leading_text_steps > 0:
+        try:
+            client.shell("am start -a android.settings.WIFI_SETTINGS")
+        except AdbCommandError as exc:
+            logger.info("am start WIFI_SETTINGS intent failed: %s", exc)
+        else:
+            ui_xml = dump_ui(client)
+            if _step_target_present(ui_xml, remaining_steps[0]):
+                logger.info(
+                    "apn menu: WIFI_SETTINGS intent landed correctly, "
+                    "skipping %d leading text step(s) of menu_path",
+                    leading_text_steps,
+                )
+                return navigate_menu_path(client, remaining_steps)
+            logger.info(
+                "apn menu: WIFI_SETTINGS intent didn't land where the next "
+                "menu_path step is reachable; falling back to the full path"
+            )
+
+    return navigate_menu_path(client, menu_path)
+
+
 def configure_apn(
     client: AdbClientProtocol,
     profile: ModelProfile,
@@ -93,7 +174,7 @@ def configure_apn(
     on success."""
     apn = profile.apn_settings()
 
-    if not navigate_menu_path(client, apn["menu_path"]):
+    if not _navigate_apn_menu(client, apn):
         logger.error("apn menu navigation failed")
         return False
 

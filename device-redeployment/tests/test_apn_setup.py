@@ -1,7 +1,11 @@
 """Tests for src/phase2/apn_setup.py — both the legacy literal-resource-id
 field shape (still used by the 3 models untouched by Stage B) and the new
 label-based field shape (SHG10 — real field rows share one generic
-resource-id, disambiguated by label text; see docs/record.md)."""
+resource-id, disambiguated by label text; see docs/record.md), plus the
+android.settings.WIFI_SETTINGS intent shortcut added after a real
+client-PC run showed menu_path's leading text steps (e.g. tapping "設定")
+fail whenever the device isn't already on a screen where that text is
+visible."""
 
 from src.device.model_profile import ModelProfile
 from src.phase2.apn_setup import configure_apn
@@ -112,6 +116,64 @@ def test_configure_apn_fails_loudly_when_menu_navigation_fails():
     client = FakeAdbClient(ui_dumps=["<hierarchy></hierarchy>"])
     result = configure_apn(client, LEGACY_PROFILE, "internet", "310", "260")
     assert result is False
+
+
+def test_configure_apn_intent_shortcut_skips_leading_text_steps():
+    """When the WIFI_SETTINGS intent lands somewhere the first non-text
+    menu_path step (the settings_button icon) is already reachable, the
+    leading "設定" text tap must be skipped entirely."""
+    # Only the post-intent screen is provided — settings_button IS present,
+    # "設定" text is NOT. If the code tried to tap "設定" first (i.e. didn't
+    # skip it), navigation would fail outright since it's absent here.
+    screen_without_settings_text = LABELED_SCREEN_XML.replace(
+        '<node text="設定" bounds="[0,0][100,100]" />', ""
+    )
+    client = FakeAdbClient(ui_dumps=[screen_without_settings_text] * 30)
+
+    result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+
+    # Reaches the (unresolved) save step, not stuck at navigation.
+    assert result is False
+    assert any(c == "am start -a android.settings.WIFI_SETTINGS" for c in client.shell_calls)
+    settings_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    assert settings_tap not in client.shell_calls
+
+
+def test_configure_apn_falls_back_to_full_menu_path_when_intent_command_fails():
+    class NoIntentClient(FakeAdbClient):
+        def shell(self, command, timeout=30):
+            if command == "am start -a android.settings.WIFI_SETTINGS":
+                from src.device.adb_client import AdbCommandError
+                raise AdbCommandError(command, "intent not supported on this build")
+            return super().shell(command, timeout=timeout)
+
+    client = NoIntentClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+
+    result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is False  # still fails at the (unresolved) save step, not navigation
+    settings_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    assert settings_tap in client.shell_calls
+
+
+def test_configure_apn_falls_back_to_full_menu_path_when_intent_lands_elsewhere():
+    home_screen_xml = '<hierarchy><node text="Home" bounds="[0,0][10,10]" /></hierarchy>'
+    client = FakeAdbClient(ui_dumps=[home_screen_xml, LABELED_SCREEN_XML] + [LABELED_SCREEN_XML] * 30)
+
+    result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is False  # still fails at the (unresolved) save step, not navigation
+    settings_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    assert settings_tap in client.shell_calls
+
+
+def test_configure_apn_all_text_menu_path_never_attempts_intent():
+    """A menu_path with no non-text steps at all (the legacy shape) has no
+    shared-prefix opportunity to skip — the intent must never even be
+    tried, matching Stage A's original behavior exactly."""
+    client = FakeAdbClient(ui_dumps=[LEGACY_SCREEN_XML] * 10)
+    configure_apn(client, LEGACY_PROFILE, "internet", "310", "260")
+    assert not any(c == "am start -a android.settings.WIFI_SETTINGS" for c in client.shell_calls)
 
 
 def test_configure_apn_legacy_missing_required_field_fails_cleanly():

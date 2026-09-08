@@ -71,13 +71,27 @@ class AdbClient:
         guards against: that used to silently look identical to "device not
         connected" rather than the config problem it actually is), or on
         timeout. Non-zero exit is NOT an error here — callers interpret
-        stdout/returncode themselves."""
+        stdout/returncode themselves.
+
+        Decodes stdout/stderr as UTF-8 explicitly (not `text=True`, which
+        uses the OS locale's codepage — e.g. cp932 on a Japanese-locale
+        Windows machine). `adb`'s actual output is UTF-8 regardless of host
+        locale, and device data routinely contains non-ASCII text (Wi-Fi
+        SSIDs, app names, `dumpsys` output echoing device-side strings).
+        Under cp932 that used to crash inside a background thread
+        subprocess.run() itself spawns, invisibly to any try/except here —
+        the caller would just see `stdout=None` and a confusing downstream
+        TypeError. `errors="replace"` trades perfect fidelity for never
+        crashing the whole flow over one stray byte in output we're usually
+        only substring/regex-matching anyway.
+        """
         full_command = [self.adb_path, *args]
         try:
             return subprocess.run(
                 full_command,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
                 check=False,
             )
