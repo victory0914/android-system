@@ -317,6 +317,36 @@ def node_is_checked(
     return target.get("checked") == "true"
 
 
+def get_node_text(
+    ui_xml: str,
+    resource_id: str,
+    *,
+    index: int = 0,
+) -> str | None:
+    """Return the matched node's `text` attribute, or None if no matching
+    node is found. Same matching/disambiguation rules as find_resource_id()
+    (minus the secondary `text=` filter, which wouldn't make sense here —
+    this function *reads* text, it doesn't search by it).
+
+    Exists to read dialog/message content rather than just detect a node's
+    presence or tap it — e.g. a real SHG10 capture showed APN save
+    validation failures render as a standard AlertDialog with the actual
+    error message at `android:id/message`; failing loudly means logging
+    that real message, not just "something went wrong".
+    """
+    root = ET.fromstring(ui_xml)
+    matches = _iter_all_matches(root, resource_id=resource_id)
+
+    if not matches:
+        return None
+
+    target = _disambiguate_or_raise(matches, index, f"resource_id {resource_id!r}")
+    if target is None:
+        return None
+
+    return target.get("text")
+
+
 def all_visible_texts(ui_xml: str) -> list[str]:
     """Return every non-empty `text` attribute in the dump, in document
     order. Used to log a screen's full visible content when nothing
@@ -504,4 +534,28 @@ def inject_text(client: AdbClientProtocol, text: str) -> bool:
     client.shell(
         f'am broadcast -a ADB_INPUT_TEXT --es msg "{escaped}"'
     )
+    return True
+
+
+def input_text_direct(client: AdbClientProtocol, text: str) -> bool:
+    """Type text via Android's built-in `input text` shell command —
+    injected directly through instrumentation, not through the active IME.
+
+    Unlike inject_text() (broadcasts to ADB Keyboard, which needs that app
+    installed and set as the active input method), this needs no extra app.
+    Real-device testing (docs/record.md, 2026-09-08) found it necessary
+    specifically for numeric fields (APN's MCC/MNC): the device's default
+    IME is in Japanese kana mode, and the on-screen keyboard can't reach
+    digits without an explicit mode switch, which UI automation has no
+    reliable way to trigger. `input text` bypasses the on-screen keyboard
+    entirely.
+
+    Not a general replacement for inject_text() — kept narrowly scoped to
+    where it's actually been confirmed necessary. `input text` requires
+    `%s` in place of literal spaces; not handled generally here since the
+    known use (MCC/MNC) is pure digits, but callers passing space-containing
+    text should be aware.
+    """
+    escaped = text.replace(" ", "%s")
+    client.shell(f'input text "{escaped}"')
     return True

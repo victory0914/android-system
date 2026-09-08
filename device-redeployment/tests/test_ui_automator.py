@@ -17,7 +17,9 @@ from src.device.ui_automator import (
     find_by_content_desc,
     find_by_text,
     find_resource_id,
+    get_node_text,
     inject_text,
+    input_text_direct,
     navigate_menu_path,
     node_is_checked,
     scroll_down,
@@ -340,3 +342,39 @@ def test_navigate_menu_path_accepts_legacy_plain_string_steps():
     client = FakeAdbClient(ui_dumps=[legacy_xml])
     result = navigate_menu_path(client, ["Settings", "Network & internet"])
     assert result is True
+
+
+# --- Stage B (SHG10 real APN-save session, 2026-09-08) additions ----------
+
+VALIDATION_DIALOG_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy rotation="0">
+  <node index="0" text="" resource-id="" class="android.widget.FrameLayout" bounds="[0,0][1080,2432]">
+    <node index="0" text="MCC欄は3桁で指定してください。" resource-id="android:id/message"
+          class="android.widget.TextView" bounds="[71,1117][1009,1176]" />
+    <node index="1" text="OK" resource-id="android:id/button1"
+          class="android.widget.Button" bounds="[800,1210][976,1359]" />
+  </node>
+</hierarchy>
+"""
+
+
+def test_get_node_text_returns_matched_text():
+    assert get_node_text(VALIDATION_DIALOG_XML, "android:id/message") == "MCC欄は3桁で指定してください。"
+    assert get_node_text(VALIDATION_DIALOG_XML, "android:id/button1") == "OK"
+
+
+def test_get_node_text_no_match_returns_none():
+    assert get_node_text(VALIDATION_DIALOG_XML, "android:id/does_not_exist") is None
+
+
+def test_input_text_direct_uses_input_text_command():
+    client = FakeAdbClient()
+    result = input_text_direct(client, "440")
+    assert result is True
+    assert 'input text "440"' in client.shell_calls
+
+
+def test_input_text_direct_escapes_spaces():
+    client = FakeAdbClient()
+    input_text_direct(client, "a b")
+    assert 'input text "a%sb"' in client.shell_calls

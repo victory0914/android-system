@@ -161,7 +161,11 @@ apn_settings:
   # assumption in docs/record.md was wrong). Both were pre-filled: MCC=440
   # (Japan), MNC=11 (Rakuten Mobile) — the SIM actually installed in this
   # unit, matching the "Rakuten SIM in a KDDI-branded unit" finding
-  # elsewhere in docs/record.md. Do NOT delete these fields.
+  # elsewhere in docs/record.md. CONFIRMED MANDATORY, not optional (real
+  # on-device validation, 2026-09-08): the device itself refuses to save
+  # without them — see the validation dialogs below. Do NOT delete these
+  # fields. MCC must be exactly 3 digits; MNC 2 or 3 digits — enforced by
+  # apn_setup.py before ever touching the device (_MCC_PATTERN/_MNC_PATTERN).
   mcc_field_label: "MCC"
   mnc_field_label: "MNC"
   # NOT resolved from any capture — the per-field edit dialog itself (opened
@@ -183,29 +187,44 @@ apn_settings:
   # is already open rather than guessing a tap target.
   add_button_resource_id: null
 
-  # NOT resolved — confirmed absent from the form (checked in top, middle,
-  # AND bottom scroll positions; no Save button exists at all). Per
-  # docs/record.md Task 2: "if the dumps don't contain it, say so explicitly
-  # rather than guessing, and leave it marked TODO" — apn_setup.py therefore
-  # fails loudly (returns False, logs clearly) rather than guessing a save
-  # action, so configure_apn() will not silently claim success on this model
-  # until this is resolved on-site.
+  # RESOLVED (real, confirmed on-device 2026-09-08 — see docs/record.md).
+  # Save is NOT a button on the form itself — it's two taps: open the
+  # overflow "⋮" menu, then tap 保存 inside it. Superseded the two unconfirmed
+  # candidates from the earlier session (the overflow menu turned out to be
+  # the right one; "上へ移動"/navigate-up was never actually the save
+  # trigger on this build — don't use it).
+  #
+  # The overflow trigger itself has no resource-id (only content-desc,
+  # confirmed across three separate captures now:
+  # tests/fixtures/apn_entry_top_SHG10.xml, apn_entry_filled_SHG10.xml, and
+  # apn_overflow_menu_SHG10.xml) — apn_setup.py uses tap_by_content_desc()
+  # for it, not tap_resource_id().
+  overflow_menu_content_desc: "その他のオプション"
+  # RESOLVED (real: tests/fixtures/apn_overflow_menu_SHG10.xml). Once open,
+  # the menu's two items ("保存" / "キャンセル") share android:id/title —
+  # same generic-id pattern as everywhere else on this screen — so this is
+  # matched by text, not by resource-id. apn_setup.py's default for this
+  # field is already "保存"; listed explicitly here for clarity.
+  save_menu_item_text: "保存"
+  # Legacy single-button save field — unused on this model now that the
+  # real two-tap flow above is resolved. Left null (not deleted) so the
+  # field's meaning stays documented; apn_setup.py's _save_apn() prefers
+  # overflow_menu_content_desc when present and never looks at this for
+  # this model.
   save_button_resource_id: null
-  # Two candidates were found in the captured dumps for what might trigger
-  # Save — recorded here as leads for the next on-site session, NOT wired
-  # into any code path (neither has a resource-id; both are content-desc
-  # only, and functionally UNCONFIRMED — this is not a working
-  # implementation, just what was observed):
-  #   - overflow "..." menu (content-desc "その他のオプション", top-right).
-  #     Contents not captured; unknown if it contains a Save item.
-  #   - toolbar "navigate up" arrow (content-desc "上へ移動", top-left).
-  #     Matches stock AOSP ApnEditor's known behavior of validating and
-  #     saving on up-navigation, but this SHARP-skinned build's actual
-  #     behavior here is NOT confirmed.
-  save_action_candidates:
-    - type: content_desc
-      value: "その他のオプション"
-      note: "overflow menu — contents not captured"
-    - type: content_desc
-      value: "上へ移動"
-      note: "matches stock AOSP ApnEditor save-on-up-navigation behavior, unconfirmed on this build"
+
+  # RESOLVED (real, confirmed on-device 2026-09-08). Field validation is
+  # sequential and blocking: saving with any required field empty/invalid
+  # shows a modal AlertDialog instead of returning to the APN list, and does
+  # NOT save. Real messages observed, in the order they appear:
+  #   - "APNは必ず指定してください。"          (APN field empty)
+  #   - "MCC欄は3桁で指定してください。"        (tests/fixtures/apn_mcc_validation_SHG10.xml)
+  #   - "MNC欄は2桁か3桁で指定してください。"    (tests/fixtures/apn_mnc_validation_SHG10.xml)
+  # Each is a standard AOSP AlertDialog: message at android:id/message,
+  # single OK button at android:id/button1 (real confirmation that this
+  # same id — already used above as the best-guess per-field dialog confirm
+  # button — really is SHG10's standard AlertDialog positive-button id).
+  # apn_setup.py's _save_apn() checks for android:id/message after tapping
+  # 保存; if present, it logs the real message and fails loudly rather than
+  # tapping OK and retrying blindly — a silent failure here would leave the
+  # device with no APN configured and no error surfaced.

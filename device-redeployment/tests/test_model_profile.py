@@ -86,7 +86,12 @@ def test_load_shg10_model_file_screen_driven_wizard_and_labeled_apn_fields():
     assert apn["mnc_field_label"] == "MNC"
     # Genuinely unresolved — must stay None, not a guessed value.
     assert apn["add_button_resource_id"] is None
+    # Save is real, resolved data now (confirmed on-device, 2026-09-08): a
+    # two-tap overflow-menu flow, not a literal save button — the legacy
+    # single-button field stays None on this model on purpose.
     assert apn["save_button_resource_id"] is None
+    assert apn["overflow_menu_content_desc"] == "その他のオプション"
+    assert apn["save_menu_item_text"] == "保存"
 
 
 def test_load_all_keys_by_model_number():

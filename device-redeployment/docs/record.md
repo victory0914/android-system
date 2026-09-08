@@ -118,6 +118,81 @@ accumulates.
 - Separate finding: **「モバイル ネットワークへの接続」/ eSIM download screen**
   exists on this model (reached via SIM settings). This is NOT the APN entry
   screen — do not confuse the two when writing navigation paths.
+- *2026-09-08 (SUPERSEDES the 2026-09-04 MCC/MNC note above):* MCC/MNC ARE
+  present on this build — the earlier note was wrong, they're just further
+  down the scrollable form than the initial look covered. Confirmed via
+  `apn_entry_middle_SHG10.xml`, `apn_entry_bottom_SHG10.xml`, and now also
+  `apn_entry_filled_SHG10.xml`. They are **mandatory**, not optional: the
+  device's own save validation rejects an entry without them.
+- *2026-09-08:* **APN save flow confirmed.** Save is NOT a button on the
+  form — it's in the overflow "⋮" menu (content-desc `その他のオプション`,
+  no resource-id — same icon-only pattern noted above for the "+" add
+  control). Opening it shows two items sharing `android:id/title`: `保存`
+  (Save) and `キャンセル` (Cancel) — same generic-id-plus-text-disambiguation
+  pattern as the field rows and the Wi-Fi list. The earlier `上へ移動`
+  (navigate-up) candidate was tested and is **not** the save trigger on
+  this build — don't use it.
+- *2026-09-08:* **Save validation is sequential and blocking.** Saving with
+  a required field empty/invalid shows a modal `AlertDialog` and does NOT
+  save — confirmed real messages, in the order they appear:
+  `APNは必ず指定してください。` (APN field empty) →
+  `MCC欄は3桁で指定してください。` (`apn_mcc_validation_SHG10.xml`) →
+  `MNC欄は2桁か3桁で指定してください。` (`apn_mnc_validation_SHG10.xml`).
+  Each dialog: message at `android:id/message`, single OK at
+  `android:id/button1` — real confirmation that `button1` really is this
+  build's standard AlertDialog positive-button id (raises confidence in
+  the earlier best-guess for the per-field entry dialog's own confirm
+  button, which uses the same assumption but is still not directly
+  captured).
+- *2026-09-08:* **Numeric field entry needs a different mechanism.** The
+  device's default IME is Japanese kana mode; the on-screen keyboard can't
+  reach digits for MCC/MNC without an explicit mode switch that UI
+  automation has no reliable way to trigger. `adb shell input text "440"`
+  (Android's built-in text-injection, bypassing the IME) works instead of
+  the ADB Keyboard broadcast used for the other (alphanumeric) fields.
+- Implication for all of the above: `apn_setup.py` was rewritten
+  accordingly (`_save_apn()`, `_MCC_PATTERN`/`_MNC_PATTERN` pre-validation,
+  `input_text_direct()` for MCC/MNC specifically) and
+  `config/models/sharp_aquos_sense7.yaml` updated
+  (`overflow_menu_content_desc`, `save_menu_item_text`). See
+  `PENDING_REAL_DEVICE_DATA.md` for the full before/after.
+
+### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
+- *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
+  *directory* (`C:\platform-tools`), but was being passed straight through
+  as the `adb` executable path itself. Every `AdbClient` call then failed
+  with `OSError`, silently swallowed by `is_connected()` into a plain
+  `False` — indistinguishable in the logs from a genuinely disconnected
+  device, even though `adb devices` worked fine in a normal shell. Fixed by
+  joining the directory with the executable name
+  (`main_phase2._resolve_adb_path()`) and making `is_connected()` raise
+  `AdbCommandError` instead of swallowing this specific failure class.
+- *2026-09-08:* `subprocess.run(..., text=True, ...)` decodes `adb` output
+  using the OS locale codepage — `cp932` on the client PC's Japanese-locale
+  Windows install — instead of UTF-8, which is what `adb`'s actual output
+  uses. Real device output (`dumpsys wifi`, containing real Wi-Fi SSIDs)
+  crashed a background thread *inside* `subprocess.run()` itself, invisible
+  to any `try`/`except` in this codebase, leaving `stdout=None` and
+  surfacing several calls later as a confusing
+  `TypeError: argument of type 'NoneType' is not iterable`. Fixed with
+  explicit `encoding="utf-8", errors="replace"`. Neither of these two bugs
+  was a device-data gap — both were pure code bugs that only a real
+  Windows client PC with real non-ASCII device output could have surfaced;
+  the fake/mock ADB layer never exercised either condition.
+- *2026-09-08:* Real client-PC run showed the SHG10 test unit was already
+  past OOBE (landed on a home screen, not any wizard screen) — it had been
+  provisioned in an earlier session. Added `main_phase2.py --skip-wizard`
+  for testing against an already-provisioned device without a fresh
+  factory reset each time. Deliberately not exposed on `run_phase2_batch()`
+  (the production batch path).
+- *2026-09-08:* Real run also showed `wifi_setup.py`'s/`apn_setup.py`'s
+  `menu_path` text navigation (tapping `設定`) fails whenever the device
+  isn't already showing that text — true for `--skip-wizard` testing
+  (starts from the home screen) and plausibly other real-world states too.
+  Both now try the standard `android.settings.WIFI_SETTINGS` intent first
+  (confirmed working — reaches the screen regardless of starting point),
+  with a read-only landing check before committing to skip any menu_path
+  steps, falling back to the original behavior unchanged otherwise.
 
 ### Windows/client-PC environment — relevant to deployment & setup docs
 - *2026-09-04:* Freshly-extracted executables on the client PC are **silently
@@ -138,15 +213,16 @@ accumulates.
 
 ## Dump capture status (all models)
 
-| Model | Wi-Fi list | APN entry | Wizard (OOBE) |
-|---|---|---|---|
-| SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
-| Xperia Ace III (SOG08) | ❌ not started | ❌ not started | ❌ same constraint applies |
-| Xperia 10 IV (SOG07) | ❌ not started | ❌ not started | ❌ same constraint applies |
-| AQUOS sense6s (SHG07) | ❌ not started | ❌ not started | ❌ same constraint applies |
+| Model | Wi-Fi list | APN entry | APN save flow | Wizard (OOBE) |
+|---|---|---|---|---|
+| SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
+| Xperia Ace III (SOG08) | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
+| Xperia 10 IV (SOG07) | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
+| AQUOS sense6s (SHG07) | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
 
-All 4 SHG10 files captured 2026-09-04, verified present in `C:\scrcpy\dumps`
-on 2026-09-08.
+Original 4 SHG10 files captured 2026-09-04. 4 more (save flow + a filled
+entry form) captured 2026-09-08, same session as the Save flow findings
+above.
 
 Capture pattern used:
 ```
@@ -382,38 +458,48 @@ file's text description.
 
 ---
 
-## Overall status (as of 2026-09-08)
+## Overall status (as of 2026-09-08, end of day)
 
 - **Stage A: complete.** All config YAMLs, `src/device/`, `src/phase2/`,
-  `src/orchestration/`, tests (30 passing, ~0.2s, no real device needed),
-  `src/main_phase2.py`, plus `PENDING_REAL_DEVICE_DATA.md` and `README.md`.
-- **Stage B: ready to start for Wi-Fi + APN.** 4 real dumps captured for
-  SHG10. Wizard remains on placeholders — this is a **valid partial state**,
-  not a blocker.
-- **Next actions:**
-  1. Move the 4 XML files from `C:\scrcpy\dumps` into `tests/fixtures/`;
-     commit and push.
-  2. Update `PENDING_REAL_DEVICE_DATA.md`: replace the hypothetical
-     disambiguation example with the real duplicate-SSID pairs
-     (`ARIZASU-WiFi-6F_2.4GHz`/`_5G`, `SPWH_L13_72E834`/`_5G`).
-  3. Resolve Wi-Fi + APN resource-ids for SHG10 against the real XML;
-     update/add tests.
-  4. From the APN dumps, settle the two open questions: do MCC/MNC fields
-     exist on this build, and where does Save live? If MCC/MNC are absent,
-     delete those two YAML fields (see schema note below).
-  5. Build `wizard_walkthrough.py` navigation from the photographed sequence,
-     with best-guess ids + fail-loud behavior.
-  6. Confirm with client: is 「オフラインで設定」 the standard path for all
-     devices? If yes, wizard scope narrows considerably.
-  7. Repeat dump capture for the remaining 3 models (Wi-Fi + APN only —
-     wizard is not remotely obtainable on any of them).
-- **Schema note (carried from Stage A):** 6 fields were added beyond the
-  prompt's literal example schema (`wifi_settings.password_field_resource_id`,
-  `wifi_settings.connect_button_resource_id`, `apn_settings.add_button_resource_id`,
-  `apn_settings.mcc_field_resource_id`, `apn_settings.mnc_field_resource_id`)
-  because the specified function signatures need somewhere to put that data.
-  All are placeholders, all marked TODO. MCC/MNC in particular may turn out
-  not to exist on these models — resolve via action 4 above.
+  `src/orchestration/`, `src/main_phase2.py`, plus `PENDING_REAL_DEVICE_DATA.md`
+  and `README.md`. Test suite has grown well past the original 30 as Stage B
+  work landed (110 passing as of this entry, still ~1s, no real device needed).
+- **Stage B for SHG10: Wi-Fi and APN (including Save) resolved and tested
+  against real captures.** Wizard remains on the photograph-derived
+  screen-driven config, blocked only on the two button labels noted above —
+  everything else about it is implemented and tested.
+- **Completed since the "ready to start" entry above:**
+  1. ✅ 8 real dumps now in `tests/fixtures/` (the original 4 plus
+     `apn_overflow_menu_SHG10.xml`, `apn_mcc_validation_SHG10.xml`,
+     `apn_mnc_validation_SHG10.xml`, `apn_entry_filled_SHG10.xml`).
+  2. ✅ `PENDING_REAL_DEVICE_DATA.md` updated with real SSID pairs, then
+     updated again as Save/MCC/MNC resolved.
+  3. ✅ Wi-Fi + APN resource-ids resolved and tested (`tests/test_real_shg10_fixtures.py`,
+     `tests/test_wifi_setup.py`, `tests/test_apn_setup.py`).
+  4. ✅ MCC/MNC confirmed mandatory; Save flow fully resolved (two-tap
+     overflow menu, sequential blocking validation) — see the APN settings
+     section above.
+  5. ⏳ `wizard_walkthrough.py` built (screen-driven, text-matching,
+     best-guess ids where needed) — implemented and tested, but 2 of 9
+     screens' button labels are still unverified, so a real end-to-end
+     wizard run hasn't happened yet.
+  6. ⏳ Still not confirmed with the client: is 「オフラインで設定」 standard
+     for all devices?
+  7. ⏳ Not started: dump capture for SOG08/SOG07/SHG07.
+- **New since this entry started:** real hardware surfaced two pure code
+  bugs (adb path resolution, UTF-8 decoding — see "Real-device bugs" above)
+  neither of which was a device-data gap; both are fixed. Also added
+  `--skip-wizard` (testing convenience) and the `WIFI_SETTINGS` intent
+  navigation shortcut (robustness improvement, not device-data).
+- **Actual current blocker for a full SHG10 run:** real Wi-Fi credentials —
+  see "Highest priority" in `PENDING_REAL_DEVICE_DATA.md`. Everything else
+  in the Wi-Fi → APN chain is implemented, tested, and has gotten as far as
+  it can without a real network to join.
+- **Schema note (carried from Stage A, now fully resolved for SHG10):** the
+  6 fields added in Stage A plus several more added during Stage B are all
+  documented in `PENDING_REAL_DEVICE_DATA.md`'s "Schema additions" section.
+  MCC/MNC turned out to exist and be mandatory (not absent, as an earlier
+  entry above speculated) — see the APN settings section.
 
 ---
 
