@@ -6,216 +6,63 @@ outstanding. See `docs/record.md` for the full session notes (test logs,
 navigation paths, capture methodology, judgment calls) behind every entry
 here — this file is the checklist; that one is the evidence.
 
-**Status as of 2026-09-11 (Stage B, ongoing):** **Wi-Fi connects
-end-to-end on real hardware** — confirmed by a client screenshot showing
-`earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. **APN navigation,
-the "+" add-button, and field entry through MNC are now confirmed working
-on real hardware** (client run, 2026-09-11, after the screen-recognition +
-add-button fixes below) — the remaining blocker is still the save step:
-a client-supplied "before"/"after" dump pair
-(`apn_failure_setting_SHG10.xml` / `apn_success_setting_SHG10.xml`)
-confirmed the failing run produces **zero new APN entries** (the failure
-dump is byte-identical to the pristine empty list), not a malformed one —
-whatever blocks it does so before any entry is ever created. **Two fixes
-are in place, not yet re-verified against a run made with both applied
-together**:
-1. MCC/MNC full-width digit entry (client's direct observation) — fixed
-   via `input_digits_direct()`.
-2. A defensive guard against `config/network.yaml` silently falling back
-   to placeholder example data — added after the success dump revealed a
-   real leftover APN entry literally named "<APN value from client>" on
-   the device from some earlier run. **This guard itself immediately blocked
-   a real, correctly-filled-in run** (over `apn.carrier`, a documentation-
-   only field nothing actually reads) — narrowed same-day to only check
-   the fields the automation depends on. See "Network-config placeholder
-   safety" below.
-**Third factor found, same day, not a code bug**: the very next run hit
-the guard again — correctly this time. `config/network.yaml`'s
-`apn.apn_name` was itself still the literal placeholder text `<APN value
-from client>` (everything else — wifi, carrier, mcc, mnc — had real
-values; only `apn_name` was missed). This means every real automation run
-tested so far, across this whole investigation, was attempting to save
-that literal placeholder string (spaces and angle brackets included) as
-the actual APN value — independently plausible as a contributor to "zero
-entries created," on top of the digit-encoding issue. **Client needs to
-edit their own `config/network.yaml`** (gitignored, local-only — not
-something fixable from this side) to set a real `apn_name` before the
-next run.
+**Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
+is CONFIRMED WORKING end-to-end on real hardware.** Client run:
+`SUCCESS: device 352063910272451 reached LOGIN_INSTALL` — Wi-Fi (already
+connected, correctly detected and skipped), APN navigation, the "+" tap,
+all four fields, and the save itself all completed successfully in one
+real run, and the client independently confirmed by manually reopening
+the APN list that `rakuten.jp` was genuinely saved and selected. This is
+the first time the full chain has worked all the way through — every
+"re-verify against real hardware" entry that used to be tracked here is
+now confirmed (see "Resolved — full Phase 2 run confirmed end-to-end"
+below for the complete account of what got this here).
 
-See "Highest priority" below — it is not yet confirmed whether the
-digit-encoding fix alone resolves the save failure; the exact terminal
-log from a run with a real `apn_name` in place is still the single most
-useful missing piece — the next run is the first one where every known
-factor is actually corrected at once. SHG10's wizard is on a
-photograph-derived, text-matching config — real dumps for the wizard are
-**not obtainable on any model, ever** (structural ADB/factory-reset
-constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
-untouched** — still 100% Stage A placeholders, not started.
+One wrinkle, fixed same-day: the automation's own post-save soft check
+warned `'rakuten.jp' wasn't spotted back on the APN list`, even though the
+save had genuinely succeeded — the list can take a moment to actually
+refresh after 保存, and the very next dump can still show the pre-save
+state. Not a real failure (the check is soft — it never blocks success on
+its own), but misleading. `_save_apn()` now retries the check once after
+a short delay before giving up. See "Resolved" below.
+
+SHG10's wizard is on a photograph-derived, text-matching config — real
+dumps for the wizard are **not obtainable on any model, ever** (structural
+ADB/factory-reset constraint, see docs/record.md); 2 of 9 screens' button
+labels are still unverified (see "Highest priority" below). **SOG08,
+SOG07, and SHG07 are entirely untouched** — still 100% Stage A
+placeholders, not started — now the next real priority since SHG10 itself
+is working.
 
 ## Highest priority
 
-### Re-verify against real hardware with BOTH the digit-entry fix and the config-safety guard (2026-09-11, latest)
+With SHG10's Wi-Fi + APN flow now confirmed working end to end, the two
+remaining priorities are both further below (kept in their original
+sections rather than duplicated here):
 
-Not yet re-verified. Client supplied a "before"/"after" dump pair for a
-run that still failed to save:
-`tests/fixtures/apn_failure_setting_SHG10.xml` (after tapping 保存, still
-landed here) is **byte-identical** to `apn_restricted_SHG10.xml` (the
-pristine, zero-entries list) — confirming the save genuinely produces no
-new entry at all, consistent with a validation dialog blocking it (same
-conclusion as before, now with direct dump evidence instead of just a
-description). It's unconfirmed whether this specific failing run already
-included the MCC/MNC full-width-digit fix from immediately before this
-entry — if not, that fix (still itself unverified against a live run)
-may already resolve this.
+- **"Two wizard button labels — still the only wizard gap"** (under
+  "SHG10 (AQUOS sense7...)" below) — now the main SHG10 gap: everything
+  else is implemented and confirmed working. Resolving these (or
+  accepting the risk and testing anyway) is what's needed to confirm a
+  *complete* fresh-device flow (wizard + Wi-Fi + APN), not just Wi-Fi +
+  APN with `--skip-wizard`.
+- **"SOG08 / SOG07 / SHG07 — no real data of any kind yet"** (same
+  section) — entirely untouched, still 100% Stage A placeholders. Now the
+  next real priority for Stage B to expand to, if/when hardware for them
+  becomes available.
 
-The paired `apn_success_setting_SHG10.xml` (client's own manual save, for
-comparison) also revealed something unrelated but worth fixing regardless:
-a **second, older APN entry on the same device, literally named "<APN
-value from client>"** — the exact placeholder string from
-`config/network.yaml.example`. Real proof that an earlier run (at some
-point, not necessarily recent) silently fell back to that example file
-instead of a real `config/network.yaml` and created a garbage entry on
-real hardware without erroring. Fixed: `main_phase2.py`'s
-`_load_network_config()` now refuses to run at all — raises
-`NetworkConfigError` — if `config/network.yaml` is missing, or if any
-value in it still matches one of the example file's known placeholder
-strings verbatim. This is unrelated to why *this* save failed (that
-leftover entry is unchecked/inactive, a different entry from the one
-being tested), but a real, concrete safety gap regardless.
+### Re-verify the destructive-tap safety fix's retry path specifically
 
-**Next run should have both fixes in place** (this commit plus the prior
-digit-entry one) — if it still doesn't save, the exact terminal log
-output remains the one thing that would settle this for real, since dumps
-of the failure state (now captured twice) show nothing more than "no
-entry got created," not *why*.
-
-### Re-verify against real hardware after switching MCC/MNC to keyevent digit entry (2026-09-11)
-
-Not yet re-verified. Client directly reported the concrete, observable
-cause of "typed through MNC but never saves": MCC/MNC were being entered
-using FULL-WIDTH digits (e.g. "４４０") instead of half-width/ASCII
-("440"). This device's on-device validation almost certainly checks for
-ASCII digits specifically ("MCC欄は3桁で指定してください" — a full-width
-"４４０" is a different Unicode range, U+FF10-FF19, not U+0030-U+0039, so
-depending on exactly how the validation regex is written it may not even
-register as digits at all) — this would explain the entry consistently
-failing to save even though field-filling itself completed with no
-errors, exactly as the client described.
-
-Root cause of the full-width conversion itself: `input_text_direct()`
-("input text") is meant to bypass the active IME entirely, but real
-evidence now shows it doesn't fully do so for digits on this device —
-plausibly the Japanese IME's zenkaku/hankaku conversion still intercepts
-committed text. Fix: added `input_digits_direct()`
-(`src/device/ui_automator.py`), which sends each digit as an individual
-`adb shell input keyevent KEYCODE_N` — a different injection path that
-maps directly to the physical/virtual number-row keys and isn't expected
-to go through the same IME conversion. `_fill_labeled_field()` now uses
-this for MCC/MNC specifically (`numeric_only=True`), while 名前/APN keep
-using `input_text_direct()` as before (arbitrary text, not just digits).
-
-**This is the client's own direct, concrete observation, not another
-inferred hypothesis** — significantly higher confidence than the
-confirm-button theory that was just ruled out. Still, "digits render
-correctly now" and "the entry actually saves" are two different things to
-confirm — watch closely on the next run, and if it still doesn't save,
-the next need is still the same: the exact terminal log output, since a
-validation dialog's real message (already logged by `_save_apn()`) would
-immediately say whether this was the whole story or one of several
-issues.
-
-### Root cause of "not saving" ruled out: confirm-button hypothesis (2026-09-11)
-
-An earlier hypothesis — that a wrong best-guess id for the per-field
-dialog's confirm button was leaving each field's dialog stuck open — was
-ruled out by a real dump of that dialog itself, captured while open
-(`tests/fixtures/apn_accesshost_okbtn_SHG10.xml`): both
-`dialog_edit_field_resource_id` ("android:id/edit") and
-`dialog_confirm_button_resource_id` ("android:id/button1", confirmed to
-genuinely be the "OK" button, not "キャンセル"/button2) were exactly right
-all along — see "Resolved — per-field entry dialog" below. The defensive
-hardening added for that hypothesis (hard failure instead of a silent
-warning when either dialog tap isn't found) is kept regardless, since
-it's correct practice, but it isn't the fix for "not saving" — see the
-full-width-digits entry above for what is.
-
-Two client-supplied real dumps from this same investigation
-(`apn_accesshost_SHG10.xml`, `apn_accesshost_save_SHG10.xml`) turned out
-to be byte-identical to already-captured/already-correctly-handled
-fixtures (the edit form and the overflow "⋮"/"保存" popup) — they confirm
-those two structures are right, not a source of new information.
-
-### Re-verify against real hardware after the APN screen-recognition + add-button fixes (2026-09-11) — CONFIRMED WORKING
-
-Two related fixes, both backed by a real dump
-(`tests/fixtures/apn_restricted_SHG10.xml`) rather than a screenshot-only
-guess, **now confirmed working by a live client run** (2026-09-11 — the
-run got through navigation, the "+" tap, and all four fields before
-stalling at save, per the entry above):
-
-1. **Screen recognition.** A real run's log showed
-   `android.settings.APN_SETTINGS` repeatedly reporting "didn't land on a
-   recognizable APN list screen" even though it *was* landing correctly —
-   `_looks_like_apn_list_screen()` only recognized the SHARP-skinned title
-   (`content-desc` "アクセスポイント名"), not this device's actual
-   intent-landing screen, whose title is `content-desc` "APN" on
-   `com.android.settings:id/collapsing_toolbar" (confirmed by the dump —
-   an earlier attempt at this fix guessed it was a plain `text` node
-   instead, based on a screenshot; that would never have matched). Now
-   accepts either content-desc title variant.
-2. **Add-button.** The same dump also captured the "+" button itself: it
-   has a real, unambiguous content-desc, `"新しい APN"` ("New APN"),
-   sitting immediately left of the confirmed "⋮" overflow icon.
-   `configure_apn()` now taps it directly via this content-desc — this
-   *replaces* the position-estimate fallback (`tap_left_of_content_desc()`)
-   for SHG10 specifically; that fallback remains in the code for any
-   model/screen where no real identifier is captured yet.
-
-### Re-verify against real hardware after the APN navigation root-cause fix
-
-Not yet re-verified — this is the fix most likely to finally get a full
-run through end-to-end. Every "apn menu navigation failed" error in prior
-real runs traced to one bug: `menu_path`'s final step tried to
-`tap_by_text()` on 「アクセスポイント名」, but hand-testing (2026-09-08/09)
-confirmed that string is the *destination screen's own title* (rendered
-via `content-desc` on the toolbar, same pattern as the edit form's
-「アクセスポイントの編集」) — never a `text` node to tap. There was nothing
-there to find; no id was ever going to fix it. Replaced with
-`adb shell am start -a android.settings.APN_SETTINGS`, hand-confirmed to
-reach the APN list in one step — tried first, with the (now-corrected)
-`menu_path` kept only as a fallback. Also fixed in the same pass: MCC/MNC
-row lookup now scrolls once and retries if the row isn't immediately
-found (real confirmation they're below the fold, not just theoretically
-possible), and `_save_apn()` makes a soft positive check for the new
-entry reappearing on the list post-save (logged only, never a hard
-failure on its own). See docs/record.md for the full account.
-
-### Re-verify against real hardware after the destructive-tap safety fix
-
-Also not yet re-verified. A real run's retry loop (Wi-Fi succeeds, a later
-step fails, the whole flow retries from the top) showed `connect_wifi()`
-re-running its full UI flow even though the device was already connected
-— tapping the SSID's row opened "Network Details" (already-connected
-state) instead of the join dialog the code assumed, and with no password
-field actually present to focus, the password got typed as raw keystrokes
-into whatever had default focus. The client caught it via screen-share:
-repeated taps landing on **削除** (Forget) — which would have deleted the
-just-established connection. Fixed: `connect_wifi()` now checks connection
-state first and touches nothing at all if already connected; `削除`/
-`接続を解除` also added to the permanent do-not-tap list as defense in
-depth. **Next real run is what confirms this is actually closed** — test
-the retry path specifically (e.g. let APN fail once on purpose, or just
-run it twice in a row) so this scenario is provably exercised, not just no
-longer reachable.
-
-### Re-verify against real hardware after the dump_ui() pull-failure fix
-
-Also not yet re-verified. A real run got through Wi-Fi and into APN menu
-navigation, then crashed with a raw `FileNotFoundError` from
-`ui_automator.dump_ui()` never checking whether its `pull()` call actually
-succeeded — fixed with a clear error + automatic retry (uiautomator dump
-is known to intermittently fail right after a screen transition, which is
-exactly what had just happened).
+The single item from the old "re-verify" list not exercised by the
+successful run above: `connect_wifi()`'s already-connected check was
+exercised (it correctly detected `earth5_1` was already connected and did
+nothing), but the specific *retry-after-a-later-step-fails* scenario the
+original bug was found in (Wi-Fi succeeds, APN fails, the whole flow
+retries from the top) hasn't been deliberately re-exercised since the
+fix. Low urgency now — the underlying bug (connect_wifi() re-running its
+full UI flow when already connected) is structurally fixed regardless of
+which step triggers a retry — but worth a deliberate test (e.g. run twice
+in a row) for full confidence.
 
 ### Wi-Fi scan results vary run to run at this location
 
@@ -250,6 +97,65 @@ factory reset.
 Same Wi-Fi list + APN dump process used for SHG10 hasn't been run for any
 of the other three models. Highest-value next step once SHG10's remaining
 gaps are closed.
+
+## Resolved — full Phase 2 run confirmed end-to-end (2026-09-11)
+
+Every fix below was previously tracked as "not yet re-verified against
+real hardware" — a single successful client run confirmed all of them at
+once, reaching `LOGIN_INSTALL`:
+
+- **APN navigation root-cause fix**: `menu_path`'s old final step tried
+  `tap_by_text()` on 「アクセスポイント名」, which was always the destination
+  screen's own title (rendered via `content-desc`, never a `text` node) —
+  there was nothing there to tap. Replaced with
+  `adb shell am start -a android.settings.APN_SETTINGS` as the primary
+  path, hand-confirmed to reach the APN list in one step; `menu_path` kept
+  only as a fallback.
+- **Screen-recognition fix**: `_looks_like_apn_list_screen()` initially
+  only recognized the SHARP-skinned title (`content-desc`
+  「アクセスポイント名」), not this device's actual intent-landing screen
+  title (`content-desc` "APN" on `com.android.settings:id/collapsing_
+  toolbar`). Now accepts either.
+- **Add-button fix**: the "+" button has a real, unambiguous content-desc,
+  `"新しい APN"`, confirmed by a real dump
+  (`tests/fixtures/apn_restricted_SHG10.xml`) — tapped directly via that
+  content-desc, no longer via the position-estimate fallback (which
+  remains in the code for any model/screen without a captured identifier).
+- **Per-field dialog ids confirmed real**, not just best-guessed:
+  `dialog_edit_field_resource_id` ("android:id/edit") and
+  `dialog_confirm_button_resource_id` ("android:id/button1") — confirmed
+  by a real dump of the dialog itself, open
+  (`tests/fixtures/apn_accesshost_okbtn_SHG10.xml`). This ruled out an
+  earlier hypothesis (a wrong confirm-button id leaving dialogs stuck
+  open) as the cause of a since-resolved save failure — the hardening
+  added for that hypothesis (hard failure instead of a silent warning on
+  either dialog tap) stays regardless, as correct defensive practice.
+- **MCC/MNC full-width-digit fix** — the actual, client-observed root
+  cause of "typed through MNC but never saves": MCC/MNC were being
+  entered as full-width digits (４４０) instead of half-width/ASCII (440)
+  via `input_text_direct()` ("input text"), which is meant to bypass the
+  active IME but evidently didn't fully do so for digits on this device.
+  New primitive `input_digits_direct()` sends each digit as its own
+  `adb shell input keyevent KEYCODE_N` instead — `_fill_labeled_field()`
+  uses this for MCC/MNC (`numeric_only=True`), 名前/APN keep using
+  `input_text_direct()`.
+- **Network-config placeholder guard**: `config/network.yaml.apn_name`
+  turned out to still be the literal placeholder text `<APN value from
+  client>` on the client's machine — meaning every real run before this
+  one was attempting to save that exact string (spaces, angle brackets,
+  and all) as the actual APN value, independently plausible as a
+  contributor to every "not saving" symptom seen throughout this whole
+  investigation. Not a code bug (the guard correctly caught it) — the
+  client edited their own `config/network.yaml` to fix it. The guard
+  itself was narrowed same-day after an unrelated false positive (see
+  "Network-config placeholder safety" below).
+- **Post-save soft-check retry**: the list can take a moment to refresh
+  after 保存 — the check now retries once after a short delay before
+  logging its "wasn't spotted" warning, avoiding a false-negative warning
+  on a save that actually succeeded.
+- **`dump_ui()` pull-failure fix**: a real run crashed with a raw
+  `FileNotFoundError` from `dump_ui()` never checking whether its `pull()`
+  call succeeded — fixed with a clear error + automatic retry.
 
 ## SHG10 (AQUOS sense7, SHARP/KDDI, Android 14) — Stage B, most of the way there
 
@@ -296,8 +202,9 @@ spec assumed. Config and tests now reflect 14.
   actually lands on — confirmed by `apn_restricted_SHG10.xml`,
   resource-id `com.android.settings:id/collapsing_toolbar`; only the first
   variant was recognized before this, causing false "didn't land
-  correctly" fallbacks). Not yet re-verified end-to-end against real
-  hardware — see "Highest priority" above.
+  correctly" fallbacks). **Confirmed end-to-end on real hardware,
+  2026-09-11** — see "Resolved — full Phase 2 run confirmed end-to-end"
+  below.
 - **Navigation, fallback `menu_path`** (only used if the intent fails or
   doesn't land correctly): same as Wi-Fi's, then the gear icon
   (`com.android.settings:id/settings_button` — real, unambiguous
@@ -343,9 +250,9 @@ spec assumed. Config and tests now reflect 14.
   (`tap_left_of_content_desc()`) would have landed within ~11px of the
   real center, though it's no longer needed for this model now that the
   real value is known. `configure_apn()` prefers this content-desc over
-  both `add_button_resource_id` and the position-estimate fallback. **Not
-  yet confirmed against a live run** (the dump proves what's on screen, not
-  that tapping it produces the expected next screen).
+  both `add_button_resource_id` and the position-estimate fallback.
+  **Confirmed against a live run, 2026-09-11** — see "Resolved — full
+  Phase 2 run confirmed end-to-end" below.
 
 ### Resolved — Save flow (real, confirmed on-device 2026-09-08 — see
 `tests/fixtures/apn_overflow_menu_SHG10.xml`,

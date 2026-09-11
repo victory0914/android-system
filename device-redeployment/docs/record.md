@@ -479,6 +479,60 @@ accumulates.
   simultaneously on every real run tested until now — but with both fixed
   now, the next run is the first genuinely clean attempt.
 
+### 🎉 MILESTONE (2026-09-11): first successful end-to-end Phase 2 run on real SHG10 hardware
+
+Client ran the automation with a real `apn_name` in place (fixing the
+placeholder-value gap above). Full log:
+
+```
+2026-09-11 21:53:25,224 INFO     main_phase2: loading model profiles from ...
+2026-09-11 21:53:25,248 INFO     main_phase2: starting Phase 2 run: serial=352063910272451 model=SHG10 (AQUOS sense7) [skip_wizard]
+2026-09-11 21:53:26,417 WARNING  src.orchestration.slot: slot 352063910272451: skip_wizard=True - ...
+2026-09-11 21:53:26,417 INFO     src.orchestration.slot: slot 352063910272451: connecting wifi
+2026-09-11 21:53:26,956 INFO     src.phase2.wifi_setup: already connected to 'earth5_1'; nothing to do
+2026-09-11 21:53:26,956 INFO     src.orchestration.slot: slot 352063910272451: configuring apn
+2026-09-11 21:53:29,529 INFO     src.phase2.apn_setup: reached APN list via android.settings.APN_SETTINGS intent
+2026-09-11 21:54:17,722 WARNING  src.phase2.apn_setup: apn: save reported no validation error, but 'rakuten.jp' wasn't spotted back on the APN list (soft check only — not treated as a failure; could be scroll position or list truncation)
+2026-09-11 21:54:17,723 INFO     src.phase2.apn_setup: apn 'rakuten.jp' configured successfully
+2026-09-11 21:54:17,723 INFO     src.orchestration.slot: slot 352063910272451: reached LOGIN_INSTALL (Phase 2 success condition)
+2026-09-11 21:54:17,723 INFO     main_phase2: SUCCESS: device 352063910272451 reached LOGIN_INSTALL
+```
+
+**This is the first time the full Wi-Fi + APN chain has completed
+end-to-end on real hardware.** The client independently confirmed it by
+manually reopening the APN list a moment later — `rakuten.jp` was there,
+selected (checked radio button), matching exactly what a real save is
+supposed to look like.
+
+One discrepancy, resolved same-day: the client's own screenshot taken
+*immediately* after the script finished still showed the empty
+"アクセスポイント名設定を利用できません" list (matching the WARNING
+above), which is why the client initially read this as a failure — only
+their *manual* re-check a moment later showed the entry. Root cause: the
+APN list's RecyclerView doesn't refresh in place right after 保存 — the
+very next `uiautomator dump` (used for `_save_apn()`'s soft post-save
+check) can still capture the pre-save state even though the save already
+genuinely succeeded on-device. Fixed: `_save_apn()` now retries the
+check once, after a `_POST_SAVE_RECHECK_DELAY_SECONDS` (2s) delay, before
+logging its "wasn't spotted" warning — this was already a *soft* check
+(never itself a hard failure — `configure_apn()` correctly returned
+`True` and the run correctly reached `LOGIN_INSTALL` even with the false
+negative), so nothing about the actual success/failure determination
+changes; this only removes a misleading warning line and the confusion
+it caused.
+
+This run also retroactively confirms, in one shot, everything tracked in
+PENDING_REAL_DEVICE_DATA.md's old "Highest priority" re-verify list:
+the destructive-tap safety fix (already-connected Wi-Fi correctly
+detected and skipped, no stray taps), the `dump_ui()` pull-failure fix
+(no crash through a long real session), the APN navigation root-cause
+fix, the screen-recognition fix, the add-button content-desc fix, the
+per-field dialog ids, the MCC/MNC digit-entry fix, and the network-config
+placeholder guard — see PENDING_REAL_DEVICE_DATA.md's "Resolved — full
+Phase 2 run confirmed end-to-end" for the consolidated list. The wizard
+(2 of 9 screens' button labels still unverified) and SOG08/SOG07/SHG07
+(entirely untouched) are now the real remaining priorities.
+
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
   *directory* (`C:\platform-tools`), but was being passed straight through

@@ -9,6 +9,8 @@ rendered via content-desc on the toolbar (same pattern as the edit form's
 "アクセスポイントの編集"), never a tappable `text` node — there was nothing
 there to find, not a resource-id/text mismatch to work around."""
 
+import logging
+
 from src.device.model_profile import ModelProfile
 from src.phase2.apn_setup import configure_apn
 from tests.fakes import FakeAdbClient
@@ -483,6 +485,12 @@ POST_SAVE_VALIDATION_XML = """<hierarchy>
   <node text="OK" resource-id="android:id/button1" bounds="[500,500][600,600]" />
 </hierarchy>"""
 
+# The list not yet reflecting the new entry — no validation message either,
+# just genuinely stale/not-yet-refreshed. See ApnPostSaveDelayedVisibilityClient.
+POST_SAVE_NOT_YET_REFRESHED_XML = """<hierarchy>
+  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
+</hierarchy>"""
+
 
 def test_configure_apn_real_save_flow_succeeds_when_no_validation_dialog_appears():
     client = ApnPostSaveClient(
@@ -493,6 +501,55 @@ def test_configure_apn_real_save_flow_succeeds_when_no_validation_dialog_appears
     assert ApnPostSaveClient.SAVE_TAP in client.shell_calls
     overflow_tap = "input tap {} {}".format((900 + 1000) // 2, (100 + 200) // 2)
     assert overflow_tap in client.shell_calls
+
+
+class ApnPostSaveDelayedVisibilityClient(ApnPostSaveClient):
+    """Real-hardware finding (2026-09-11): the APN list can take a moment
+    to actually refresh after 保存 — the dump taken immediately after the
+    tap can still show the pre-save state even though the save genuinely
+    succeeded (confirmed by the client manually re-opening the screen
+    moments later). Models that: the first post-save dump serves
+    `post_save_xml` (not-yet-refreshed); every dump after that serves
+    `delayed_post_save_xml` (refreshed, entry visible)."""
+
+    def __init__(self, *, delayed_post_save_xml: str, **kwargs):
+        super().__init__(**kwargs)
+        self.delayed_post_save_xml = delayed_post_save_xml
+        self._post_save_pull_count = 0
+
+    def pull(self, remote_path, local_path):
+        if self._save_tapped:
+            self._post_save_pull_count += 1
+            xml = self.post_save_xml if self._post_save_pull_count == 1 else self.delayed_post_save_xml
+            with open(local_path, "w", encoding="utf-8") as fh:
+                fh.write(xml)
+            self.pulled_files[remote_path] = local_path
+            return self.pull_result
+        return FakeAdbClient.pull(self, remote_path, local_path)
+
+
+def test_configure_apn_retries_post_save_check_before_warning(monkeypatch, caplog):
+    """The soft post-save visibility check retries once (after a short
+    delay) before logging its "wasn't spotted" warning — real hardware
+    showed the very first dump after 保存 can still show the pre-save
+    state for a save that actually succeeded (2026-09-11). Must still
+    return True either way (soft check, never a hard failure) — this test
+    specifically confirms the retry finds it and no misleading warning
+    fires."""
+    monkeypatch.setattr("src.phase2.apn_setup.time.sleep", lambda _seconds: None)
+    client = ApnPostSaveDelayedVisibilityClient(
+        ui_dumps=[SAVE_FLOW_SCREEN_XML] * 30,
+        post_save_xml=POST_SAVE_NOT_YET_REFRESHED_XML,
+        delayed_post_save_xml=POST_SAVE_SUCCESS_XML,
+    )
+
+    with caplog.at_level(logging.INFO, logger="src.phase2.apn_setup"):
+        result = configure_apn(client, SAVE_FLOW_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is True
+    messages = [r.getMessage() for r in caplog.records]
+    assert not any("wasn't spotted" in m for m in messages)
+    assert any("confirmed visible" in m for m in messages)
 
 
 def test_configure_apn_taps_estimated_add_button_position_when_unresolved():

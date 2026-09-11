@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 from src.device.adb_client import AdbClientProtocol, AdbCommandError
 from src.device.model_profile import ModelProfile
@@ -81,6 +82,16 @@ _DIALOG_MESSAGE_RESOURCE_ID = "android:id/message"
 
 _MCC_PATTERN = re.compile(r"\d{3}")
 _MNC_PATTERN = re.compile(r"\d{2,3}")
+
+# Real hardware (2026-09-11): a successful save can take a moment for the
+# APN list's RecyclerView to actually reflect the new entry — the dump
+# taken immediately after tapping 保存 showed the pre-save (empty) list
+# even though the save had genuinely already succeeded (confirmed by the
+# client manually re-opening the same screen moments later and finding the
+# entry present and selected). One retry after this delay avoids reporting
+# a false-negative warning for what is, in practice, just a slow list
+# refresh — not a real save failure.
+_POST_SAVE_RECHECK_DELAY_SECONDS = 2.0
 
 
 def _fill_legacy_field(client: AdbClientProtocol, resource_id: str, value: str) -> bool:
@@ -259,6 +270,18 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
     return navigate_menu_path(client, menu_path)
 
 
+def _apn_entry_visible(ui_xml: str, apn_name: str) -> bool:
+    """Best-effort check: does `apn_name` appear as visible text anywhere
+    in this dump? Used for _save_apn()'s soft post-save confirmation —
+    exceptions (e.g. AmbiguousResourceIdError-style ambiguity from
+    find_by_text()) are treated as "not found" rather than propagated,
+    since this is advisory only and must never itself cause a failure."""
+    try:
+        return find_by_text(ui_xml, apn_name) is not None
+    except Exception:
+        return False
+
+
 def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
     """Save the APN entry. Two shapes supported:
 
@@ -280,7 +303,12 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
       first line. Only logged (info if found, warning if not) — never
       turns a save the validation check already accepted into a failure,
       since e.g. list scroll position or display truncation could make
-      this check miss a genuinely successful save.
+      this check miss a genuinely successful save. If not found on the
+      first try, waits `_POST_SAVE_RECHECK_DELAY_SECONDS` and dumps once
+      more before giving up: a real run (2026-09-11) showed the list can
+      take a moment to actually refresh after 保存 — the client's own
+      manual re-check moments later found the entry present, even though
+      the automation's own immediate dump didn't. Still soft either way.
 
     - Legacy (3 untouched models): a single literal save button.
     """
@@ -313,10 +341,14 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
             )
             return False
 
-        try:
-            entry_visible = find_by_text(ui_xml, apn_name) is not None
-        except Exception:
-            entry_visible = False
+        entry_visible = _apn_entry_visible(ui_xml, apn_name)
+        if not entry_visible:
+            # See _POST_SAVE_RECHECK_DELAY_SECONDS's comment — the list may
+            # just not have refreshed yet. One retry before concluding.
+            time.sleep(_POST_SAVE_RECHECK_DELAY_SECONDS)
+            ui_xml = dump_ui(client)
+            entry_visible = _apn_entry_visible(ui_xml, apn_name)
+
         if entry_visible:
             logger.info("apn: new entry %r confirmed visible on the APN list", apn_name)
         else:
