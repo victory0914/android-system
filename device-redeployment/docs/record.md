@@ -460,6 +460,24 @@ accumulates.
   this exact scenario down directly so it can't silently regress if the
   check is ever broadened again without checking what's actually
   consumed first.
+- *2026-09-11 (same day — the guard fires correctly, on a real gap):*
+  After the `carrier` false positive was fixed, the client's next run hit
+  the guard again — this time correctly: `config/network.yaml`'s
+  `apn.apn_name` was itself still the literal placeholder text `<APN
+  value from client>` (wifi ssid/password, carrier, mcc, and mnc had all
+  been filled in with real values; only `apn_name` was missed). **Not a
+  code bug** — no fix needed here, this is exactly what the guard exists
+  to catch. Genuinely significant in hindsight, though: it means every
+  real automation run so far, across this entire investigation (the
+  full-width-digit finding included), was attempting to save this literal
+  string — spaces, angle brackets, and all — as the real APN value. That's
+  independently very plausible as a contributor to "produces zero
+  entries": Android's APN validation may reasonably reject a value with
+  those characters even before reaching the MCC/MNC check. Left as an
+  open question exactly how much of the "not saving" mystery this alone
+  explains vs. the digit-encoding fix, since both were wrong
+  simultaneously on every real run tested until now — but with both fixed
+  now, the next run is the first genuinely clean attempt.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a

@@ -29,10 +29,24 @@ together**:
    only field nothing actually reads) — narrowed same-day to only check
    the fields the automation depends on. See "Network-config placeholder
    safety" below.
-See "Highest priority" below — it is not yet confirmed whether fix #1
-alone resolves the save failure; the exact terminal log from a run that
-gets *past* the network-config check (now fixed) and all the way through
-is still the single most useful missing piece. SHG10's wizard is on a
+**Third factor found, same day, not a code bug**: the very next run hit
+the guard again — correctly this time. `config/network.yaml`'s
+`apn.apn_name` was itself still the literal placeholder text `<APN value
+from client>` (everything else — wifi, carrier, mcc, mnc — had real
+values; only `apn_name` was missed). This means every real automation run
+tested so far, across this whole investigation, was attempting to save
+that literal placeholder string (spaces and angle brackets included) as
+the actual APN value — independently plausible as a contributor to "zero
+entries created," on top of the digit-encoding issue. **Client needs to
+edit their own `config/network.yaml`** (gitignored, local-only — not
+something fixable from this side) to set a real `apn_name` before the
+next run.
+
+See "Highest priority" below — it is not yet confirmed whether the
+digit-encoding fix alone resolves the save failure; the exact terminal
+log from a run with a real `apn_name` in place is still the single most
+useful missing piece — the next run is the first one where every known
+factor is actually corrected at once. SHG10's wizard is on a
 photograph-derived, text-matching config — real dumps for the wizard are
 **not obtainable on any model, ever** (structural ADB/factory-reset
 constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
