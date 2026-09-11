@@ -11,57 +11,77 @@ end-to-end on real hardware** — confirmed by a client screenshot showing
 `earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. **APN navigation,
 the "+" add-button, and field entry through MNC are now confirmed working
 on real hardware** (client run, 2026-09-11, after the screen-recognition +
-add-button fixes below) — the remaining blocker is the save step itself:
-the entry isn't actually persisting after name/APN/MCC/MNC are typed. The
-leading hypothesis (a wrong best-guess id for the per-field dialog's
-confirm button) has now been **ruled out** by a real dump of that exact
-dialog — both ids were already correct (see "Highest priority" below).
-The defensive hardening from that hypothesis is kept (fail loud instead of
-silently continuing on a future mismatch) but the *actual* cause of "not
-saving" is still open — next need is the exact terminal log from a run
-with the current code. SHG10's wizard is on a photograph-derived,
-text-matching config — real dumps for the wizard are **not obtainable on
-any model, ever** (structural ADB/factory-reset constraint, see
-docs/record.md). **SOG08, SOG07, and SHG07 are entirely untouched** —
-still 100% Stage A placeholders, not started.
+add-button fixes below) — the remaining blocker was the save step itself:
+the entry wasn't actually persisting after name/APN/MCC/MNC were typed.
+**Likely root cause found and fixed**: the client directly observed that
+MCC/MNC were being entered as FULL-WIDTH digits (４４０) instead of
+half-width/ASCII (440) — `input_text_direct()` ("input text") apparently
+picks up the device's Japanese-IME zenkaku conversion for digits even
+though it's meant to bypass the IME. MCC/MNC now go through
+`input_digits_direct()` (per-digit keyevents) instead — see "Highest
+priority" below. Not yet re-verified against a live run. SHG10's wizard is
+on a photograph-derived, text-matching config — real dumps for the wizard
+are **not obtainable on any model, ever** (structural ADB/factory-reset
+constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
+untouched** — still 100% Stage A placeholders, not started.
 
 ## Highest priority
 
-### Root cause of "not saving" still open — confirm-button hypothesis ruled out (2026-09-11)
+### Re-verify against real hardware after switching MCC/MNC to keyevent digit entry (2026-09-11)
 
-Client report: typing name/APN/MCC/MNC "works correctly up to the MNC
-input stage", but the entry then never actually saves. The leading
-hypothesis was that `dialog_confirm_button_resource_id`
-("android:id/button1", a best-guess id — the per-field dialog had never
-itself been dumped) was wrong, leaving each field's dialog stuck open and
-derailing every tap after it. **A real dump of the dialog itself, captured
-while open** (`tests/fixtures/apn_accesshost_okbtn_SHG10.xml`, 2026-09-11
-— dumped mid-edit on 名前), disproves this: both
+Not yet re-verified. Client directly reported the concrete, observable
+cause of "typed through MNC but never saves": MCC/MNC were being entered
+using FULL-WIDTH digits (e.g. "４４０") instead of half-width/ASCII
+("440"). This device's on-device validation almost certainly checks for
+ASCII digits specifically ("MCC欄は3桁で指定してください" — a full-width
+"４４０" is a different Unicode range, U+FF10-FF19, not U+0030-U+0039, so
+depending on exactly how the validation regex is written it may not even
+register as digits at all) — this would explain the entry consistently
+failing to save even though field-filling itself completed with no
+errors, exactly as the client described.
+
+Root cause of the full-width conversion itself: `input_text_direct()`
+("input text") is meant to bypass the active IME entirely, but real
+evidence now shows it doesn't fully do so for digits on this device —
+plausibly the Japanese IME's zenkaku/hankaku conversion still intercepts
+committed text. Fix: added `input_digits_direct()`
+(`src/device/ui_automator.py`), which sends each digit as an individual
+`adb shell input keyevent KEYCODE_N` — a different injection path that
+maps directly to the physical/virtual number-row keys and isn't expected
+to go through the same IME conversion. `_fill_labeled_field()` now uses
+this for MCC/MNC specifically (`numeric_only=True`), while 名前/APN keep
+using `input_text_direct()` as before (arbitrary text, not just digits).
+
+**This is the client's own direct, concrete observation, not another
+inferred hypothesis** — significantly higher confidence than the
+confirm-button theory that was just ruled out. Still, "digits render
+correctly now" and "the entry actually saves" are two different things to
+confirm — watch closely on the next run, and if it still doesn't save,
+the next need is still the same: the exact terminal log output, since a
+validation dialog's real message (already logged by `_save_apn()`) would
+immediately say whether this was the whole story or one of several
+issues.
+
+### Root cause of "not saving" ruled out: confirm-button hypothesis (2026-09-11)
+
+An earlier hypothesis — that a wrong best-guess id for the per-field
+dialog's confirm button was leaving each field's dialog stuck open — was
+ruled out by a real dump of that dialog itself, captured while open
+(`tests/fixtures/apn_accesshost_okbtn_SHG10.xml`): both
 `dialog_edit_field_resource_id` ("android:id/edit") and
 `dialog_confirm_button_resource_id` ("android:id/button1", confirmed to
 genuinely be the "OK" button, not "キャンセル"/button2) were exactly right
-all along. See "Resolved" below.
+all along — see "Resolved — per-field entry dialog" below. The defensive
+hardening added for that hypothesis (hard failure instead of a silent
+warning when either dialog tap isn't found) is kept regardless, since
+it's correct practice, but it isn't the fix for "not saving" — see the
+full-width-digits entry above for what is.
 
-**This means the actual root cause of "not saving" is still unknown.**
-The defensive hardening added for the (now-ruled-out) hypothesis — hard
-failure instead of a silent warning when either dialog tap isn't found —
-is still correct to keep (protects against a future OS/build change), but
-it isn't itself the fix. **What's needed next: the exact terminal log
-output from a run with the current (hardened) code.** If the hardening
-never fires (most likely now, since both ids are confirmed correct), the
-log's own error message — from `_save_apn()`, most likely — should point
-directly at the real cause: whether the overflow/save taps land correctly,
-whether a validation dialog appears (and its real message text, which
-`_save_apn()` already logs), or something not yet considered (e.g.
-name/APN being filled with the identical value — `configure_apn()` uses
-`apn_name` for both — could plausibly trip a "duplicate APN" or similar
-validation on-device, unconfirmed).
-
-Two earlier client-supplied real dumps
+Two client-supplied real dumps from this same investigation
 (`apn_accesshost_SHG10.xml`, `apn_accesshost_save_SHG10.xml`) turned out
 to be byte-identical to already-captured/already-correctly-handled
 fixtures (the edit form and the overflow "⋮"/"保存" popup) — they confirm
-those two structures are right, not a source of new information either.
+those two structures are right, not a source of new information.
 
 ### Re-verify against real hardware after the APN screen-recognition + add-button fixes (2026-09-11) — CONFIRMED WORKING
 
@@ -298,7 +318,7 @@ This was the previous highest-priority blocker — now closed:
   (though still not directly proven) that the same id is correct for the
   per-field entry dialog's own confirm button too.
 
-### Resolved — text input mechanism (broadened twice, both from real evidence)
+### Resolved — text input mechanism (broadened three times, all from real evidence)
 First finding: the device's default IME is Japanese kana mode, and the
 on-screen keyboard can't reach digits without an explicit mode switch that
 UI automation has no reliable way to trigger — `input_text_direct()`
@@ -320,6 +340,19 @@ on this device at all. `input_text_direct()`'s escaping was also hardened
 at the same time (backslash/quote/`$`/backtick, not just spaces) since
 passwords are far more likely than "440" to contain shell-special
 characters.
+
+Third finding, 2026-09-11: client directly observed `input_text_direct()`
+("input text") committing MCC/MNC as **full-width digits** (４４０)
+instead of half-width/ASCII (440) — apparently `input text`, despite being
+meant to bypass the IME, still picks up this device's Japanese-IME
+zenkaku conversion for digits specifically. New primitive,
+`input_digits_direct()` (per-digit `adb shell input keyevent KEYCODE_N`),
+routes around it — MCC/MNC use this now; 名前/APN (arbitrary text) keep
+using `input_text_direct()`. This is the client's own direct observation
+of the actual bytes typed, not an inference — see "Highest priority"
+above for the theory of why this explains "typed through MNC but never
+saves": the device's own MCC/MNC digit-count validation likely doesn't
+recognize full-width digits as digits at all.
 
 Legacy-shape models (the 3 untouched by Stage B) still default to
 `inject_text()` — this finding is specific to this real device, not

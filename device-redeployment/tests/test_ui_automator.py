@@ -20,6 +20,7 @@ from src.device.ui_automator import (
     find_resource_id,
     get_node_text,
     inject_text,
+    input_digits_direct,
     input_text_direct,
     navigate_menu_path,
     node_is_checked,
@@ -422,6 +423,44 @@ def test_input_text_direct_escapes_shell_special_characters():
     client = FakeAdbClient()
     input_text_direct(client, 'P@ss"w$ord`!\\')
     assert 'input text "P@ss\\"w\\$ord\\`!\\\\"' in client.shell_calls
+
+
+# --- input_digits_direct (real client report, 2026-09-11): input_text_direct
+# ("input text") was found to commit MCC/MNC as FULL-WIDTH digits on this
+# device instead of half-width/ASCII — per-digit KEYCODE_N keyevents avoid it ---
+
+
+def test_input_digits_direct_sends_one_keyevent_per_digit():
+    client = FakeAdbClient()
+    result = input_digits_direct(client, "440")
+    assert result is True
+    assert client.shell_calls == [
+        "input keyevent KEYCODE_4",
+        "input keyevent KEYCODE_4",
+        "input keyevent KEYCODE_0",
+    ]
+
+
+def test_input_digits_direct_never_uses_input_text():
+    """The whole point — `input text` is exactly the mechanism found to
+    produce full-width digits on this device."""
+    client = FakeAdbClient()
+    input_digits_direct(client, "11")
+    assert not any(c.startswith("input text") for c in client.shell_calls)
+
+
+def test_input_digits_direct_rejects_non_digit_input():
+    """Exists specifically for MCC/MNC (pre-validated as ASCII digits by
+    _MCC_PATTERN/_MNC_PATTERN before this is ever called) — anything else
+    reaching here is a caller bug, not a device quirk to route around."""
+    client = FakeAdbClient()
+    with pytest.raises(ValueError):
+        input_digits_direct(client, "44a")
+    with pytest.raises(ValueError):
+        input_digits_direct(client, "")
+    with pytest.raises(ValueError):
+        input_digits_direct(client, "４４０")  # full-width digits themselves
+    assert client.shell_calls == []
 
 
 # --- tap_left_of_content_desc (real screenshot, 2026-09-11): the APN

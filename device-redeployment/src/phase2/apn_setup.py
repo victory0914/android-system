@@ -51,6 +51,7 @@ from src.device.ui_automator import (
     find_by_text,
     get_node_text,
     inject_text,
+    input_digits_direct,
     input_text_direct,
     navigate_menu_path,
     scroll_down,
@@ -91,7 +92,7 @@ def _fill_legacy_field(client: AdbClientProtocol, resource_id: str, value: str) 
 
 
 def _fill_labeled_field(
-    client: AdbClientProtocol, apn: dict, label: str, value: str
+    client: AdbClientProtocol, apn: dict, label: str, value: str, *, numeric_only: bool = False
 ) -> bool:
     """Stage B shape: tap the row identified by (field_row_resource_id,
     text=label) to open its edit dialog, then type into the dialog's
@@ -100,6 +101,17 @@ def _fill_labeled_field(
     the dialog itself while open) — if a tap still doesn't land,
     tap_resource_id() returns False rather than mistapping, and this
     function surfaces that as a failure rather than pretending it worked.
+
+    `numeric_only=True` (used for MCC/MNC — see configure_apn()) types via
+    input_digits_direct() (per-digit KEYCODE_N keyevents) instead of
+    input_text_direct() (`input text`). Real-device finding (client report,
+    2026-09-11): `input text` commits MCC/MNC as FULL-WIDTH digits
+    (e.g. "４４０") on this device instead of half-width/ASCII ("440") —
+    the on-device validation almost certainly rejects full-width digits as
+    not matching "N digits", which would explain a real run getting all
+    the way through typing every field (this doesn't fail — the dialog
+    closes normally) yet the entry never actually saving. See
+    input_digits_direct()'s docstring for why keyevents avoid this.
 
     Both the edit-field tap and the confirm-button tap are treated as HARD
     failures if the id isn't found — NOT soft warnings that let execution
@@ -151,7 +163,10 @@ def _fill_labeled_field(
         )
         return False
 
-    if not input_text_direct(client, value):
+    if numeric_only:
+        if not input_digits_direct(client, value):
+            return False
+    elif not input_text_direct(client, value):
         return False
 
     confirm_button = apn.get("dialog_confirm_button_resource_id")
@@ -416,14 +431,18 @@ def configure_apn(
         # Fill ALL fields before ever tapping save — confirmed on real
         # hardware that validation is sequential and blocking, so a partial
         # save attempt just wastes a round-trip on a guaranteed failure.
+        # MCC/MNC are marked numeric_only=True: real-device finding
+        # (2026-09-11) showed input_text_direct() ("input text") commits
+        # them as full-width digits on this device — see
+        # _fill_labeled_field()'s docstring.
         fields = [
-            (apn["name_field_label"], apn_name),
-            (apn["apn_field_label"], apn_name),
-            (apn["mcc_field_label"], mcc),
-            (apn["mnc_field_label"], mnc),
+            (apn["name_field_label"], apn_name, False),
+            (apn["apn_field_label"], apn_name, False),
+            (apn["mcc_field_label"], mcc, True),
+            (apn["mnc_field_label"], mnc, True),
         ]
-        for label, value in fields:
-            if not _fill_labeled_field(client, apn, label, value):
+        for label, value, numeric_only in fields:
+            if not _fill_labeled_field(client, apn, label, value, numeric_only=numeric_only):
                 logger.error("apn field labeled %r not found/could not be filled", label)
                 return False
     else:

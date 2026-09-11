@@ -655,3 +655,32 @@ def input_text_direct(client: AdbClientProtocol, text: str) -> bool:
     )
     client.shell(f'input text "{escaped}"')
     return True
+
+
+def input_digits_direct(client: AdbClientProtocol, digits: str) -> bool:
+    """Type a string of ASCII digits one at a time via `adb shell input
+    keyevent KEYCODE_<n>` — NOT input_text_direct()'s `input text`.
+
+    Real-device finding (client report, 2026-09-11): on this device,
+    `input text "440"` for APN's MCC/MNC fields commits as FULL-WIDTH
+    digits (e.g. "４４０") instead of half-width/ASCII ("440"), even
+    though input_text_direct() is meant to bypass the active IME entirely.
+    The device's default IME is Japanese kana mode (see
+    input_text_direct()'s docstring); it's not confirmed exactly why
+    `input text` picks up its zenkaku conversion when individual digit
+    keyevents evidently don't, but per-digit KEYCODE_0..KEYCODE_9 events
+    map directly to the physical/virtual number-row keys and have always
+    been the standard way to guarantee literal ASCII digit entry
+    regardless of IME state — safer to rely on here than to guess further
+    at why `input text` misbehaves.
+
+    Raises ValueError if `digits` isn't purely ASCII 0-9 — this exists
+    specifically for MCC/MNC, which are pre-validated against
+    _MCC_PATTERN/_MNC_PATTERN before this is ever called; anything else
+    reaching here is a caller bug, not a device quirk to route around.
+    """
+    if not digits.isascii() or not digits.isdigit():
+        raise ValueError(f"input_digits_direct() only accepts ASCII digits, got {digits!r}")
+    for digit in digits:
+        client.shell(f"input keyevent KEYCODE_{digit}")
+    return True

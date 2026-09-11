@@ -381,6 +381,38 @@ accumulates.
   both 名前 and APN with the identical value (`apn_name`) — plausible,
   since many real carrier profiles do use matching name/APN strings, but
   unconfirmed whether this specific device's validation is fine with that.
+- *2026-09-11 (client's own direct observation — a genuine root-cause
+  candidate, not another inference):* Client reported that MCC/MNC are
+  being entered as **full-width digits** (４４０) instead of
+  half-width/ASCII (440), and asked for this to be fixed. This is a much
+  stronger lead than anything guessed from dumps so far: this device's
+  on-device MCC/MNC validation ("MCC欄は3桁で指定してください") almost
+  certainly checks for ASCII digits, and a full-width "４４０" is a
+  different Unicode range entirely (U+FF10-FF19 vs. U+0030-U+0039) — it
+  may not register as "digits" to that validation at all. That would
+  explain exactly the reported symptom: field entry completes with no
+  errors (typing, the OK tap, even the overflow/save taps all "work"),
+  yet the entry never actually saves, because a validation dialog is
+  legitimately appearing and blocking the save every time — just not one
+  that's currently visible in what's been reported/dumped so far, since
+  no one had reason yet to suspect the *typed value itself* was wrong
+  rather than the mechanics of typing it.
+
+  Root cause of the conversion itself: `input_text_direct()` ("input
+  text") is documented (and was verified, 2026-09-08) to bypass the
+  active IME entirely — but real evidence now shows that's not fully true
+  for digits on this device; the Japanese IME's zenkaku/hankaku
+  conversion apparently still intercepts committed text somewhere in the
+  pipeline. Fix: new primitive `input_digits_direct()`
+  (`src/device/ui_automator.py`) sends each digit as its own `adb shell
+  input keyevent KEYCODE_N` — individual number-row keyevents map to
+  hardware key semantics directly, a different code path than committing
+  a text string, and aren't expected to go through the same IME
+  conversion. `_fill_labeled_field()` (`src/phase2/apn_setup.py`) now
+  takes a `numeric_only` flag; MCC/MNC pass `numeric_only=True` and route
+  through this new function, while 名前/APN (arbitrary text, not just
+  digits) keep using `input_text_direct()` exactly as before. Not yet
+  re-verified against a live run — see PENDING_REAL_DEVICE_DATA.md.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
