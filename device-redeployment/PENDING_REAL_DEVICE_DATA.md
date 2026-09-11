@@ -24,15 +24,19 @@ together**:
 2. A defensive guard against `config/network.yaml` silently falling back
    to placeholder example data — added after the success dump revealed a
    real leftover APN entry literally named "<APN value from client>" on
-   the device from some earlier run.
+   the device from some earlier run. **This guard itself immediately blocked
+   a real, correctly-filled-in run** (over `apn.carrier`, a documentation-
+   only field nothing actually reads) — narrowed same-day to only check
+   the fields the automation depends on. See "Network-config placeholder
+   safety" below.
 See "Highest priority" below — it is not yet confirmed whether fix #1
-alone resolves the save failure; the exact terminal log from a run with
-both fixes applied is still the single most useful missing piece. SHG10's
-wizard is on a photograph-derived, text-matching config — real dumps for
-the wizard are **not obtainable on any model, ever** (structural
-ADB/factory-reset constraint, see docs/record.md). **SOG08, SOG07, and
-SHG07 are entirely untouched** — still 100% Stage A placeholders, not
-started.
+alone resolves the save failure; the exact terminal log from a run that
+gets *past* the network-config check (now fixed) and all the way through
+is still the single most useful missing piece. SHG10's wizard is on a
+photograph-derived, text-matching config — real dumps for the wizard are
+**not obtainable on any model, ever** (structural ADB/factory-reset
+constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
+untouched** — still 100% Stage A placeholders, not started.
 
 ## Highest priority
 
@@ -446,6 +450,17 @@ hard failure: `NetworkConfigError` if the file is missing, and the same
 if any value inside it still matches a known placeholder string verbatim
 (`_PLACEHOLDER_VALUES`) — catches both "never copied the example" and
 "copied it but forgot to fill in one field."
+
+**Self-correction, same day:** the first version of the placeholder check
+walked the *entire* config recursively, and immediately blocked a real
+client run — `config/network.yaml`'s `apn.carrier` still had its
+placeholder text, even though `carrier` is documentation-only and never
+read by any code path (`src/orchestration/slot.py` only ever reads
+`apn_name`/`mcc`/`mnc` and `wifi.ssid`/`wifi.password`). A real, correctly
+filled-in config got refused over a field nothing depends on. Narrowed to
+an explicit whitelist, `_REQUIRED_CONFIG_PATHS`, matching exactly what
+`slot.py` consumes — `apn.carrier` (and any other future documentation-
+only field) is intentionally never checked.
 
 ### Wizard — hard constraint, not a temporary gap
 No `uiautomator dump` exists or ever will for OOBE wizard screens on any of

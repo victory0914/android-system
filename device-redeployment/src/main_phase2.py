@@ -45,7 +45,8 @@ def _load_settings(path: Path) -> dict:
 
 class NetworkConfigError(RuntimeError):
     """config/network.yaml is missing, or still contains a placeholder value
-    copied verbatim from config/network.yaml.example."""
+    copied verbatim from config/network.yaml.example, in one of the fields
+    the automation actually reads."""
 
 
 # Every placeholder string in config/network.yaml.example, verbatim — real
@@ -63,13 +64,33 @@ _PLACEHOLDER_VALUES = {
     "<mobile network code>",
 }
 
+# Only the fields src/orchestration/slot.py actually reads
+# (wifi_cfg.get("ssid"/"password"), apn_cfg.get("apn_name"/"mcc"/"mnc")) —
+# NOT every key in the file. A first version of this check walked the
+# whole config recursively and blocked a real run (2026-09-11) over
+# apn.carrier still being "<carrier name>" — carrier is documentation only,
+# never read by any code path, so refusing to proceed over it was a false
+# positive: it protects nothing and just blocks otherwise-real, working
+# config. Scoped to what's load-bearing instead.
+_REQUIRED_CONFIG_PATHS = (
+    ("wifi", "ssid"),
+    ("wifi", "password"),
+    ("apn", "apn_name"),
+    ("apn", "mcc"),
+    ("apn", "mnc"),
+)
 
-def _check_no_placeholder_values(config: dict, *, _path: str = "") -> None:
-    for key, value in config.items():
-        full_key = f"{_path}.{key}" if _path else str(key)
-        if isinstance(value, dict):
-            _check_no_placeholder_values(value, _path=full_key)
-        elif isinstance(value, str) and value in _PLACEHOLDER_VALUES:
+
+def _check_no_placeholder_values(config: dict) -> None:
+    for path in _REQUIRED_CONFIG_PATHS:
+        value = config
+        for key in path:
+            if not isinstance(value, dict):
+                value = None
+                break
+            value = value.get(key)
+        if isinstance(value, str) and value in _PLACEHOLDER_VALUES:
+            full_key = ".".join(path)
             raise NetworkConfigError(
                 f"config/network.yaml[{full_key!r}] is still the placeholder "
                 f"value {value!r} copied from network.yaml.example — fill in "

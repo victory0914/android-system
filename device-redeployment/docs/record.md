@@ -442,6 +442,24 @@ accumulates.
   any value inside it still matches one of the example file's known
   placeholder strings verbatim — catches both "never copied the example"
   and "copied it but left one field unedited."
+- *2026-09-11 (same day — the guard above immediately caused a real
+  false-positive):* Client ran the actual automation with both fixes in
+  place; it refused to start at all:
+  `config/network.yaml['apn.carrier'] is still the placeholder value
+  '<carrier name>' ...`. Root cause: the guard walked the *entire* config
+  file recursively, checking every key — but `apn.carrier` is
+  documentation-only and never read by any code path
+  (`src/orchestration/slot.py` only ever reads `apn_name`/`mcc`/`mnc` from
+  `apn_cfg` and `ssid`/`password` from `wifi_cfg`). The client's actual
+  config was correctly filled in for everything that matters; the check
+  blocked a good run over a field nothing depends on. Fixed same-day:
+  narrowed to an explicit whitelist, `_REQUIRED_CONFIG_PATHS`, matching
+  exactly what `slot.py` consumes — `apn.carrier` is now intentionally
+  never checked, regardless of its value. New regression test,
+  `test_load_network_config_ignores_placeholder_in_unread_field`, pins
+  this exact scenario down directly so it can't silently regress if the
+  check is ever broadened again without checking what's actually
+  consumed first.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a

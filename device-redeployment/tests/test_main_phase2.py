@@ -112,3 +112,28 @@ def test_load_network_config_succeeds_with_real_values(tmp_path, monkeypatch):
     result = _load_network_config(logging.getLogger("test"))
 
     assert result == _REAL_NETWORK_CONFIG
+
+
+def test_load_network_config_ignores_placeholder_in_unread_field(tmp_path, monkeypatch):
+    """Regression test for the exact real failure this guard caused
+    (2026-09-11): a real client run with a genuinely-filled-in config was
+    blocked because apn.carrier — never read by any code path
+    (src/orchestration/slot.py only reads apn_name/mcc/mnc) — still had its
+    placeholder text. The guard must only check fields that are actually
+    load-bearing (_REQUIRED_CONFIG_PATHS), not every key in the file."""
+    config = {
+        "wifi": {"ssid": "earth5_1", "password": "s3cret"},
+        "apn": {
+            "carrier": "<carrier name>",  # left as placeholder — must be fine
+            "apn_name": "rakuten.jp",
+            "mcc": "440",
+            "mnc": "11",
+        },
+    }
+    path = tmp_path / "network.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.setattr(main_phase2, "DEFAULT_NETWORK_PATH", path)
+
+    result = _load_network_config(logging.getLogger("test"))
+
+    assert result == config
