@@ -149,6 +149,31 @@ def test_configure_apn_reaches_list_via_intent_with_no_menu_path_taps():
     assert settings_tap not in client.shell_calls
 
 
+def test_configure_apn_recognizes_plain_text_apn_title_variant():
+    """Real client screenshot (2026-09-11): the screen reached via the
+    android.settings.APN_SETTINGS intent on this device shows a plain
+    heading `text` "APN", not the content-desc "アクセスポイント名" title
+    used by the SHARP-skinned screen reached via manual navigation. Both
+    must be recognized as "arrived" — no menu_path taps for either."""
+    text_title_screen = """<hierarchy>
+  <node text="APN" bounds="[0,0][1080,100]" />
+  <node text="このユーザーはアクセスポイント名設定を利用できません" bounds="[0,100][1080,200]" />
+  <node resource-id="android:id/title" text="名前" bounds="[0,300][100,400]" />
+  <node resource-id="android:id/title" text="APN" bounds="[0,400][100,500]" />
+  <node resource-id="android:id/title" text="MCC" bounds="[0,500][100,600]" />
+  <node resource-id="android:id/title" text="MNC" bounds="[0,600][100,700]" />
+  <node resource-id="android:id/edit" bounds="[0,700][100,800]" />
+  <node resource-id="android:id/button1" bounds="[0,800][100,900]" />
+</hierarchy>"""
+    client = FakeAdbClient(ui_dumps=[text_title_screen] * 30)
+
+    result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is False  # still fails at the (unresolved) save step, not navigation
+    settings_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    assert settings_tap not in client.shell_calls
+
+
 def test_configure_apn_falls_back_to_menu_path_when_intent_command_fails():
     class NoIntentClient(FakeAdbClient):
         def shell(self, command, timeout=30):
@@ -397,6 +422,29 @@ def test_configure_apn_real_save_flow_succeeds_when_no_validation_dialog_appears
     assert ApnPostSaveClient.SAVE_TAP in client.shell_calls
     overflow_tap = "input tap {} {}".format((900 + 1000) // 2, (100 + 200) // 2)
     assert overflow_tap in client.shell_calls
+
+
+def test_configure_apn_taps_estimated_add_button_position_when_unresolved():
+    """Real screenshot (2026-09-11): add_button_resource_id ("+") has never
+    been captured (no dump of the list screen with an empty/known-count APN
+    set exists) — but the "その他のオプション" ("⋮") overflow icon
+    immediately to its right IS confirmed real, so configure_apn() must fall
+    back to tap_left_of_content_desc() instead of silently skipping the tap
+    (see PENDING_REAL_DEVICE_DATA.md)."""
+    client = ApnPostSaveClient(
+        ui_dumps=[SAVE_FLOW_SCREEN_XML] * 30, post_save_xml=POST_SAVE_SUCCESS_XML
+    )
+    result = configure_apn(client, SAVE_FLOW_PROFILE, "rakuten.jp", "440", "11")
+    assert result is True
+    # overflow icon bounds [900,100][1000,200] -> width 100 -> estimated "+"
+    # tap at (900 - 100//2, (100+200)//2) = (850, 150).
+    add_button_tap = "input tap 850 150"
+    assert add_button_tap in client.shell_calls
+    # It must happen before the fields are filled (add-new comes first).
+    name_field_tap_index = client.shell_calls.index(
+        "input tap {} {}".format((0 + 100) // 2, (300 + 400) // 2)
+    )
+    assert client.shell_calls.index(add_button_tap) < name_field_tap_index
 
 
 def test_configure_apn_real_save_flow_fails_loudly_on_validation_dialog():

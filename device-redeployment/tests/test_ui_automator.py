@@ -26,6 +26,7 @@ from src.device.ui_automator import (
     scroll_down,
     tap_by_content_desc,
     tap_by_text,
+    tap_left_of_content_desc,
     tap_resource_id,
     wait_for_text_to_disappear,
 )
@@ -421,3 +422,33 @@ def test_input_text_direct_escapes_shell_special_characters():
     client = FakeAdbClient()
     input_text_direct(client, 'P@ss"w$ord`!\\')
     assert 'input text "P@ss\\"w\\$ord\\`!\\\\"' in client.shell_calls
+
+
+# --- tap_left_of_content_desc (real screenshot, 2026-09-11): the APN
+# list's "+" add button sits immediately left of the "⋮" overflow menu,
+# whose content-desc is confirmed real; "+" has no identifier of its own ---
+
+OVERFLOW_ANCHOR_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy rotation="0">
+  <node index="0" text="" resource-id="" class="android.widget.FrameLayout" bounds="[0,0][1080,2160]">
+    <node index="1" text="" resource-id="" content-desc="その他のオプション"
+          class="android.widget.ImageButton" bounds="[969,83][1080,215]" />
+  </node>
+</hierarchy>
+"""
+
+
+def test_tap_left_of_content_desc_estimates_adjacent_position():
+    client = FakeAdbClient(ui_dumps=[OVERFLOW_ANCHOR_XML])
+    result = tap_left_of_content_desc(client, "その他のオプション")
+    assert result is True
+    # anchor width = 1080-969 = 111; estimated_x = 969 - 111//2 = 914
+    # estimated_y = (83+215)//2 = 149
+    assert "input tap 914 149" in client.shell_calls
+
+
+def test_tap_left_of_content_desc_false_when_anchor_not_found():
+    client = FakeAdbClient(ui_dumps=[NO_MATCH_XML])
+    result = tap_left_of_content_desc(client, "その他のオプション")
+    assert result is False
+    assert not any(c.startswith("input tap") for c in client.shell_calls)

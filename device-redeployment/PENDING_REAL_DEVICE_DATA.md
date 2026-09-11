@@ -6,20 +6,41 @@ outstanding. See `docs/record.md` for the full session notes (test logs,
 navigation paths, capture methodology, judgment calls) behind every entry
 here — this file is the checklist; that one is the evidence.
 
-**Status as of 2026-09-09 (Stage B, ongoing):** **Wi-Fi connects
+**Status as of 2026-09-11 (Stage B, ongoing):** **Wi-Fi connects
 end-to-end on real hardware** — confirmed by a client screenshot showing
 `earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. SHG10 also has full
 APN data resolved, including the Save flow, and the root cause of every
 "apn menu navigation failed" error hit so far has been found and fixed
 (see "Highest priority" below) — but a full run has not yet completed
 successfully end-to-end with all current fixes in place; the last
-attempted run predates this latest fix. SHG10's wizard is on a
+attempted run predates this latest fix. A 2026-09-11 real run surfaced one
+more navigation gap (the intent-reached screen's plain-text "APN" title
+wasn't recognized — only the SHARP-skinned content-desc title was) plus
+the still-unresolved "+" add-button id, both now addressed (see "Highest
+priority" below); not yet re-verified. SHG10's wizard is on a
 photograph-derived, text-matching config — real dumps for the wizard are
 **not obtainable on any model, ever** (structural ADB/factory-reset
 constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
 untouched** — still 100% Stage A placeholders, not started.
 
 ## Highest priority
+
+### Re-verify against real hardware after the APN screen-recognition fix + add-button position-estimate (2026-09-11)
+
+Not yet re-verified. A real run's log showed `android.settings.APN_SETTINGS`
+repeatedly reporting "didn't land on a recognizable APN list screen" even
+though it *was* landing correctly — `_looks_like_apn_list_screen()` only
+recognized the SHARP-skinned title (`content-desc` "アクセスポイント名"),
+not the plain `text` "APN" heading this device's intent-reached screen
+actually shows. Now accepts either title variant. The same screenshot also
+showed a "+" add-button whose id is still uncaptured (see "Not resolved"
+below) — `configure_apn()` now falls back to `tap_left_of_content_desc()`,
+which taps an ESTIMATED position immediately left of the confirmed "⋮"
+overflow icon rather than skipping the tap outright. **Both changes are
+unverified against real hardware** — the estimated "+" position in
+particular could be wrong; if so it will fail loudly a few steps later
+(field rows not found) rather than silently mistapping. Watch closely on
+the next run. See docs/record.md's 2026-09-11 entries for the full account.
 
 ### Re-verify against real hardware after the APN navigation root-cause fix
 
@@ -137,8 +158,14 @@ spec assumed. Config and tests now reflect 14.
 - **Navigation, primary path (real, hand-confirmed 2026-09-08/09):**
   `adb shell am start -a android.settings.APN_SETTINGS` reaches the APN
   list screen in one step. `apn_setup.py` tries this first, verifying
-  landing via `アクセスポイント名` as a `content-desc` (that screen's own
-  title — see below), before ever touching `menu_path`.
+  landing via `_looks_like_apn_list_screen()`, which accepts **either**
+  real title variant confirmed so far: `アクセスポイント名` as a
+  `content-desc` (the SHARP-skinned screen reached via manual `menu_path`
+  navigation) or a plain `text` heading "APN" (the stock/AOSP-style screen
+  this device's `APN_SETTINGS` intent actually lands on — 2026-09-11
+  screenshot; only the first variant was recognized before this, causing
+  false "didn't land correctly" fallbacks). Not yet re-verified against
+  real hardware — see "Highest priority" above.
 - **Navigation, fallback `menu_path`** (only used if the intent fails or
   doesn't land correctly): same as Wi-Fi's, then the gear icon
   (`com.android.settings:id/settings_button` — real, unambiguous
@@ -236,11 +263,20 @@ generalized to models with no data of their own yet.
 ### Not resolved (genuinely absent from available data — not guessed)
 - `apn_settings.add_button_resource_id` — the "+ add new APN" icon's
   *position* is confirmed by hand (top-right of the APN list screen,
-  icon-only, no text — 2026-09-08/09), but not its resource-id: the APN
-  *list* screen itself was never captured, only the edit *form* (reached
-  after tapping it or an existing entry). `apn_setup.py` handles this being
-  `null` by assuming a blank entry is already open rather than guessing a
-  tap target.
+  icon-only, no text — 2026-09-08/09, re-confirmed by a real screenshot
+  2026-09-11), but not its resource-id/content-desc: the APN *list* screen
+  itself has still never been dumped, only photographed. **Workaround
+  added 2026-09-11** (not a resolution of the actual value):
+  `configure_apn()` now falls back to `tap_left_of_content_desc()`, which
+  taps an ESTIMATED position immediately left of the confirmed "⋮" overflow
+  icon (`overflow_menu_content_desc`), on the assumption a same-width icon
+  occupies that adjacent space with no gap — consistent with the
+  screenshot's layout. This is explicitly an estimate: if it's wrong, the
+  next step (field rows not found) fails loudly rather than silently
+  mistapping, but it has **not yet been confirmed correct against real
+  hardware**. A real dump of the list screen (or a report of what actually
+  happened after this tap) would let this become a real resolved id instead
+  of a positional guess.
 - `wifi_settings.password_field_resource_id` / `connect_button_resource_id`
   — the "Connect to network" dialog (shown after tapping an unsaved SSID)
   was never captured; only the network list screen was. Unchanged Stage A

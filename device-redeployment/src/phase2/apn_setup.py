@@ -54,6 +54,7 @@ from src.device.ui_automator import (
     scroll_down,
     tap_by_content_desc,
     tap_by_text,
+    tap_left_of_content_desc,
     tap_resource_id,
 )
 
@@ -139,23 +140,41 @@ def _fill_labeled_field(
     return True
 
 
-_APN_LIST_SCREEN_TITLE = "アクセスポイント名"
+_APN_LIST_SCREEN_TITLE_CONTENT_DESC = "アクセスポイント名"
+_APN_LIST_SCREEN_TITLE_TEXT = "APN"
 
 
 def _looks_like_apn_list_screen(ui_xml: str) -> bool:
-    """Best-effort check for the APN list screen.
+    """Best-effort check for the APN list screen. Two variants confirmed
+    real, both accepted here:
 
-    Real hand-testing (2026-09-08/09) established that "アクセスポイント名"
-    is that screen's own *title*, rendered via `content-desc` on the
-    toolbar — the exact same pattern already confirmed for the edit form's
-    "アクセスポイントの編集" (see the collapsing_toolbar node in
-    tests/fixtures/apn_entry_*_SHG10.xml). It was never a `text` node to
-    tap, which is the actual reason the old menu_path's final step (which
-    tried tap_by_text() on it) could never succeed — there was nothing
-    there to find, not a resource-id/text mismatch to fix.
+    - SHARP's own screen (reached via the fallback menu_path — manual
+      navigation): titled via `content-desc` "アクセスポイント名" on the
+      toolbar — the same pattern already confirmed for the edit form's
+      "アクセスポイントの編集" (see tests/fixtures/apn_entry_*_SHG10.xml).
+      Never a `text` node to tap, which is the actual reason the old
+      menu_path's final step (tap_by_text() on it) could never succeed —
+      there was nothing there to find, not a resource-id/text mismatch.
+
+    - The stock/AOSP screen reached via `android.settings.APN_SETTINGS`
+      (the primary path): a plain heading `text` "APN" instead — real
+      client screenshot, 2026-09-11. This screen also showed a warning,
+      「このユーザーはアクセスポイント名設定を利用できません」("this user
+      cannot use APN name settings") — initially read as a hard access
+      restriction, but the client confirmed the "+" button on this exact
+      screen still works with a normal tap; that message doesn't block
+      basic add/edit. See docs/record.md.
     """
     try:
-        return find_by_content_desc(ui_xml, _APN_LIST_SCREEN_TITLE) is not None
+        if find_by_content_desc(ui_xml, _APN_LIST_SCREEN_TITLE_CONTENT_DESC) is not None:
+            return True
+    except AmbiguousResourceIdError:
+        return True
+    except Exception:
+        pass
+
+    try:
+        return find_by_text(ui_xml, _APN_LIST_SCREEN_TITLE_TEXT) is not None
     except AmbiguousResourceIdError:
         return True
     except Exception:
@@ -318,6 +337,22 @@ def configure_apn(
                 "apn add-new button %r not found; assuming a blank entry is "
                 "already open (e.g. this screen has no existing APNs yet)",
                 add_button,
+            )
+    elif apn.get("overflow_menu_content_desc"):
+        # No resource-id/content-desc of its own has ever been captured for
+        # "+" (no dump of the APN list screen exists) — real screenshot
+        # (2026-09-11) confirmed it sits immediately left of the "⋮"
+        # overflow menu, whose content-desc IS confirmed, so this taps an
+        # ESTIMATED position derived from that icon's own real bounds
+        # rather than doing nothing. See tap_left_of_content_desc()'s
+        # docstring — it can only confirm the overflow icon was found, not
+        # that the tap actually landed on "+"; a wrong estimate here fails
+        # loudly a few lines later when the expected field rows aren't found.
+        if not tap_left_of_content_desc(client, apn["overflow_menu_content_desc"]):
+            logger.warning(
+                "apn add-new button: could not even find the overflow menu "
+                "(content-desc %r) to estimate its position from",
+                apn["overflow_menu_content_desc"],
             )
     else:
         logger.debug(

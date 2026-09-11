@@ -244,6 +244,45 @@ accumulates.
   warning if not), never turned into a failure on its own, since e.g. list
   scroll position could make this check miss a genuinely successful save
   the validation-dialog check already accepted.
+- *2026-09-11 (real run — `_looks_like_apn_list_screen` was too narrow):*
+  Client's log showed `android.settings.APN_SETTINGS` repeatedly logging
+  "didn't land on a recognizable APN list screen; falling back to
+  menu_path" followed by `apn menu navigation failed`, even though the
+  intent *was* landing correctly. Root cause: the landing-check only
+  accepted the SHARP-skinned title rendered via `content-desc`
+  ("アクセスポイント名", the pattern confirmed 09-08/09 above) — but on
+  this device the screen reached via the *intent* instead shows a plain
+  heading `text` "APN" (stock/AOSP-style title), which the check didn't
+  recognize at all. `_looks_like_apn_list_screen()` now accepts either
+  title variant. The same screenshot also showed a warning banner,
+  「このユーザーはアクセスポイント名設定を利用できません」("this user
+  cannot use APN name settings") — client confirmed by hand that this does
+  **not** block the "+" button from working with a normal tap; it's just
+  informational text on this screen, not an access restriction to route
+  around.
+- *2026-09-11 (client correction, [+] tap mechanism):* My first read of the
+  client's screenshot/caption (mentioning "you must press the Tab key")
+  was wrong — I initially built keyboard-focus-cycling (`KEYCODE_TAB`/
+  `KEYCODE_ENTER`) on the theory the "+" button was touch-disabled. Client
+  corrected this directly: "Tab" referred to the on-screen "+" icon itself
+  (translation artifact), not a keyboard key — the intended flow is a
+  normal tap on "+", then fill 名前/APN/MCC/MNC one at a time via the
+  already-implemented per-row dialog mechanism, OK each one, then the
+  already-implemented two-tap overflow→保存 save. The keyboard mechanism
+  was fully reverted (no trace left in `ui_automator.py`).
+- *2026-09-11:* **[+] add-new-APN button still has no captured id of its
+  own** (still true from 09-08/09 above — no dump of the list screen with
+  a known-empty/known-count APN set exists, only a hand photo). Rather than
+  leave the tap silently skipped, `configure_apn()` now falls back to a new
+  primitive, `tap_left_of_content_desc()`: it taps an ESTIMATED position
+  immediately left of the confirmed "その他のオプション" (⋮ overflow menu)
+  icon, assuming a same-width icon occupies that adjacent space with no
+  gap — consistent with the real screenshot's layout (+ and ⋮ both
+  top-right, adjacent). This is explicitly an estimate, not a confirmed
+  value: if wrong, it fails loudly a few steps later (the expected field
+  rows won't be found), never silently misfires into a different action.
+  Needs real-hardware confirmation before `add_button_resource_id` can be
+  marked resolved in `PENDING_REAL_DEVICE_DATA.md`.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a

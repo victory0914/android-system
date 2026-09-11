@@ -484,6 +484,47 @@ def tap_by_content_desc(
     return True
 
 
+def tap_left_of_content_desc(
+    client: AdbClientProtocol, anchor_content_desc: str, *, index: int = 0
+) -> bool:
+    """Tap an ESTIMATED position immediately to the left of a node
+    identified by `anchor_content_desc`, assuming a same-width icon
+    occupies that adjacent space with no gap.
+
+    For an icon-only control that has no identifier of its own (no
+    resource-id, no text, and its own content-desc was never captured)
+    but sits directly next to one that does. Confirmed real use case
+    (2026-09-11): the APN list's "+" add button sits immediately left of
+    the "⋮" overflow menu (content-desc "その他のオプション", itself
+    confirmed real). This is a position ESTIMATE derived from the
+    anchor's own real, dumped bounds — not a captured value for the
+    target itself — so it can only confirm the anchor was found, not that
+    the tap actually landed on the intended control; callers should still
+    verify the expected next screen appears rather than trust this alone.
+    """
+    ui_xml = dump_ui(client)
+    _raise_if_hazardous(ui_xml)
+    root = ET.fromstring(ui_xml)
+    matches = _iter_all_matches(root, content_desc=anchor_content_desc)
+    if not matches:
+        return False
+    target = _disambiguate_or_raise(matches, index, f"content_desc {anchor_content_desc!r}")
+    if target is None:
+        return False
+    bounds = target.get("bounds")
+    if not bounds:
+        return False
+    rect = _parse_bounds_rect(bounds)
+    if rect is None:
+        return False
+    x1, y1, x2, y2 = rect
+    width = x2 - x1
+    estimated_x = x1 - width // 2
+    estimated_y = (y1 + y2) // 2
+    client.shell(f"input tap {estimated_x} {estimated_y}")
+    return True
+
+
 def scroll_down(client: AdbClientProtocol, *, duration_ms: int = 300) -> None:
     """Swipe up (revealing content further down the page) by an amount
     computed from the *current* screen's own dumped bounds, so no per-model

@@ -202,13 +202,23 @@ apn_settings:
   dialog_confirm_button_resource_id: "android:id/button1"
 
   # NOT resolved — genuinely absent from available data, not an oversight.
-  # Hand-testing (2026-09-08/09) confirmed its position (icon-only, top
-  # right of the APN list screen, no visible text label — must be matched
-  # by resource-id, find_by_text() will not work for it) but not its actual
-  # resource-id value, since no dump of the APN *list* screen itself
+  # Hand-testing (2026-09-08/09, re-confirmed by a real screenshot
+  # 2026-09-11) confirmed its position (icon-only, top right of the APN
+  # list screen, no visible text label — must be matched by resource-id,
+  # find_by_text() will not work for it) but not its actual resource-id/
+  # content-desc value, since no dump of the APN *list* screen itself
   # exists — only the edit *form* (reached after tapping it) was ever
-  # captured. apn_setup.py handles this being null: it logs and assumes a
-  # blank entry is already open rather than guessing a tap target.
+  # captured.
+  #
+  # apn_setup.py handles this being null with a fallback, not by skipping
+  # the tap: tap_left_of_content_desc() taps an ESTIMATED position
+  # immediately left of overflow_menu_content_desc's confirmed "⋮" icon
+  # below, on the assumption a same-width icon occupies that adjacent
+  # space with no gap (matches the 2026-09-11 screenshot's layout). This
+  # is still an estimate, not a resolved id — unverified against real
+  # hardware; a wrong estimate fails loudly a few steps later (expected
+  # field rows not found) rather than silently mistapping. See
+  # PENDING_REAL_DEVICE_DATA.md's "Not resolved" section.
   add_button_resource_id: null
 
   # RESOLVED (real, confirmed on-device 2026-09-08 — see docs/record.md).
