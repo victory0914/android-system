@@ -190,15 +190,16 @@ apn_settings:
   # apn_setup.py before ever touching the device (_MCC_PATTERN/_MNC_PATTERN).
   mcc_field_label: "MCC"
   mnc_field_label: "MNC"
-  # NOT resolved from any capture — the per-field edit dialog itself (opened
-  # by tapping a row above) was never dumped, only the underlying list was.
-  # These two are BEST-GUESS standard AOSP/AndroidX framework ids (the same
-  # ids every EditTextPreference dialog in the entire OS uses), not
-  # app-specific and not invented to look plausible — tagged per
-  # docs/record.md's established convention. Verify on-device.
-  # TODO(real-device, best-guess-standard-id)
+  # RESOLVED (real, confirmed by a dump of the dialog itself while open —
+  # tests/fixtures/apn_accesshost_okbtn_SHG10.xml, 2026-09-11, captured
+  # mid-edit on the 名前 field: title at com.android.settings:id/alertTitle
+  # "名前", a standard AOSP AlertDialog). What were previously best-guess
+  # standard-framework ids turned out to be exactly right:
   dialog_edit_field_resource_id: "android:id/edit"
-  # TODO(real-device, best-guess-standard-id)
+  # RESOLVED (same dump). Two buttons present: "キャンセル" at
+  # android:id/button2, "OK" at android:id/button1 — matched by resource-id
+  # (not by the English "OK" text, which would be a translation trap
+  # elsewhere in this device's mostly-Japanese UI).
   dialog_confirm_button_resource_id: "android:id/button1"
 
   # Has no resource-id at all on this build (icon-only button, standard

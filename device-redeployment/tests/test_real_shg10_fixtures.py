@@ -16,6 +16,7 @@ from src.device.ui_automator import (
     find_by_content_desc,
     find_by_text,
     find_resource_id,
+    get_node_text,
     node_is_checked,
 )
 from src.phase2.apn_setup import _looks_like_apn_list_screen
@@ -27,6 +28,7 @@ APN_ENTRY_TOP_XML = (FIXTURES_DIR / "apn_entry_top_SHG10.xml").read_text(encodin
 APN_ENTRY_MIDDLE_XML = (FIXTURES_DIR / "apn_entry_middle_SHG10.xml").read_text(encoding="utf-8")
 APN_ENTRY_BOTTOM_XML = (FIXTURES_DIR / "apn_entry_bottom_SHG10.xml").read_text(encoding="utf-8")
 APN_RESTRICTED_XML = (FIXTURES_DIR / "apn_restricted_SHG10.xml").read_text(encoding="utf-8")
+APN_OKBTN_DIALOG_XML = (FIXTURES_DIR / "apn_accesshost_okbtn_SHG10.xml").read_text(encoding="utf-8")
 
 # Real near-duplicate SSID pairs observed at the client site (docs/record.md).
 REAL_DUPLICATE_SSID_PAIRS = [
@@ -191,3 +193,33 @@ def test_restriction_warning_does_not_prevent_navigation_from_recognizing_the_sc
         is not None
     )
     assert _looks_like_apn_list_screen(APN_RESTRICTED_XML) is True
+
+
+# --- Per-field entry dialog, captured while open (real, tests/fixtures/
+# apn_accesshost_okbtn_SHG10.xml, 2026-09-11: dumped mid-edit on the 名前
+# field). Settles what was previously only a best-guess: the dialog's
+# EditText/confirm-button ids. -----------------------------------------------
+
+
+def test_dialog_edit_field_resolves_by_resource_id():
+    """android:id/edit — the id apn_setup.py has always used for
+    dialog_edit_field_resource_id — is real and unambiguous on this dialog."""
+    assert find_resource_id(APN_OKBTN_DIALOG_XML, "android:id/edit") is not None
+
+
+def test_dialog_confirm_button_is_ok_not_cancel():
+    """Two buttons exist: "OK" (android:id/button1) and "キャンセル"
+    (android:id/button2). apn_setup.py's dialog_confirm_button_resource_id
+    ("android:id/button1") is genuinely the OK button, not accidentally the
+    Cancel one — confirms the previously best-guess id was exactly right,
+    not just present."""
+    assert get_node_text(APN_OKBTN_DIALOG_XML, "android:id/button1") == "OK"
+    assert get_node_text(APN_OKBTN_DIALOG_XML, "android:id/button2") == "キャンセル"
+
+
+def test_dialog_title_renders_via_standard_alert_title_id():
+    """Confirms this is a plain, standard AOSP AlertDialog (title at
+    com.android.settings:id/alertTitle, here showing "名前" — the field
+    apn_setup.py had open when this was captured), not a custom layout that
+    might have different button/field ids than the framework default."""
+    assert get_node_text(APN_OKBTN_DIALOG_XML, "com.android.settings:id/alertTitle") == "名前"

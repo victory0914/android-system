@@ -9,13 +9,15 @@ captures showed the APN edit form does NOT expose a per-field resource-id —
 every field row shares one generic id (`apn_settings['field_row_resource_id']`,
 in practice "android:id/title") and is disambiguated only by its visible
 Japanese label text (名前/APN/MCC/MNC/...). Tapping a row opens a small
-EditTextPreference-style dialog; the dialog itself was never captured in a
-real dump, so its EditText/confirm-button ids are best-guess standard AOSP
-framework ids (TODO(real-device, best-guess-standard-id)), same convention
-docs/record.md established for the wizard. (Indirect confirmation, 2026-09-08:
-the *validation-error* dialog, which WAS captured, uses exactly
-"android:id/button1" for its OK button — the same id already guessed for the
-per-field dialog's confirm button, since both are standard AOSP AlertDialogs.)
+per-field AlertDialog; its EditText/confirm-button ids were first only
+best-guess standard AOSP framework ids (inferred from the *validation-error*
+dialog, which shares the same "android:id/button1" OK id), then directly
+RESOLVED by a real dump of the dialog itself while open
+(tests/fixtures/apn_accesshost_okbtn_SHG10.xml, 2026-09-11) — the guess was
+exactly right: EditText at "android:id/edit", "OK" at "android:id/button1",
+"キャンセル" at "android:id/button2" (the dialog's title even renders via
+the standard "com.android.settings:id/alertTitle", confirming it's a plain
+AOSP AlertDialog, not a custom layout).
 
 APN save flow — confirmed on real SHG10 hardware, 2026-09-08 (see
 docs/record.md): Save lives in the overflow "⋮" menu, not on the form
@@ -93,25 +95,28 @@ def _fill_labeled_field(
 ) -> bool:
     """Stage B shape: tap the row identified by (field_row_resource_id,
     text=label) to open its edit dialog, then type into the dialog's
-    EditText and confirm. The dialog's own ids are best-guess standard
-    framework ids (never captured directly) — if they're wrong,
-    tap_resource_id() simply returns False rather than mistapping, and this
+    EditText and confirm. The dialog's own ids are RESOLVED, real values
+    (tests/fixtures/apn_accesshost_okbtn_SHG10.xml, 2026-09-11 — a dump of
+    the dialog itself while open) — if a tap still doesn't land,
+    tap_resource_id() returns False rather than mistapping, and this
     function surfaces that as a failure rather than pretending it worked.
 
     Both the edit-field tap and the confirm-button tap are treated as HARD
-    failures if the (best-guess) id isn't found — NOT soft warnings that
-    let execution continue (2026-09-11 fix; an earlier version only warned
-    and returned True, on the theory the EditText might already be
-    auto-focused). Real-device testing showed why that was dangerous: if
-    the confirm button silently fails to be found, its dialog is left open,
-    and every subsequent tap (the next field's row, the overflow menu, the
-    save item) lands on — or is swallowed by — that still-open modal
-    instead of what it was aimed at, typing later fields' values into the
-    same stuck EditText and ultimately failing at the *save* step with a
-    confusing "menu item not found" error that looks like a save-flow bug
-    but actually originates here, several steps earlier. Failing loudly at
-    the field that actually didn't commit is far more diagnosable — see
-    docs/record.md, 2026-09-11.
+    failures if the id isn't found — NOT soft warnings that let execution
+    continue (2026-09-11 fix, made before the ids above were confirmed; an
+    earlier version only warned and returned True, on the theory the
+    EditText might already be auto-focused). Real-device testing showed why
+    that was dangerous: if the confirm button silently fails to be found,
+    its dialog is left open, and every subsequent tap (the next field's
+    row, the overflow menu, the save item) lands on — or is swallowed by —
+    that still-open modal instead of what it was aimed at, typing later
+    fields' values into the same stuck EditText and ultimately failing at
+    the *save* step with a confusing "menu item not found" error that looks
+    like a save-flow bug but actually originates here, several steps
+    earlier. Failing loudly at the field that actually didn't commit is far
+    more diagnosable — see docs/record.md, 2026-09-11. Kept even now that
+    the ids are confirmed correct: still the right behavior if a future
+    build/OS update ever changes them.
 
     Uses input_text_direct() (Android's built-in `input text`), not
     inject_text() (ADB Keyboard broadcast) — confirmed necessary on real
@@ -137,10 +142,11 @@ def _fill_labeled_field(
     edit_field = apn.get("dialog_edit_field_resource_id")
     if edit_field and not tap_resource_id(client, edit_field):
         logger.error(
-            "apn field %r: dialog edit-field %r (best-guess id) not found "
-            "— refusing to type blindly into whatever currently has focus "
-            "(see PENDING_REAL_DEVICE_DATA.md: this dialog has never been "
-            "captured in a real dump, so this id is unconfirmed)",
+            "apn field %r: dialog edit-field %r not found (real, confirmed "
+            "id — see tests/fixtures/apn_accesshost_okbtn_SHG10.xml; a "
+            "miss here means something about this specific dialog's state "
+            "was unexpected, not a wrong id) — refusing to type blindly "
+            "into whatever currently has focus",
             label, edit_field,
         )
         return False
@@ -151,13 +157,12 @@ def _fill_labeled_field(
     confirm_button = apn.get("dialog_confirm_button_resource_id")
     if confirm_button and not tap_resource_id(client, confirm_button):
         logger.error(
-            "apn field %r: dialog confirm button %r (best-guess id) not "
-            "found — the value was typed but NOT committed, and the dialog "
-            "is likely still open. Failing here rather than continuing: "
-            "every later tap (next field, save) would otherwise land on "
-            "this stuck dialog instead of its intended target. See "
-            "PENDING_REAL_DEVICE_DATA.md — this id has never been "
-            "confirmed against a real dump of the per-field dialog.",
+            "apn field %r: dialog confirm button %r not found (real, "
+            "confirmed id — see tests/fixtures/apn_accesshost_okbtn_SHG10.xml) "
+            "— the value was typed but NOT committed, and the dialog is "
+            "likely still open. Failing here rather than continuing: every "
+            "later tap (next field, save) would otherwise land on this "
+            "stuck dialog instead of its intended target.",
             label, confirm_button,
         )
         return False

@@ -12,40 +12,56 @@ end-to-end on real hardware** — confirmed by a client screenshot showing
 the "+" add-button, and field entry through MNC are now confirmed working
 on real hardware** (client run, 2026-09-11, after the screen-recognition +
 add-button fixes below) — the remaining blocker is the save step itself:
-the entry isn't actually persisting after name/APN/MCC/MNC are typed. Root
-cause found and fixed (see "Highest priority" below) but **not yet
-re-verified against a live run**. SHG10's wizard is on a
-photograph-derived, text-matching config — real dumps for the wizard are
-**not obtainable on any model, ever** (structural ADB/factory-reset
-constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
-untouched** — still 100% Stage A placeholders, not started.
+the entry isn't actually persisting after name/APN/MCC/MNC are typed. The
+leading hypothesis (a wrong best-guess id for the per-field dialog's
+confirm button) has now been **ruled out** by a real dump of that exact
+dialog — both ids were already correct (see "Highest priority" below).
+The defensive hardening from that hypothesis is kept (fail loud instead of
+silently continuing on a future mismatch) but the *actual* cause of "not
+saving" is still open — next need is the exact terminal log from a run
+with the current code. SHG10's wizard is on a photograph-derived,
+text-matching config — real dumps for the wizard are **not obtainable on
+any model, ever** (structural ADB/factory-reset constraint, see
+docs/record.md). **SOG08, SOG07, and SHG07 are entirely untouched** —
+still 100% Stage A placeholders, not started.
 
 ## Highest priority
 
-### Re-verify against real hardware after hardening the per-field dialog confirm-button check (2026-09-11)
+### Root cause of "not saving" still open — confirm-button hypothesis ruled out (2026-09-11)
 
-Not yet re-verified. Client report: typing name/APN/MCC/MNC "works
-correctly up to the MNC input stage", but the entry then never actually
-saves. Root cause: `_fill_labeled_field()`'s confirm-button tap
-(`dialog_confirm_button_resource_id`, a best-guess id — see "Best-guess"
-below, this per-field dialog has never itself been dumped) only logged a
-*warning* and continued when the tap wasn't found, instead of failing.
-If that id is wrong on this build, the field's dialog is left open and
-never actually commits the typed value; every tap after that (the next
-field's row, the "⋮" overflow icon, "保存" itself) lands on/is swallowed
-by that stuck dialog instead of its real target — which would surface,
-several steps later, as a confusing "save menu item not found" error that
-looks like a save-flow bug but actually originates at the very first
-field. Both the edit-field tap and the confirm-button tap in
-`_fill_labeled_field()` are now hard failures instead of soft warnings, so
-a wrong id now fails loudly and immediately at whichever field it happens
-on, rather than cascading. **This does not yet resolve the *actual* ids**
-— see "Best-guess" below for what's still needed to close this out for
-real. Two client-supplied real dumps this same day
+Client report: typing name/APN/MCC/MNC "works correctly up to the MNC
+input stage", but the entry then never actually saves. The leading
+hypothesis was that `dialog_confirm_button_resource_id`
+("android:id/button1", a best-guess id — the per-field dialog had never
+itself been dumped) was wrong, leaving each field's dialog stuck open and
+derailing every tap after it. **A real dump of the dialog itself, captured
+while open** (`tests/fixtures/apn_accesshost_okbtn_SHG10.xml`, 2026-09-11
+— dumped mid-edit on 名前), disproves this: both
+`dialog_edit_field_resource_id` ("android:id/edit") and
+`dialog_confirm_button_resource_id` ("android:id/button1", confirmed to
+genuinely be the "OK" button, not "キャンセル"/button2) were exactly right
+all along. See "Resolved" below.
+
+**This means the actual root cause of "not saving" is still unknown.**
+The defensive hardening added for the (now-ruled-out) hypothesis — hard
+failure instead of a silent warning when either dialog tap isn't found —
+is still correct to keep (protects against a future OS/build change), but
+it isn't itself the fix. **What's needed next: the exact terminal log
+output from a run with the current (hardened) code.** If the hardening
+never fires (most likely now, since both ids are confirmed correct), the
+log's own error message — from `_save_apn()`, most likely — should point
+directly at the real cause: whether the overflow/save taps land correctly,
+whether a validation dialog appears (and its real message text, which
+`_save_apn()` already logs), or something not yet considered (e.g.
+name/APN being filled with the identical value — `configure_apn()` uses
+`apn_name` for both — could plausibly trip a "duplicate APN" or similar
+validation on-device, unconfirmed).
+
+Two earlier client-supplied real dumps
 (`apn_accesshost_SHG10.xml`, `apn_accesshost_save_SHG10.xml`) turned out
 to be byte-identical to already-captured/already-correctly-handled
 fixtures (the edit form and the overflow "⋮"/"保存" popup) — they confirm
-those two structures are right, not the missing piece here.
+those two structures are right, not a source of new information either.
 
 ### Re-verify against real hardware after the APN screen-recognition + add-button fixes (2026-09-11) — CONFIRMED WORKING
 
@@ -317,22 +333,21 @@ generalized to models with no data of their own yet.
   password (see "Real Wi-Fi credentials" above) — this is about the
   dialog's field/button *ids*, a separate and solvable gap.
 
-### Best-guess (marked `TODO(real-device, best-guess-standard-id)` in YAML)
+### Resolved — per-field entry dialog (`tests/fixtures/apn_accesshost_okbtn_SHG10.xml`, 2026-09-11)
 - `apn_settings.dialog_edit_field_resource_id` = `android:id/edit` and
-  `dialog_confirm_button_resource_id` = `android:id/button1` — still not
-  directly captured (the per-field entry dialog itself has never been
-  dumped, only inferred from the *validation-error* dialog's real ids).
-  **This is now the single most important unresolved gap**: a 2026-09-11
-  real run got through typing name/APN/MCC/MNC but the entry never saved
-  — root cause traced to `_fill_labeled_field()` previously treating a
-  not-found confirm button as a soft warning and continuing anyway, which
-  leaves that dialog stuck open and derails every subsequent tap (see
-  "Highest priority" below). The soft-continue is now a hard failure, so
-  a wrong id fails loudly and immediately at the first field instead of
-  cascading into a confusing late "save menu item not found" error — but
-  the *actual* ids are still unconfirmed. **A real dump of this dialog
-  (tap 名前, dump before typing/confirming) would resolve this properly**
-  — the single highest-value capture left to get for SHG10.
+  `dialog_confirm_button_resource_id` = `android:id/button1` — previously
+  only best-guess standard-framework ids (inferred from the
+  *validation-error* dialog, never captured from this dialog directly).
+  **Now directly confirmed**: a real dump of the per-field dialog itself,
+  captured while open (mid-edit on 名前, before confirming), shows a plain
+  standard AOSP AlertDialog — title at
+  `com.android.settings:id/alertTitle` ("名前"), EditText at
+  `android:id/edit` (focused, as expected), and two buttons: "OK" at
+  `android:id/button1` and "キャンセル" (Cancel) at `android:id/button2`.
+  The guess was exactly right on every point, including which of the two
+  buttons is genuinely OK. This **rules out** the leading hypothesis for
+  why a real 2026-09-11 run typed all four fields but the entry never
+  saved — see "Highest priority" above for what's still actually unknown.
 
 ### Toggle-tap safety (fixed, not just data)
 Real capture showed the Wi-Fi toggle is a plain `Switch` with a `checked`
@@ -434,7 +449,7 @@ by what real captures actually showed rather than by further guessing:
   for the other 3 until their own dumps exist).
 - `apn_settings.dialog_edit_field_resource_id` /
   `dialog_confirm_button_resource_id` — the per-field edit dialog's own
-  best-guess ids (see "Best-guess" above).
+  ids, resolved (see "Resolved — per-field entry dialog" above).
 - `apn_settings.overflow_menu_content_desc` / `save_menu_item_text` — the
   real, confirmed two-tap save flow (replaces the earlier
   `save_action_candidates` list, which recorded two unconfirmed guesses;

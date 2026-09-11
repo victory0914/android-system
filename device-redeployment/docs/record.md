@@ -351,6 +351,36 @@ accumulates.
   see PENDING_REAL_DEVICE_DATA.md — capturing a real dump of this dialog,
   e.g. mid-way through tapping 名前 and before confirming, would settle it
   for real). Not yet re-verified against a live run.
+- *2026-09-11 (client attached the dialog dump itself — rules out the
+  hypothesis above):* Client captured exactly the requested dump:
+  `tests/fixtures/apn_accesshost_okbtn_SHG10.xml`, taken while the 名前
+  field's edit dialog was open (EditText focused, per `focused="true"`).
+  This settles the question directly instead of by inference: it's a
+  plain standard AOSP AlertDialog — title at
+  `com.android.settings:id/alertTitle` (reading "名前", confirming which
+  field was open), EditText at `android:id/edit`, and two buttons, "OK"
+  at `android:id/button1` and "キャンセル" at `android:id/button2`. **Both
+  ids `_fill_labeled_field()` already used were exactly right** — the
+  best-guess wasn't a guess gone wrong, it was correct all along.
+  `apn_setup.py`'s docstrings, the YAML's comments, and
+  PENDING_REAL_DEVICE_DATA.md's "Best-guess"/"Not resolved" framing for
+  these two ids are all updated to "Resolved" accordingly.
+
+  This means the confirm-button hypothesis from the entry above — the
+  leading theory for why a real run typed all four fields but the entry
+  never saved — **is ruled out**. The hardening (hard failure instead of
+  a silent warning when either dialog tap isn't found) stays, since it's
+  correct defensive practice regardless, but it almost certainly won't be
+  what fires on the next run, since both ids check out. The actual root
+  cause of "not saving" is still open. **Next need: the exact terminal
+  log output from a run with the current code** — whatever `_save_apn()`
+  logs (a validation dialog's real message text, or "save menu item not
+  found", or something else) will point directly at it, rather than
+  guessing further from dumps of screens already confirmed correct. One
+  concrete alternate hypothesis worth checking: `configure_apn()` fills
+  both 名前 and APN with the identical value (`apn_name`) — plausible,
+  since many real carrier profiles do use matching name/APN strings, but
+  unconfirmed whether this specific device's validation is fine with that.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
@@ -424,7 +454,7 @@ accumulates.
 
 | Model | Wi-Fi list | APN list | APN entry | APN save flow | Wizard (OOBE) |
 |---|---|---|---|---|---|
-| SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_restricted_SHG10.xml` (6,104 B) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
+| SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_restricted_SHG10.xml` (6,104 B) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B), `apn_accesshost_okbtn_SHG10.xml` (per-field dialog, open) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
 | Xperia Ace III (SOG08) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
 | Xperia 10 IV (SOG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
 | AQUOS sense6s (SHG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
@@ -434,6 +464,12 @@ entry form) captured 2026-09-08, same session as the Save flow findings
 above. `apn_restricted_SHG10.xml` (the APN *list* screen itself — the
 piece missing from every earlier capture, which only ever reached the edit
 *form*) added 2026-09-11 — see the dated entry above for what it resolved.
+`apn_accesshost_okbtn_SHG10.xml` (the per-field entry dialog itself, open
+mid-edit) also added 2026-09-11 — resolved `dialog_edit_field_resource_id`/
+`dialog_confirm_button_resource_id` for real. `apn_accesshost_SHG10.xml`/
+`apn_accesshost_save_SHG10.xml`, supplied the same day, are byte-identical
+to `apn_entry_top_SHG10.xml`/`apn_overflow_menu_SHG10.xml` respectively —
+kept for provenance, not listed separately above.
 
 Capture pattern used:
 ```
