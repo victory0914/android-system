@@ -139,12 +139,26 @@ wifi_settings:
   connect_button_text: "接続"
 
 apn_settings:
-  # Real navigation path confirmed (docs/record.md): 設定 →
-  # ネットワークとインターネット → Wi-Fi とモバイルネットワーク → (gear icon
-  # next to the carrier name) → アクセスポイント名. The gear icon step is
-  # reached via an icon, not a text menu item — it has a real app-specific
-  # resource-id though (unlike the icons in apn_settings below), resolved
-  # directly from tests/fixtures/wifi_list_SHG10.xml.
+  # PRIMARY navigation (real, hand-confirmed 2026-09-08/09):
+  # `adb shell am start -a android.settings.APN_SETTINGS` reaches the APN
+  # list screen in a single step — apn_setup.py tries this before ever
+  # touching menu_path (same pattern as wifi_setup.py's WIFI_SETTINGS
+  # intent). Landing is confirmed by checking for "アクセスポイント名" as a
+  # content-desc (see below) — not hardcoded here since it's the same
+  # constant used for verification, not a navigation step.
+  #
+  # FALLBACK menu_path (only used if the intent fails or doesn't land
+  # correctly): 設定 → ネットワークとインターネット → Wi-Fi とモバイルネットワーク
+  # → (gear icon next to the carrier name). Ends at the gear icon — it does
+  # NOT continue to a tap on "アクセスポイント名", unlike an earlier version
+  # of this file. That was a real, confirmed-on-hardware bug: "アクセスポイ
+  # ント名" is the *destination screen's own title*, rendered via
+  # content-desc on the toolbar (the exact same pattern already confirmed
+  # for the edit form's "アクセスポイントの編集" — see the collapsing_toolbar
+  # node in tests/fixtures/apn_entry_*_SHG10.xml). It was never a `text`
+  # node to tap — there was nothing there to find, which is the actual
+  # reason menu_path navigation kept failing before this fix, not a
+  # resource-id/text mismatch.
   menu_path:
     - type: text
       value: "設定"
@@ -154,8 +168,6 @@ apn_settings:
       value: "Wi-Fi とモバイルネットワーク"
     - type: resource_id
       value: "com.android.settings:id/settings_button"
-    - type: text
-      value: "アクセスポイント名"
 
   # RESOLVED (real: tests/fixtures/apn_entry_{top,middle,bottom}_SHG10.xml).
   # The edit form is a PreferenceScreen list, not a flat set of EditTexts:
@@ -190,11 +202,13 @@ apn_settings:
   dialog_confirm_button_resource_id: "android:id/button1"
 
   # NOT resolved — genuinely absent from available data, not an oversight.
-  # The "+ add new APN" control (icon-only, no visible text label per
-  # docs/record.md) lives on the APN *list* screen, which was never
-  # captured — only the edit *form* (3 scroll positions) was dumped.
-  # apn_setup.py handles this being null: it logs and assumes a blank entry
-  # is already open rather than guessing a tap target.
+  # Hand-testing (2026-09-08/09) confirmed its position (icon-only, top
+  # right of the APN list screen, no visible text label — must be matched
+  # by resource-id, find_by_text() will not work for it) but not its actual
+  # resource-id value, since no dump of the APN *list* screen itself
+  # exists — only the edit *form* (reached after tapping it) was ever
+  # captured. apn_setup.py handles this being null: it logs and assumes a
+  # blank entry is already open rather than guessing a tap target.
   add_button_resource_id: null
 
   # RESOLVED (real, confirmed on-device 2026-09-08 — see docs/record.md).

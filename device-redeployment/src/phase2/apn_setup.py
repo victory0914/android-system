@@ -47,11 +47,11 @@ from src.device.ui_automator import (
     dump_ui,
     find_by_content_desc,
     find_by_text,
-    find_resource_id,
     get_node_text,
     inject_text,
     input_text_direct,
     navigate_menu_path,
+    scroll_down,
     tap_by_content_desc,
     tap_by_text,
     tap_resource_id,
@@ -109,7 +109,14 @@ def _fill_labeled_field(
     """
     row_resource_id = apn["field_row_resource_id"]
     if not tap_resource_id(client, row_resource_id, text=label):
-        return False
+        # Real hardware confirmed (2026-09-08): MCC/MNC are below the fold
+        # in this scrollable form — a row not yet scrolled into view can be
+        # genuinely absent from the dump, not just hard to find. Scroll
+        # once and retry before giving up, same pattern as the wizard's
+        # scroll_then_tap_by_text.
+        scroll_down(client)
+        if not tap_resource_id(client, row_resource_id, text=label):
+            return False
 
     edit_field = apn.get("dialog_edit_field_resource_id")
     if edit_field and not tap_resource_id(client, edit_field):
@@ -132,79 +139,62 @@ def _fill_labeled_field(
     return True
 
 
-def _step_target_present(ui_xml: str, step) -> bool:
-    """Read-only check (no tap) for whether a single navigate_menu_path()
-    step's target is visible in an already-taken dump."""
-    if isinstance(step, str):
-        step_type, value = "text", step
-    else:
-        step_type, value = step.get("type", "text"), step["value"]
+_APN_LIST_SCREEN_TITLE = "アクセスポイント名"
+
+
+def _looks_like_apn_list_screen(ui_xml: str) -> bool:
+    """Best-effort check for the APN list screen.
+
+    Real hand-testing (2026-09-08/09) established that "アクセスポイント名"
+    is that screen's own *title*, rendered via `content-desc` on the
+    toolbar — the exact same pattern already confirmed for the edit form's
+    "アクセスポイントの編集" (see the collapsing_toolbar node in
+    tests/fixtures/apn_entry_*_SHG10.xml). It was never a `text` node to
+    tap, which is the actual reason the old menu_path's final step (which
+    tried tap_by_text() on it) could never succeed — there was nothing
+    there to find, not a resource-id/text mismatch to fix.
+    """
     try:
-        if step_type == "text":
-            return find_by_text(ui_xml, value) is not None
-        if step_type == "resource_id":
-            return find_resource_id(ui_xml, value) is not None
-        if step_type == "content_desc":
-            return find_by_content_desc(ui_xml, value) is not None
+        return find_by_content_desc(ui_xml, _APN_LIST_SCREEN_TITLE) is not None
     except AmbiguousResourceIdError:
-        return True  # present, just ambiguous — good enough as a landing signal
-    return False
+        return True
+    except Exception:
+        return False
 
 
 def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
-    """Reach the APN entry screen via profile.apn_settings()['menu_path'].
+    """Reach the APN entry (list) screen.
 
-    A real client-PC run showed the leading text steps of menu_path (e.g.
-    tapping "設定") fail whenever the device isn't already on a screen where
-    that text is visible — e.g. reached via --skip-wizard testing rather
-    than a fresh wizard walkthrough. SHG10's confirmed path (and plausibly
-    other models following the same "APN lives under Wi-Fi settings"
-    pattern) reaches the same combined Wi-Fi/mobile-network screen that
-    wifi_setup.py's android.settings.WIFI_SETTINGS intent goes to directly,
-    before continuing with APN-specific steps (an icon, then a menu item).
-
-    So: try that same intent, then do a **read-only** check (dump + find,
-    no tap) of whether it landed somewhere the first non-text menu_path
-    step is already reachable. Only then commit to skipping the leading
-    text steps — never tap partway down one path and fall back to another,
-    which could leave the UI in a state neither path recovers from
-    correctly. Falls back to the full menu_path from the start otherwise —
-    exactly Stage A's original behavior, zero regression risk if the
-    intent doesn't help.
+    Real hand-testing on SHG10 (2026-09-08/09) confirmed
+    `adb shell am start -a android.settings.APN_SETTINGS` reaches the APN
+    list screen in a single step, bypassing the multi-tap Settings ->
+    Network & internet -> Wi-Fi and mobile network -> gear icon path
+    entirely. Tried first; falls back to `apn_settings['menu_path']`
+    (Settings -> ... -> the gear icon; note the destination screen's own
+    title is not itself a tap target — see _looks_like_apn_list_screen)
+    only if the intent isn't available or doesn't land correctly.
     """
-    menu_path = apn["menu_path"]
+    try:
+        client.shell("am start -a android.settings.APN_SETTINGS")
+    except AdbCommandError as exc:
+        logger.info("am start APN_SETTINGS intent failed: %s", exc)
+    else:
+        ui_xml = dump_ui(client)
+        if _looks_like_apn_list_screen(ui_xml):
+            logger.info("reached APN list via android.settings.APN_SETTINGS intent")
+            return True
+        logger.info(
+            "APN_SETTINGS intent didn't land on a recognizable APN list "
+            "screen; falling back to menu_path navigation"
+        )
 
-    leading_text_steps = 0
-    for step in menu_path:
-        step_type = "text" if isinstance(step, str) else step.get("type", "text")
-        if step_type != "text":
-            break
-        leading_text_steps += 1
-    remaining_steps = menu_path[leading_text_steps:]
-
-    if remaining_steps and leading_text_steps > 0:
-        try:
-            client.shell("am start -a android.settings.WIFI_SETTINGS")
-        except AdbCommandError as exc:
-            logger.info("am start WIFI_SETTINGS intent failed: %s", exc)
-        else:
-            ui_xml = dump_ui(client)
-            if _step_target_present(ui_xml, remaining_steps[0]):
-                logger.info(
-                    "apn menu: WIFI_SETTINGS intent landed correctly, "
-                    "skipping %d leading text step(s) of menu_path",
-                    leading_text_steps,
-                )
-                return navigate_menu_path(client, remaining_steps)
-            logger.info(
-                "apn menu: WIFI_SETTINGS intent didn't land where the next "
-                "menu_path step is reachable; falling back to the full path"
-            )
-
+    menu_path = apn.get("menu_path")
+    if not menu_path:
+        return False
     return navigate_menu_path(client, menu_path)
 
 
-def _save_apn(client: AdbClientProtocol, apn: dict) -> bool:
+def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
     """Save the APN entry. Two shapes supported:
 
     - Stage B (SHG10, real device, confirmed 2026-09-08): Save lives in the
@@ -218,6 +208,14 @@ def _save_apn(client: AdbClientProtocol, apn: dict) -> bool:
       if present, its real text is logged and this fails loudly rather
       than tapping OK and retrying blindly — a silent failure here would
       leave the device with no APN configured and no error surfaced.
+
+      After a save with no validation dialog, makes one best-effort,
+      *soft* positive check: real hand-testing confirmed a successful save
+      shows the new entry back on the APN list with `apn_name` as its
+      first line. Only logged (info if found, warning if not) — never
+      turns a save the validation check already accepted into a failure,
+      since e.g. list scroll position or display truncation could make
+      this check miss a genuinely successful save.
 
     - Legacy (3 untouched models): a single literal save button.
     """
@@ -249,6 +247,21 @@ def _save_apn(client: AdbClientProtocol, apn: dict) -> bool:
                 message,
             )
             return False
+
+        try:
+            entry_visible = find_by_text(ui_xml, apn_name) is not None
+        except Exception:
+            entry_visible = False
+        if entry_visible:
+            logger.info("apn: new entry %r confirmed visible on the APN list", apn_name)
+        else:
+            logger.warning(
+                "apn: save reported no validation error, but %r wasn't "
+                "spotted back on the APN list (soft check only — not "
+                "treated as a failure; could be scroll position or list "
+                "truncation)",
+                apn_name,
+            )
 
         return True
 
@@ -353,7 +366,7 @@ def configure_apn(
         if mnc_field:
             _fill_legacy_field(client, mnc_field, mnc)
 
-    if not _save_apn(client, apn):
+    if not _save_apn(client, apn, apn_name):
         return False
 
     logger.info("apn %r configured successfully", apn_name)

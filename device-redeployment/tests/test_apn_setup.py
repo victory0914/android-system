@@ -2,10 +2,12 @@
 field shape (still used by the 3 models untouched by Stage B) and the new
 label-based field shape (SHG10 — real field rows share one generic
 resource-id, disambiguated by label text; see docs/record.md), plus the
-android.settings.WIFI_SETTINGS intent shortcut added after a real
-client-PC run showed menu_path's leading text steps (e.g. tapping "設定")
-fail whenever the device isn't already on a screen where that text is
-visible."""
+android.settings.APN_SETTINGS intent navigation added after hand-testing
+(2026-09-08/09) found the old menu_path's final step ("アクセスポイント名")
+could never succeed: that text is the *destination screen's own title*,
+rendered via content-desc on the toolbar (same pattern as the edit form's
+"アクセスポイントの編集"), never a tappable `text` node — there was nothing
+there to find, not a resource-id/text mismatch to work around."""
 
 from src.device.model_profile import ModelProfile
 from src.phase2.apn_setup import configure_apn
@@ -36,6 +38,9 @@ LEGACY_SCREEN_XML = """<hierarchy>
   <node resource-id="apn:save" bounds="[0,400][100,500]" />
 </hierarchy>"""
 
+# menu_path now ends at the gear icon (settings_button) — the real,
+# hand-confirmed fallback path — not at "アクセスポイント名", which was never
+# a valid tap target (see module docstring).
 LABELED_PROFILE = ModelProfile(
     {
         "model": "SHG10-like Test",
@@ -48,7 +53,6 @@ LABELED_PROFILE = ModelProfile(
             "menu_path": [
                 {"type": "text", "value": "設定"},
                 {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
-                {"type": "text", "value": "アクセスポイント名"},
             ],
             "field_row_resource_id": "android:id/title",
             "name_field_label": "名前",
@@ -63,14 +67,15 @@ LABELED_PROFILE = ModelProfile(
     }
 )
 
-# One dump reused for every step: navigation targets, all four field rows
-# (by label), the best-guess dialog edit/confirm ids. Real automation would
-# re-dump between taps, but since none of these targets disappear from this
-# synthetic fixture, one dump satisfies every lookup FakeAdbClient repeats.
+# The APN list screen as reached via the android.settings.APN_SETTINGS
+# intent: content-desc carries the screen's own title (real pattern,
+# confirmed by analogy with the edit form's "アクセスポイントの編集" — see
+# tests/fixtures/apn_entry_*_SHG10.xml), so the intent-landing check
+# succeeds immediately and no menu_path taps happen at all. Also includes
+# every field row + the best-guess dialog ids, reused for every dump call
+# throughout field-filling.
 LABELED_SCREEN_XML = """<hierarchy>
-  <node text="設定" bounds="[0,0][100,100]" />
-  <node resource-id="com.android.settings:id/settings_button" bounds="[0,100][100,200]" />
-  <node text="アクセスポイント名" bounds="[0,200][100,300]" />
+  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
   <node resource-id="android:id/title" text="名前" bounds="[0,300][100,400]" />
   <node resource-id="android:id/title" text="APN" bounds="[0,400][100,500]" />
   <node resource-id="android:id/title" text="MCC" bounds="[0,500][100,600]" />
@@ -126,62 +131,82 @@ def test_configure_apn_fails_loudly_when_menu_navigation_fails():
     assert result is False
 
 
-def test_configure_apn_intent_shortcut_skips_leading_text_steps():
-    """When the WIFI_SETTINGS intent lands somewhere the first non-text
-    menu_path step (the settings_button icon) is already reachable, the
-    leading "設定" text tap must be skipped entirely."""
-    # Only the post-intent screen is provided — settings_button IS present,
-    # "設定" text is NOT. If the code tried to tap "設定" first (i.e. didn't
-    # skip it), navigation would fail outright since it's absent here.
-    screen_without_settings_text = LABELED_SCREEN_XML.replace(
-        '<node text="設定" bounds="[0,0][100,100]" />', ""
-    )
-    client = FakeAdbClient(ui_dumps=[screen_without_settings_text] * 30)
+# --- APN_SETTINGS intent navigation (real hand-testing, 2026-09-08/09) -----
+
+
+def test_configure_apn_reaches_list_via_intent_with_no_menu_path_taps():
+    """When android.settings.APN_SETTINGS lands on a screen whose
+    content-desc confirms "アクセスポイント名" (the real screen-title
+    pattern), no menu_path step should be tapped at all — not even the
+    first one."""
+    client = FakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
 
     result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
 
-    # Reaches the (unresolved) save step, not stuck at navigation.
-    assert result is False
-    assert any(c == "am start -a android.settings.WIFI_SETTINGS" for c in client.shell_calls)
+    assert result is False  # still fails at the (unresolved) save step, not navigation
+    assert any(c == "am start -a android.settings.APN_SETTINGS" for c in client.shell_calls)
     settings_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
     assert settings_tap not in client.shell_calls
 
 
-def test_configure_apn_falls_back_to_full_menu_path_when_intent_command_fails():
+def test_configure_apn_falls_back_to_menu_path_when_intent_command_fails():
     class NoIntentClient(FakeAdbClient):
         def shell(self, command, timeout=30):
-            if command == "am start -a android.settings.WIFI_SETTINGS":
+            if command == "am start -a android.settings.APN_SETTINGS":
                 from src.device.adb_client import AdbCommandError
                 raise AdbCommandError(command, "intent not supported on this build")
             return super().shell(command, timeout=timeout)
 
-    client = NoIntentClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    # This screen has no content-desc title (as if the intent never ran) but
+    # does have the full menu_path's targets: "設定" text, then the gear
+    # icon.
+    menu_path_screen = """<hierarchy>
+  <node text="設定" bounds="[0,0][100,100]" />
+  <node resource-id="com.android.settings:id/settings_button" bounds="[0,100][100,200]" />
+  <node content-desc="アクセスポイント名" bounds="[0,200][1080,300]" />
+  <node resource-id="android:id/title" text="名前" bounds="[0,300][100,400]" />
+  <node resource-id="android:id/title" text="APN" bounds="[0,400][100,500]" />
+  <node resource-id="android:id/title" text="MCC" bounds="[0,500][100,600]" />
+  <node resource-id="android:id/title" text="MNC" bounds="[0,600][100,700]" />
+  <node resource-id="android:id/edit" bounds="[0,700][100,800]" />
+  <node resource-id="android:id/button1" bounds="[0,800][100,900]" />
+</hierarchy>"""
+    client = NoIntentClient(ui_dumps=[menu_path_screen] * 30)
 
     result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
 
     assert result is False  # still fails at the (unresolved) save step, not navigation
     settings_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    gear_tap = "input tap {} {}".format((0 + 100) // 2, (100 + 200) // 2)
     assert settings_tap in client.shell_calls
+    assert gear_tap in client.shell_calls
 
 
-def test_configure_apn_falls_back_to_full_menu_path_when_intent_lands_elsewhere():
+def test_configure_apn_falls_back_to_menu_path_when_intent_lands_elsewhere():
+    """Intent command runs without error, but the resulting screen doesn't
+    carry the APN list's content-desc title — must fall back to menu_path
+    rather than assume the intent worked."""
     home_screen_xml = '<hierarchy><node text="Home" bounds="[0,0][10,10]" /></hierarchy>'
-    client = FakeAdbClient(ui_dumps=[home_screen_xml, LABELED_SCREEN_XML] + [LABELED_SCREEN_XML] * 30)
+    menu_path_screen = """<hierarchy>
+  <node text="設定" bounds="[0,0][100,100]" />
+  <node resource-id="com.android.settings:id/settings_button" bounds="[0,100][100,200]" />
+  <node content-desc="アクセスポイント名" bounds="[0,200][1080,300]" />
+  <node resource-id="android:id/title" text="名前" bounds="[0,300][100,400]" />
+  <node resource-id="android:id/title" text="APN" bounds="[0,400][100,500]" />
+  <node resource-id="android:id/title" text="MCC" bounds="[0,500][100,600]" />
+  <node resource-id="android:id/title" text="MNC" bounds="[0,600][100,700]" />
+  <node resource-id="android:id/edit" bounds="[0,700][100,800]" />
+  <node resource-id="android:id/button1" bounds="[0,800][100,900]" />
+</hierarchy>"""
+    client = FakeAdbClient(ui_dumps=[home_screen_xml] + [menu_path_screen] * 30)
 
     result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
 
     assert result is False  # still fails at the (unresolved) save step, not navigation
     settings_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    gear_tap = "input tap {} {}".format((0 + 100) // 2, (100 + 200) // 2)
     assert settings_tap in client.shell_calls
-
-
-def test_configure_apn_all_text_menu_path_never_attempts_intent():
-    """A menu_path with no non-text steps at all (the legacy shape) has no
-    shared-prefix opportunity to skip — the intent must never even be
-    tried, matching Stage A's original behavior exactly."""
-    client = FakeAdbClient(ui_dumps=[LEGACY_SCREEN_XML] * 10)
-    configure_apn(client, LEGACY_PROFILE, "internet", "310", "260")
-    assert not any(c == "am start -a android.settings.WIFI_SETTINGS" for c in client.shell_calls)
+    assert gear_tap in client.shell_calls
 
 
 def test_configure_apn_labeled_shape_missing_mcc_label_fails_cleanly():
@@ -240,6 +265,45 @@ def test_mcc_mnc_length_patterns():
     assert not _MNC_PATTERN.fullmatch("1")
 
 
+# --- Scroll-to-reveal for below-the-fold fields (real hardware, 2026-09-08:
+# MCC/MNC rows are below the fold in the scrollable form) ------------------
+
+
+class ScrollRevealsMncClient(FakeAdbClient):
+    """The MNC row is stripped out of every dump until at least one scroll
+    (`input swipe`) has happened, then present afterward — models the real
+    finding (2026-09-08): MCC/MNC rows are below the fold in the
+    scrollable form and genuinely absent from the dump until scrolled into
+    view, not just "hard to find" in an already-complete dump."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._scrolled = False
+
+    def shell(self, command, timeout=30):
+        if command.startswith("input swipe"):
+            self._scrolled = True
+        return super().shell(command, timeout=timeout)
+
+    def _next_ui_dump(self):
+        xml = super()._next_ui_dump()
+        if not self._scrolled:
+            xml = xml.replace(
+                '<node resource-id="android:id/title" text="MNC" bounds="[0,600][100,700]" />',
+                "",
+            )
+        return xml
+
+
+def test_fill_labeled_field_scrolls_when_row_not_immediately_present():
+    client = ScrollRevealsMncClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+
+    configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+
+    assert any(c.startswith("input swipe") for c in client.shell_calls)
+    assert 'input text "11"' in [c for c in client.shell_calls if c.startswith("input text ")]
+
+
 # --- Real save flow (SHG10, confirmed 2026-09-08): overflow menu -> "保存",
 # blocked by a validation dialog if any required field was empty/invalid ---
 
@@ -285,7 +349,6 @@ SAVE_FLOW_PROFILE = ModelProfile(
             "menu_path": [
                 {"type": "text", "value": "設定"},
                 {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
-                {"type": "text", "value": "アクセスポイント名"},
             ],
             "field_row_resource_id": "android:id/title",
             "name_field_label": "名前",
@@ -302,22 +365,21 @@ SAVE_FLOW_PROFILE = ModelProfile(
 )
 
 SAVE_FLOW_SCREEN_XML = """<hierarchy>
-  <node text="設定" bounds="[0,0][100,100]" />
-  <node resource-id="com.android.settings:id/settings_button" bounds="[0,100][100,200]" />
-  <node text="アクセスポイント名" bounds="[0,200][100,300]" />
+  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
   <node resource-id="android:id/title" text="名前" bounds="[0,300][100,400]" />
   <node resource-id="android:id/title" text="APN" bounds="[0,400][100,500]" />
   <node resource-id="android:id/title" text="MCC" bounds="[0,500][100,600]" />
   <node resource-id="android:id/title" text="MNC" bounds="[0,600][100,700]" />
   <node resource-id="android:id/edit" bounds="[0,700][100,800]" />
   <node resource-id="android:id/button1" bounds="[0,800][100,900]" />
-  <node content-desc="その他のオプション" bounds="[900,0][1000,100]" />
+  <node content-desc="その他のオプション" bounds="[900,100][1000,200]" />
   <node resource-id="android:id/title" text="保存" bounds="[0,900][100,1000]" />
   <node resource-id="android:id/title" text="キャンセル" bounds="[0,1000][100,1100]" />
 </hierarchy>"""
 
 POST_SAVE_SUCCESS_XML = """<hierarchy>
-  <node text="Access Point Names" bounds="[0,0][100,100]" />
+  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
+  <node resource-id="android:id/title" text="rakuten.jp" bounds="[0,300][100,400]" />
 </hierarchy>"""
 
 POST_SAVE_VALIDATION_XML = """<hierarchy>
@@ -333,7 +395,7 @@ def test_configure_apn_real_save_flow_succeeds_when_no_validation_dialog_appears
     result = configure_apn(client, SAVE_FLOW_PROFILE, "rakuten.jp", "440", "11")
     assert result is True
     assert ApnPostSaveClient.SAVE_TAP in client.shell_calls
-    overflow_tap = "input tap {} {}".format((900 + 1000) // 2, (0 + 100) // 2)
+    overflow_tap = "input tap {} {}".format((900 + 1000) // 2, (100 + 200) // 2)
     assert overflow_tap in client.shell_calls
 
 

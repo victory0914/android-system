@@ -6,25 +6,43 @@ outstanding. See `docs/record.md` for the full session notes (test logs,
 navigation paths, capture methodology, judgment calls) behind every entry
 here — this file is the checklist; that one is the evidence.
 
-**Status as of 2026-09-08 (Stage B, ongoing):** **Wi-Fi connects
+**Status as of 2026-09-09 (Stage B, ongoing):** **Wi-Fi connects
 end-to-end on real hardware** — confirmed by a client screenshot showing
-`earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. This is the first
-Phase 2 step proven working on a real device against a real network, not
-just structurally exercised. SHG10 also has full APN data resolved,
-including the Save flow, but APN itself has not yet completed
-successfully end-to-end — the most recent blocker was a `dump_ui()` crash
-(now fixed, not yet re-verified; see "Highest priority" below).
-SHG10's wizard is on a photograph-derived, text-matching config — real
-dumps for the wizard are **not obtainable on any model, ever** (structural
-ADB/factory-reset constraint, see docs/record.md). **SOG08, SOG07, and
-SHG07 are entirely untouched** — still 100% Stage A placeholders, not
-started.
+`earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. SHG10 also has full
+APN data resolved, including the Save flow, and the root cause of every
+"apn menu navigation failed" error hit so far has been found and fixed
+(see "Highest priority" below) — but a full run has not yet completed
+successfully end-to-end with all current fixes in place; the last
+attempted run predates this latest fix. SHG10's wizard is on a
+photograph-derived, text-matching config — real dumps for the wizard are
+**not obtainable on any model, ever** (structural ADB/factory-reset
+constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
+untouched** — still 100% Stage A placeholders, not started.
 
 ## Highest priority
 
-### Re-verify against real hardware after a safety fix (destructive-tap risk)
+### Re-verify against real hardware after the APN navigation root-cause fix
 
-Not yet re-verified. A real run's retry loop (Wi-Fi succeeds, a later APN
+Not yet re-verified — this is the fix most likely to finally get a full
+run through end-to-end. Every "apn menu navigation failed" error in prior
+real runs traced to one bug: `menu_path`'s final step tried to
+`tap_by_text()` on 「アクセスポイント名」, but hand-testing (2026-09-08/09)
+confirmed that string is the *destination screen's own title* (rendered
+via `content-desc` on the toolbar, same pattern as the edit form's
+「アクセスポイントの編集」) — never a `text` node to tap. There was nothing
+there to find; no id was ever going to fix it. Replaced with
+`adb shell am start -a android.settings.APN_SETTINGS`, hand-confirmed to
+reach the APN list in one step — tried first, with the (now-corrected)
+`menu_path` kept only as a fallback. Also fixed in the same pass: MCC/MNC
+row lookup now scrolls once and retries if the row isn't immediately
+found (real confirmation they're below the fold, not just theoretically
+possible), and `_save_apn()` makes a soft positive check for the new
+entry reappearing on the list post-save (logged only, never a hard
+failure on its own). See docs/record.md for the full account.
+
+### Re-verify against real hardware after the destructive-tap safety fix
+
+Also not yet re-verified. A real run's retry loop (Wi-Fi succeeds, a later
 step fails, the whole flow retries from the top) showed `connect_wifi()`
 re-running its full UI flow even though the device was already connected
 — tapping the SSID's row opened "Network Details" (already-connected
@@ -35,23 +53,19 @@ repeated taps landing on **削除** (Forget) — which would have deleted the
 just-established connection. Fixed: `connect_wifi()` now checks connection
 state first and touches nothing at all if already connected; `削除`/
 `接続を解除` also added to the permanent do-not-tap list as defense in
-depth. See docs/record.md for the full account. **Next real run is what
-confirms this is actually closed** — test the retry path specifically
-(e.g. let APN fail once on purpose, or just run it twice in a row) so this
-scenario is provably exercised, not just no longer reachable.
+depth. **Next real run is what confirms this is actually closed** — test
+the retry path specifically (e.g. let APN fail once on purpose, or just
+run it twice in a row) so this scenario is provably exercised, not just no
+longer reachable.
 
-### Re-verify APN configuration against real hardware after the dump_ui() fix
+### Re-verify against real hardware after the dump_ui() pull-failure fix
 
-Also not yet confirmed working end-to-end (should now be reachable, given
-the fix above no longer aborts wifi's retry into the wrong screen). The
-most recent real run got through Wi-Fi (confirmed connected) and into APN
-menu navigation, then crashed with a raw `FileNotFoundError` from
+Also not yet re-verified. A real run got through Wi-Fi and into APN menu
+navigation, then crashed with a raw `FileNotFoundError` from
 `ui_automator.dump_ui()` never checking whether its `pull()` call actually
 succeeded — fixed with a clear error + automatic retry (uiautomator dump
 is known to intermittently fail right after a screen transition, which is
-exactly what had just happened). Next real run is what confirms or
-refutes this actually gets APN entry (and the save flow) working
-end-to-end.
+exactly what had just happened).
 
 ### Wi-Fi scan results vary run to run at this location
 
@@ -120,12 +134,21 @@ spec assumed. Config and tests now reflect 14.
   worked together against a real network
 
 ### Resolved — APN navigation & fields (`tests/fixtures/apn_entry_{top,middle,bottom,filled}_SHG10.xml`)
-- `apn_settings.menu_path`: same as Wi-Fi's, then the gear icon
+- **Navigation, primary path (real, hand-confirmed 2026-09-08/09):**
+  `adb shell am start -a android.settings.APN_SETTINGS` reaches the APN
+  list screen in one step. `apn_setup.py` tries this first, verifying
+  landing via `アクセスポイント名` as a `content-desc` (that screen's own
+  title — see below), before ever touching `menu_path`.
+- **Navigation, fallback `menu_path`** (only used if the intent fails or
+  doesn't land correctly): same as Wi-Fi's, then the gear icon
   (`com.android.settings:id/settings_button` — real, unambiguous
-  resource-id) → アクセスポイント名. `apn_setup.py` also tries the
-  `WIFI_SETTINGS` intent first, skipping the shared leading text steps when
-  it lands correctly (read-only verified before skipping — see
-  `_navigate_apn_menu()`).
+  resource-id). **Correctly ends at the gear icon** — an earlier version of
+  this file had it continue to `tap_by_text()` on `アクセスポイント名`, which
+  was a confirmed bug: that string is the destination screen's own title
+  (rendered via `content-desc` on the toolbar, not a `text` node), so that
+  step could never find anything to tap. This was the actual root cause of
+  every "apn menu navigation failed" seen in real runs before this fix —
+  not a wrong id, a step that never had a valid target at all.
 - `apn_settings.field_row_resource_id` = `android:id/title` (generic, shared
   by every field on the edit form — 名前/APN/プロキシ/ポート/ユーザー名/
   パスワード/サーバー/MMSC/MMSプロキシ/MMSポート/MCC/MNC/認証タイプ/APNタイプ/
@@ -139,6 +162,16 @@ spec assumed. Config and tests now reflect 14.
   validates format (MCC exactly 3 digits, MNC 2 or 3) and refuses to save
   otherwise — `apn_setup.py` checks the same constraint before ever
   touching the device (`_MCC_PATTERN`/`_MNC_PATTERN`).
+- **MCC/MNC rows confirmed below the fold** (real, 2026-09-08/09) — the
+  field-row lookup now scrolls once and retries if a row isn't immediately
+  found, same pattern as the wizard's `scroll_then_tap_by_text`.
+- **Success state confirmed** (real, 2026-09-08/09): a successful save
+  shows the new entry back on the APN list with its `名前` value as the
+  first line (e.g. "TEST_SAVE_A / test.apn"). `_save_apn()` makes a soft,
+  best-effort positive check for this now (logged only — info if found,
+  warning if not — never turned into a failure on its own, since e.g. list
+  scroll position could make it miss a genuinely successful save the
+  validation-dialog check already accepted).
 
 ### Resolved — Save flow (real, confirmed on-device 2026-09-08 — see
 `tests/fixtures/apn_overflow_menu_SHG10.xml`,
@@ -201,11 +234,13 @@ Legacy-shape models (the 3 untouched by Stage B) still default to
 generalized to models with no data of their own yet.
 
 ### Not resolved (genuinely absent from available data — not guessed)
-- `apn_settings.add_button_resource_id` — the "+ add new APN" icon lives on
-  the APN *list* screen, which was never captured (only the edit *form*, at
-  4 scroll positions now, was). There is nothing to find in current data; a
-  list-screen dump is needed. `apn_setup.py` handles this being `null` by
-  assuming a blank entry is already open rather than guessing a tap target.
+- `apn_settings.add_button_resource_id` — the "+ add new APN" icon's
+  *position* is confirmed by hand (top-right of the APN list screen,
+  icon-only, no text — 2026-09-08/09), but not its resource-id: the APN
+  *list* screen itself was never captured, only the edit *form* (reached
+  after tapping it or an existing entry). `apn_setup.py` handles this being
+  `null` by assuming a blank entry is already open rather than guessing a
+  tap target.
 - `wifi_settings.password_field_resource_id` / `connect_button_resource_id`
   — the "Connect to network" dialog (shown after tapping an unsaved SSID)
   was never captured; only the network list screen was. Unchanged Stage A

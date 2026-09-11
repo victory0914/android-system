@@ -214,6 +214,36 @@ accumulates.
   `config/models/sharp_aquos_sense7.yaml` updated
   (`overflow_menu_content_desc`, `save_menu_item_text`). See
   `PENDING_REAL_DEVICE_DATA.md` for the full before/after.
+- *2026-09-08/09 (root cause of "apn menu navigation failed"):* Hand-tested
+  and confirmed `adb shell am start -a android.settings.APN_SETTINGS`
+  reaches the APN list screen in a single step. This also explains — and
+  fixes — every "apn menu navigation failed" error seen in prior real
+  runs: `menu_path`'s final step tried `tap_by_text()` on
+  「アクセスポイント名」, but that string is the *destination screen's own
+  title*, rendered via `content-desc` on the toolbar (the exact same
+  pattern already confirmed for the edit form's 「アクセスポイントの編集」)
+  — never a `text` node at all. There was nothing there to tap; the bug
+  wasn't a wrong id, it was a step that could never have succeeded.
+  `menu_path` (kept as a fallback if the intent ever fails) now correctly
+  ends at the gear icon instead.
+- *2026-09-08/09:* **[+] add-new-APN button confirmed icon-only, top-right
+  of the APN list**, matching the earlier finding — position confirmed by
+  hand, but its resource-id still isn't (no dump of the APN *list* screen
+  itself exists, only the edit *form* reached after tapping it/an existing
+  entry). Still `null`/TODO in config.
+- *2026-09-08/09:* **MCC/MNC rows confirmed below the fold** — scrolling is
+  required to reach them, not just theoretically possible. `apn_setup.py`'s
+  field-row lookup now tries once, scrolls once, and retries if the row
+  isn't found — same `scroll_then_tap_by_text` pattern already used for the
+  wizard's scrollable terms screen.
+- *2026-09-08/09:* **Success state confirmed**: after a save with no
+  validation dialog, the new entry reappears on the APN list with its
+  `名前` value as the first line (e.g. "TEST_SAVE_A / test.apn" — name then
+  APN string). `_save_apn()` now makes a soft, best-effort positive check
+  for this (`find_by_text(ui_xml, apn_name)`) — logged only (info if found,
+  warning if not), never turned into a failure on its own, since e.g. list
+  scroll position could make this check miss a genuinely successful save
+  the validation-dialog check already accepted.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
