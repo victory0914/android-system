@@ -14,33 +14,46 @@ APN data resolved, including the Save flow, and the root cause of every
 (see "Highest priority" below) — but a full run has not yet completed
 successfully end-to-end with all current fixes in place; the last
 attempted run predates this latest fix. A 2026-09-11 real run surfaced one
-more navigation gap (the intent-reached screen's plain-text "APN" title
-wasn't recognized — only the SHARP-skinned content-desc title was) plus
-the still-unresolved "+" add-button id, both now addressed (see "Highest
-priority" below); not yet re-verified. SHG10's wizard is on a
-photograph-derived, text-matching config — real dumps for the wizard are
-**not obtainable on any model, ever** (structural ADB/factory-reset
-constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
-untouched** — still 100% Stage A placeholders, not started.
+more navigation gap (the intent-reached screen's "APN" title wasn't
+recognized) plus the "+" add-button id — **both now fully resolved from a
+real dump** (`tests/fixtures/apn_restricted_SHG10.xml`, not just an
+estimate — see "Highest priority" below); not yet re-verified end-to-end.
+SHG10's wizard is on a photograph-derived, text-matching config — real
+dumps for the wizard are **not obtainable on any model, ever** (structural
+ADB/factory-reset constraint, see docs/record.md). **SOG08, SOG07, and
+SHG07 are entirely untouched** — still 100% Stage A placeholders, not
+started.
 
 ## Highest priority
 
-### Re-verify against real hardware after the APN screen-recognition fix + add-button position-estimate (2026-09-11)
+### Re-verify against real hardware after the APN screen-recognition + add-button fixes (2026-09-11)
 
-Not yet re-verified. A real run's log showed `android.settings.APN_SETTINGS`
-repeatedly reporting "didn't land on a recognizable APN list screen" even
-though it *was* landing correctly — `_looks_like_apn_list_screen()` only
-recognized the SHARP-skinned title (`content-desc` "アクセスポイント名"),
-not the plain `text` "APN" heading this device's intent-reached screen
-actually shows. Now accepts either title variant. The same screenshot also
-showed a "+" add-button whose id is still uncaptured (see "Not resolved"
-below) — `configure_apn()` now falls back to `tap_left_of_content_desc()`,
-which taps an ESTIMATED position immediately left of the confirmed "⋮"
-overflow icon rather than skipping the tap outright. **Both changes are
-unverified against real hardware** — the estimated "+" position in
-particular could be wrong; if so it will fail loudly a few steps later
-(field rows not found) rather than silently mistapping. Watch closely on
-the next run. See docs/record.md's 2026-09-11 entries for the full account.
+Not yet re-verified end-to-end. Two related fixes, both now backed by a
+real dump (`tests/fixtures/apn_restricted_SHG10.xml`) rather than a
+screenshot-only guess:
+
+1. **Screen recognition.** A real run's log showed
+   `android.settings.APN_SETTINGS` repeatedly reporting "didn't land on a
+   recognizable APN list screen" even though it *was* landing correctly —
+   `_looks_like_apn_list_screen()` only recognized the SHARP-skinned title
+   (`content-desc` "アクセスポイント名"), not this device's actual
+   intent-landing screen, whose title is `content-desc` "APN" on
+   `com.android.settings:id/collapsing_toolbar" (confirmed by the dump —
+   an earlier attempt at this fix guessed it was a plain `text` node
+   instead, based on a screenshot; that would never have matched). Now
+   accepts either content-desc title variant.
+2. **Add-button.** The same dump also captured the "+" button itself: it
+   has a real, unambiguous content-desc, `"新しい APN"` ("New APN"),
+   sitting immediately left of the confirmed "⋮" overflow icon.
+   `configure_apn()` now taps it directly via this content-desc — this
+   *replaces* the position-estimate fallback (`tap_left_of_content_desc()`)
+   for SHG10 specifically; that fallback remains in the code for any
+   model/screen where no real identifier is captured yet.
+
+**Neither has been confirmed against a live run yet** — the dump proves
+what's *on screen*, not that tapping it produces the expected next screen.
+Watch closely on the next run. See docs/record.md's 2026-09-11 entries for
+the full account.
 
 ### Re-verify against real hardware after the APN navigation root-cause fix
 
@@ -154,18 +167,21 @@ spec assumed. Config and tests now reflect 14.
   check → password entry → connect tap → `dumpsys wifi` poll confirms) all
   worked together against a real network
 
-### Resolved — APN navigation & fields (`tests/fixtures/apn_entry_{top,middle,bottom,filled}_SHG10.xml`)
-- **Navigation, primary path (real, hand-confirmed 2026-09-08/09):**
-  `adb shell am start -a android.settings.APN_SETTINGS` reaches the APN
-  list screen in one step. `apn_setup.py` tries this first, verifying
-  landing via `_looks_like_apn_list_screen()`, which accepts **either**
-  real title variant confirmed so far: `アクセスポイント名` as a
-  `content-desc` (the SHARP-skinned screen reached via manual `menu_path`
-  navigation) or a plain `text` heading "APN" (the stock/AOSP-style screen
-  this device's `APN_SETTINGS` intent actually lands on — 2026-09-11
-  screenshot; only the first variant was recognized before this, causing
-  false "didn't land correctly" fallbacks). Not yet re-verified against
-  real hardware — see "Highest priority" above.
+### Resolved — APN navigation & fields (`tests/fixtures/apn_entry_{top,middle,bottom,filled}_SHG10.xml`, `apn_restricted_SHG10.xml`)
+- **Navigation, primary path (real, hand-confirmed 2026-09-08/09, screen
+  title confirmed by dump 2026-09-11):** `adb shell am start -a
+  android.settings.APN_SETTINGS` reaches the APN list screen in one step.
+  `apn_setup.py` tries this first, verifying landing via
+  `_looks_like_apn_list_screen()`, which accepts **either** real title
+  variant, both rendered via `content-desc` on the toolbar (never a plain
+  `text` node — same pattern as the edit form's title): `アクセスポイント名`
+  (the SHARP-skinned screen reached via manual `menu_path` navigation) or
+  `APN` (the stock/AOSP-style screen this device's `APN_SETTINGS` intent
+  actually lands on — confirmed by `apn_restricted_SHG10.xml`,
+  resource-id `com.android.settings:id/collapsing_toolbar`; only the first
+  variant was recognized before this, causing false "didn't land
+  correctly" fallbacks). Not yet re-verified end-to-end against real
+  hardware — see "Highest priority" above.
 - **Navigation, fallback `menu_path`** (only used if the intent fails or
   doesn't land correctly): same as Wi-Fi's, then the gear icon
   (`com.android.settings:id/settings_button` — real, unambiguous
@@ -199,6 +215,21 @@ spec assumed. Config and tests now reflect 14.
   warning if not — never turned into a failure on its own, since e.g. list
   scroll position could make it miss a genuinely successful save the
   validation-dialog check already accepted).
+- **`apn_settings.add_button_content_desc` = `新しい APN`** ("New APN") —
+  the "+ add new APN" icon, resolved from a real dump
+  (`apn_restricted_SHG10.xml`, 2026-09-11) of the APN *list* screen itself
+  (the missing piece before this — only the edit *form* had ever been
+  captured). Has no resource-id at all on this build (confirmed by the same
+  dump, not just absent data — `add_button_resource_id` stays `null`
+  permanently). Sits immediately left of the confirmed "⋮" overflow icon,
+  same height, sharing the exact x=969 edge — this also retroactively
+  confirms the 2026-09-08/09 position-estimate fallback
+  (`tap_left_of_content_desc()`) would have landed within ~11px of the
+  real center, though it's no longer needed for this model now that the
+  real value is known. `configure_apn()` prefers this content-desc over
+  both `add_button_resource_id` and the position-estimate fallback. **Not
+  yet confirmed against a live run** (the dump proves what's on screen, not
+  that tapping it produces the expected next screen).
 
 ### Resolved — Save flow (real, confirmed on-device 2026-09-08 — see
 `tests/fixtures/apn_overflow_menu_SHG10.xml`,
@@ -261,22 +292,6 @@ Legacy-shape models (the 3 untouched by Stage B) still default to
 generalized to models with no data of their own yet.
 
 ### Not resolved (genuinely absent from available data — not guessed)
-- `apn_settings.add_button_resource_id` — the "+ add new APN" icon's
-  *position* is confirmed by hand (top-right of the APN list screen,
-  icon-only, no text — 2026-09-08/09, re-confirmed by a real screenshot
-  2026-09-11), but not its resource-id/content-desc: the APN *list* screen
-  itself has still never been dumped, only photographed. **Workaround
-  added 2026-09-11** (not a resolution of the actual value):
-  `configure_apn()` now falls back to `tap_left_of_content_desc()`, which
-  taps an ESTIMATED position immediately left of the confirmed "⋮" overflow
-  icon (`overflow_menu_content_desc`), on the assumption a same-width icon
-  occupies that adjacent space with no gap — consistent with the
-  screenshot's layout. This is explicitly an estimate: if it's wrong, the
-  next step (field rows not found) fails loudly rather than silently
-  mistapping, but it has **not yet been confirmed correct against real
-  hardware**. A real dump of the list screen (or a report of what actually
-  happened after this tap) would let this become a real resolved id instead
-  of a positional guess.
 - `wifi_settings.password_field_resource_id` / `connect_button_resource_id`
   — the "Connect to network" dialog (shown after tapping an unsaved SSID)
   was never captured; only the network list screen was. Unchanged Stage A
@@ -400,7 +415,15 @@ by what real captures actually showed rather than by further guessing:
   `get_node_text` (reading dialog/message content, not just detecting
   presence), `scroll_down` + `wait_for_text_to_disappear` (wizard
   spinner/scroll screens), `input_text_direct` (numeric field entry
-  bypassing the IME), and a `HazardousScreenError` guard (see below).
+  bypassing the IME), `tap_left_of_content_desc` (2026-09-11: estimates a
+  same-width adjacent icon's position from a confirmed neighbor's real
+  bounds — generic fallback for any icon-only control with no identifier
+  of its own captured yet), and a `HazardousScreenError` guard (see below).
+- `apn_settings.add_button_content_desc` (2026-09-11) — the "+ add new
+  APN" icon's own content-desc, once real data showed it has one (unlike
+  `add_button_resource_id`, which this icon genuinely lacks on this
+  build). Takes priority over both `add_button_resource_id` and the
+  `tap_left_of_content_desc()` fallback when set.
 
 ## Safety guard added (Stage B Task 4)
 

@@ -149,15 +149,20 @@ def test_configure_apn_reaches_list_via_intent_with_no_menu_path_taps():
     assert settings_tap not in client.shell_calls
 
 
-def test_configure_apn_recognizes_plain_text_apn_title_variant():
-    """Real client screenshot (2026-09-11): the screen reached via the
-    android.settings.APN_SETTINGS intent on this device shows a plain
-    heading `text` "APN", not the content-desc "アクセスポイント名" title
-    used by the SHARP-skinned screen reached via manual navigation. Both
-    must be recognized as "arrived" — no menu_path taps for either."""
-    text_title_screen = """<hierarchy>
-  <node text="APN" bounds="[0,0][1080,100]" />
-  <node text="このユーザーはアクセスポイント名設定を利用できません" bounds="[0,100][1080,200]" />
+def test_configure_apn_recognizes_content_desc_apn_title_variant():
+    """Real dump (tests/fixtures/apn_restricted_SHG10.xml, 2026-09-11): the
+    screen reached via the android.settings.APN_SETTINGS intent on this
+    device shows its "APN" title via `content-desc` on the toolbar
+    (`com.android.settings:id/collapsing_toolbar`), not the content-desc
+    "アクセスポイント名" title used by the SHARP-skinned screen reached via
+    manual navigation, and — critically — never as a plain `text` node
+    (an earlier version of this test used `text="APN"`, based on a
+    screenshot read before this real dump existed; that fixture wouldn't
+    match anything on the actual device). Both content-desc variants must
+    be recognized as "arrived" — no menu_path taps for either."""
+    content_desc_title_screen = """<hierarchy>
+  <node resource-id="com.android.settings:id/collapsing_toolbar" content-desc="APN" bounds="[0,0][1080,100]" />
+  <node resource-id="android:id/empty" text="このユーザーはアクセスポイント名設定を利用できません" bounds="[0,100][1080,200]" />
   <node resource-id="android:id/title" text="名前" bounds="[0,300][100,400]" />
   <node resource-id="android:id/title" text="APN" bounds="[0,400][100,500]" />
   <node resource-id="android:id/title" text="MCC" bounds="[0,500][100,600]" />
@@ -165,13 +170,19 @@ def test_configure_apn_recognizes_plain_text_apn_title_variant():
   <node resource-id="android:id/edit" bounds="[0,700][100,800]" />
   <node resource-id="android:id/button1" bounds="[0,800][100,900]" />
 </hierarchy>"""
-    client = FakeAdbClient(ui_dumps=[text_title_screen] * 30)
+    client = FakeAdbClient(ui_dumps=[content_desc_title_screen] * 30)
 
     result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
 
     assert result is False  # still fails at the (unresolved) save step, not navigation
-    settings_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
-    assert settings_tap not in client.shell_calls
+    assert any(c == "am start -a android.settings.APN_SETTINGS" for c in client.shell_calls)
+    # Positive proof navigation was recognized (not just coincidentally
+    # unreachable another way): field-filling proceeded far enough to tap
+    # the 名前 row, which only happens once _navigate_apn_menu() returns
+    # True — menu_path's steps (which this fixture has nothing matching)
+    # were never needed.
+    name_field_tap = "input tap {} {}".format((0 + 100) // 2, (300 + 400) // 2)
+    assert name_field_tap in client.shell_calls
 
 
 def test_configure_apn_falls_back_to_menu_path_when_intent_command_fails():
@@ -445,6 +456,51 @@ def test_configure_apn_taps_estimated_add_button_position_when_unresolved():
         "input tap {} {}".format((0 + 100) // 2, (300 + 400) // 2)
     )
     assert client.shell_calls.index(add_button_tap) < name_field_tap_index
+
+
+# add_button_content_desc: the "+" button's own content-desc, now resolved
+# on real hardware (tests/fixtures/apn_restricted_SHG10.xml, 2026-09-11:
+# "新しい APN"). Takes priority over both add_button_resource_id (still
+# unresolved) and the tap_left_of_content_desc() position estimate.
+ADD_BUTTON_CONTENT_DESC_PROFILE = ModelProfile(
+    {
+        "model": "SHG10-like Add-Button Test",
+        "model_number": "TST04",
+        "manufacturer": "Test",
+        "android_version": 14,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+        "apn_settings": {
+            **SAVE_FLOW_PROFILE.apn_settings(),
+            "add_button_content_desc": "新しい APN",
+        },
+    }
+)
+
+ADD_BUTTON_CONTENT_DESC_SCREEN_XML = SAVE_FLOW_SCREEN_XML.replace(
+    '<node content-desc="その他のオプション" bounds="[900,100][1000,200]" />',
+    '<node content-desc="新しい APN" bounds="[750,100][900,200]" />\n'
+    '  <node content-desc="その他のオプション" bounds="[900,100][1000,200]" />',
+)
+
+
+def test_configure_apn_taps_real_add_button_content_desc_when_resolved():
+    """Once add_button_content_desc is set, configure_apn() must tap it
+    directly (tap_by_content_desc) instead of falling back to the
+    positional estimate — the estimate exists only for models/screens
+    where no real identifier for "+" has been captured at all."""
+    client = ApnPostSaveClient(
+        ui_dumps=[ADD_BUTTON_CONTENT_DESC_SCREEN_XML] * 30, post_save_xml=POST_SAVE_SUCCESS_XML
+    )
+    result = configure_apn(client, ADD_BUTTON_CONTENT_DESC_PROFILE, "rakuten.jp", "440", "11")
+    assert result is True
+    add_button_tap = "input tap {} {}".format((750 + 900) // 2, (100 + 200) // 2)
+    assert add_button_tap in client.shell_calls
+    # Must NOT fall back to the estimate (which would tap left of the
+    # overflow icon at [900,100][1000,200] -> (850, 150) — a different,
+    # wrong-for-this-case coordinate now that the real value is known).
+    estimate_tap = "input tap 850 150"
+    assert estimate_tap not in client.shell_calls
 
 
 def test_configure_apn_real_save_flow_fails_loudly_on_validation_dialog():

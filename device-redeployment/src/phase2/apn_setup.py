@@ -141,29 +141,31 @@ def _fill_labeled_field(
 
 
 _APN_LIST_SCREEN_TITLE_CONTENT_DESC = "アクセスポイント名"
-_APN_LIST_SCREEN_TITLE_TEXT = "APN"
+_APN_LIST_SCREEN_TITLE_CONTENT_DESC_ALT = "APN"
 
 
 def _looks_like_apn_list_screen(ui_xml: str) -> bool:
-    """Best-effort check for the APN list screen. Two variants confirmed
-    real, both accepted here:
+    """Best-effort check for the APN list screen. Two title variants
+    confirmed real, both accepted here — and BOTH render via `content-desc`
+    on the toolbar, never as a `text` node (same pattern already confirmed
+    for the edit form's "アクセスポイントの編集"):
 
     - SHARP's own screen (reached via the fallback menu_path — manual
-      navigation): titled via `content-desc` "アクセスポイント名" on the
-      toolbar — the same pattern already confirmed for the edit form's
-      "アクセスポイントの編集" (see tests/fixtures/apn_entry_*_SHG10.xml).
-      Never a `text` node to tap, which is the actual reason the old
-      menu_path's final step (tap_by_text() on it) could never succeed —
-      there was nothing there to find, not a resource-id/text mismatch.
+      navigation): `content-desc` "アクセスポイント名" (see
+      tests/fixtures/apn_entry_*_SHG10.xml).
 
     - The stock/AOSP screen reached via `android.settings.APN_SETTINGS`
-      (the primary path): a plain heading `text` "APN" instead — real
-      client screenshot, 2026-09-11. This screen also showed a warning,
-      「このユーザーはアクセスポイント名設定を利用できません」("this user
-      cannot use APN name settings") — initially read as a hard access
-      restriction, but the client confirmed the "+" button on this exact
-      screen still works with a normal tap; that message doesn't block
-      basic add/edit. See docs/record.md.
+      (the primary path): `content-desc` "APN" instead — confirmed by a
+      real dump, tests/fixtures/apn_restricted_SHG10.xml (2026-09-11,
+      resource-id com.android.settings:id/collapsing_toolbar). An earlier
+      version of this check looked for "APN" as plain `text`, based on a
+      misreading of a screenshot before this dump existed — that never
+      would have matched this real screen at all. This screen also shows a
+      warning, 「このユーザーはアクセスポイント名設定を利用できません」
+      ("this user cannot use APN name settings") — initially read as a
+      hard access restriction, but the client confirmed the "+" button on
+      this exact screen still works with a normal tap; that message
+      doesn't block basic add/edit. See docs/record.md.
     """
     try:
         if find_by_content_desc(ui_xml, _APN_LIST_SCREEN_TITLE_CONTENT_DESC) is not None:
@@ -174,7 +176,7 @@ def _looks_like_apn_list_screen(ui_xml: str) -> bool:
         pass
 
     try:
-        return find_by_text(ui_xml, _APN_LIST_SCREEN_TITLE_TEXT) is not None
+        return find_by_content_desc(ui_xml, _APN_LIST_SCREEN_TITLE_CONTENT_DESC_ALT) is not None
     except AmbiguousResourceIdError:
         return True
     except Exception:
@@ -331,6 +333,7 @@ def configure_apn(
         return False
 
     add_button = apn.get("add_button_resource_id")
+    add_button_content_desc = apn.get("add_button_content_desc")
     if add_button:
         if not tap_resource_id(client, add_button):
             logger.warning(
@@ -338,16 +341,29 @@ def configure_apn(
                 "already open (e.g. this screen has no existing APNs yet)",
                 add_button,
             )
+    elif add_button_content_desc:
+        # Real dump (tests/fixtures/apn_restricted_SHG10.xml, 2026-09-11)
+        # confirmed the "+" button is a genuine, unambiguous
+        # content-desc "新しい APN" ("New APN") — no estimate needed once
+        # this is set; prefer it over the position-estimate fallback below.
+        if not tap_by_content_desc(client, add_button_content_desc):
+            logger.warning(
+                "apn add-new button (content-desc %r) not found; assuming "
+                "a blank entry is already open (e.g. this screen has no "
+                "existing APNs yet)",
+                add_button_content_desc,
+            )
     elif apn.get("overflow_menu_content_desc"):
-        # No resource-id/content-desc of its own has ever been captured for
-        # "+" (no dump of the APN list screen exists) — real screenshot
-        # (2026-09-11) confirmed it sits immediately left of the "⋮"
-        # overflow menu, whose content-desc IS confirmed, so this taps an
-        # ESTIMATED position derived from that icon's own real bounds
-        # rather than doing nothing. See tap_left_of_content_desc()'s
-        # docstring — it can only confirm the overflow icon was found, not
-        # that the tap actually landed on "+"; a wrong estimate here fails
-        # loudly a few lines later when the expected field rows aren't found.
+        # Fallback for models/screens where "+" has no identifier of its
+        # own captured yet (not SHG10 anymore — see add_button_content_desc
+        # above). Real screenshot (2026-09-11) confirmed it sits
+        # immediately left of the "⋮" overflow menu, whose content-desc IS
+        # confirmed, so this taps an ESTIMATED position derived from that
+        # icon's own real bounds rather than doing nothing. See
+        # tap_left_of_content_desc()'s docstring — it can only confirm the
+        # overflow icon was found, not that the tap actually landed on
+        # "+"; a wrong estimate here fails loudly a few lines later when
+        # the expected field rows aren't found.
         if not tap_left_of_content_desc(client, apn["overflow_menu_content_desc"]):
             logger.warning(
                 "apn add-new button: could not even find the overflow menu "

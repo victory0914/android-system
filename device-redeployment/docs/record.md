@@ -251,10 +251,13 @@ accumulates.
   intent *was* landing correctly. Root cause: the landing-check only
   accepted the SHARP-skinned title rendered via `content-desc`
   ("アクセスポイント名", the pattern confirmed 09-08/09 above) — but on
-  this device the screen reached via the *intent* instead shows a plain
-  heading `text` "APN" (stock/AOSP-style title), which the check didn't
-  recognize at all. `_looks_like_apn_list_screen()` now accepts either
-  title variant. The same screenshot also showed a warning banner,
+  this device the screen reached via the *intent* instead shows a different
+  title, "APN", which the check didn't recognize at all.
+  `_looks_like_apn_list_screen()` now accepts either title variant (at
+  first fixed based on the client's screenshot alone, which read as a
+  plain `text` heading — a real dump captured shortly after, see below,
+  corrected this to `content-desc` too, same pattern as everywhere else on
+  this screen). The same screenshot also showed a warning banner,
   「このユーザーはアクセスポイント名設定を利用できません」("this user
   cannot use APN name settings") — client confirmed by hand that this does
   **not** block the "+" button from working with a normal tap; it's just
@@ -283,6 +286,38 @@ accumulates.
   rows won't be found), never silently misfires into a different action.
   Needs real-hardware confirmation before `add_button_resource_id` can be
   marked resolved in `PENDING_REAL_DEVICE_DATA.md`.
+- *2026-09-11 (same day, client attached a real dump — supersedes both
+  entries above):* Client attached `tests/fixtures/apn_restricted_SHG10.xml`
+  — the first-ever real `uiautomator dump` of the APN *list* screen itself
+  (every prior APN capture was the edit *form*, reached after tapping an
+  entry). This settles both open questions from earlier today with real
+  evidence instead of a screenshot-derived guess or a positional estimate:
+  - The screen's "APN" title renders via `content-desc` on
+    `com.android.settings:id/collapsing_toolbar` — **not** a plain `text`
+    node as the earlier fix (based on the screenshot alone) assumed.
+    `_looks_like_apn_list_screen()` corrected to check `content-desc`
+    "APN" instead of `text` "APN" — the previous version would never have
+    matched this actual screen.
+  - The "+" button **does** have its own identifier after all: `content-desc`
+    "新しい APN" ("New APN") — genuinely unambiguous, no resource-id (that
+    part of the earlier guess was right: confirmed by the same dump, a
+    plain `android.widget.Button` with `resource-id=""`). Its bounds,
+    `[837,83][969,215]`, sit exactly adjacent to the "⋮" overflow icon's
+    `[969,83][1080,215]` (sharing the x=969 edge) — this also retroactively
+    confirms the position-estimate fallback added earlier today would have
+    landed within ~11px of the real center (914 vs. the real 903), close
+    enough it likely would have worked, but there's no need to rely on an
+    estimate now. `configure_apn()` now taps `"新しい APN"` directly via
+    `tap_by_content_desc()`, ahead of both `add_button_resource_id` and the
+    `tap_left_of_content_desc()` fallback (which stays in the code for any
+    model/screen without a captured identifier).
+  - The dump also shows this screen has **no existing APN entries** at all
+    under this restricted/SIM state — just the warning message — consistent
+    with a genuinely blank "add new" flow, not a list to scroll through
+    first.
+  Still not confirmed by a live run: the dump proves what's on screen, not
+  that tapping "新しい APN" actually opens the expected blank entry form.
+  See `tests/test_real_shg10_fixtures.py` for the new fixture-backed tests.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
@@ -354,16 +389,18 @@ accumulates.
 
 ## Dump capture status (all models)
 
-| Model | Wi-Fi list | APN entry | APN save flow | Wizard (OOBE) |
-|---|---|---|---|---|
-| SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
-| Xperia Ace III (SOG08) | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
-| Xperia 10 IV (SOG07) | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
-| AQUOS sense6s (SHG07) | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
+| Model | Wi-Fi list | APN list | APN entry | APN save flow | Wizard (OOBE) |
+|---|---|---|---|---|---|
+| SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_restricted_SHG10.xml` (6,104 B) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
+| Xperia Ace III (SOG08) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
+| Xperia 10 IV (SOG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
+| AQUOS sense6s (SHG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
 
 Original 4 SHG10 files captured 2026-09-04. 4 more (save flow + a filled
 entry form) captured 2026-09-08, same session as the Save flow findings
-above.
+above. `apn_restricted_SHG10.xml` (the APN *list* screen itself — the
+piece missing from every earlier capture, which only ever reached the edit
+*form*) added 2026-09-11 — see the dated entry above for what it resolved.
 
 Capture pattern used:
 ```

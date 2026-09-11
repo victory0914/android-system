@@ -201,25 +201,22 @@ apn_settings:
   # TODO(real-device, best-guess-standard-id)
   dialog_confirm_button_resource_id: "android:id/button1"
 
-  # NOT resolved — genuinely absent from available data, not an oversight.
-  # Hand-testing (2026-09-08/09, re-confirmed by a real screenshot
-  # 2026-09-11) confirmed its position (icon-only, top right of the APN
-  # list screen, no visible text label — must be matched by resource-id,
-  # find_by_text() will not work for it) but not its actual resource-id/
-  # content-desc value, since no dump of the APN *list* screen itself
-  # exists — only the edit *form* (reached after tapping it) was ever
-  # captured.
-  #
-  # apn_setup.py handles this being null with a fallback, not by skipping
-  # the tap: tap_left_of_content_desc() taps an ESTIMATED position
-  # immediately left of overflow_menu_content_desc's confirmed "⋮" icon
-  # below, on the assumption a same-width icon occupies that adjacent
-  # space with no gap (matches the 2026-09-11 screenshot's layout). This
-  # is still an estimate, not a resolved id — unverified against real
-  # hardware; a wrong estimate fails loudly a few steps later (expected
-  # field rows not found) rather than silently mistapping. See
-  # PENDING_REAL_DEVICE_DATA.md's "Not resolved" section.
+  # Has no resource-id at all on this build (icon-only button, standard
+  # AOSP-style Button/ImageButton with no android:id set) — confirmed by a
+  # real dump, not just absence of evidence: tests/fixtures/
+  # apn_restricted_SHG10.xml (2026-09-11) shows it as a plain
+  # android.widget.Button with resource-id="". Left null permanently, not
+  # a gap to fill in later.
   add_button_resource_id: null
+  # RESOLVED (real, confirmed by the same dump, 2026-09-11). The "+" button
+  # DOES have a stable, unambiguous content-desc: "新しい APN" ("New APN"),
+  # sitting immediately left of the "⋮" overflow menu
+  # (content-desc "その他のオプション", bounds [969,83][1080,215] vs. this
+  # button's own [837,83][969,215] — confirming the earlier position-
+  # estimate fallback below would have landed close, but this exact value
+  # is now used instead of an estimate). apn_setup.py prefers this over
+  # add_button_resource_id/the position-estimate fallback whenever set.
+  add_button_content_desc: "新しい APN"
 
   # RESOLVED (real, confirmed on-device 2026-09-08 — see docs/record.md).
   # Save is NOT a button on the form itself — it's two taps: open the
