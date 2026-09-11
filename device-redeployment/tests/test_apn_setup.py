@@ -131,6 +131,57 @@ def test_configure_apn_fails_loudly_when_menu_navigation_fails():
     assert result is False
 
 
+# --- Per-field dialog confirm-button hardening (2026-09-11): a real run
+# reported values typed correctly up through MNC but the entry never
+# actually saved — root cause was the OLD behavior here (soft-warn and
+# continue when the best-guess dialog_confirm_button_resource_id isn't
+# found), which leaves the dialog stuck open and lets every later tap
+# (next field, overflow menu, save) land on/be swallowed by it instead of
+# its real target. Both taps are hard failures now. -------------------------
+
+NO_CONFIRM_BUTTON_SCREEN_XML = """<hierarchy>
+  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
+  <node resource-id="android:id/title" text="名前" bounds="[0,300][100,400]" />
+  <node resource-id="android:id/title" text="APN" bounds="[0,400][100,500]" />
+  <node resource-id="android:id/title" text="MCC" bounds="[0,500][100,600]" />
+  <node resource-id="android:id/title" text="MNC" bounds="[0,600][100,700]" />
+  <node resource-id="android:id/edit" bounds="[0,700][100,800]" />
+</hierarchy>"""
+
+NO_EDIT_FIELD_SCREEN_XML = """<hierarchy>
+  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
+  <node resource-id="android:id/title" text="名前" bounds="[0,300][100,400]" />
+  <node resource-id="android:id/title" text="APN" bounds="[0,400][100,500]" />
+  <node resource-id="android:id/title" text="MCC" bounds="[0,500][100,600]" />
+  <node resource-id="android:id/title" text="MNC" bounds="[0,600][100,700]" />
+  <node resource-id="android:id/button1" bounds="[0,800][100,900]" />
+</hierarchy>"""
+
+
+def test_configure_apn_fails_loudly_when_dialog_confirm_button_not_found():
+    """If the best-guess dialog_confirm_button_resource_id ("android:id/
+    button1") isn't found after typing, this must be a HARD failure, not a
+    warning-and-continue — the typed value was never actually committed,
+    and continuing would mean every later tap targets the wrong (still
+    covered by a stuck dialog) screen."""
+    client = FakeAdbClient(ui_dumps=[NO_CONFIRM_BUTTON_SCREEN_XML] * 30)
+    result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+    assert result is False
+    # Must fail on the very first field (名前) — never even reach APN/MCC/MNC.
+    typed = [c for c in client.shell_calls if c.startswith("input text ")]
+    assert typed == ['input text "rakuten.jp"']
+
+
+def test_configure_apn_fails_loudly_when_dialog_edit_field_not_found():
+    """Same hardening for the edit-field tap: refuse to type blindly into
+    whatever currently has focus if the best-guess id isn't found."""
+    client = FakeAdbClient(ui_dumps=[NO_EDIT_FIELD_SCREEN_XML] * 30)
+    result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+    assert result is False
+    # Must fail before ever typing anything.
+    assert not any(c.startswith("input text ") for c in client.shell_calls)
+
+
 # --- APN_SETTINGS intent navigation (real hand-testing, 2026-09-08/09) -----
 
 

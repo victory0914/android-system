@@ -318,6 +318,39 @@ accumulates.
   Still not confirmed by a live run: the dump proves what's on screen, not
   that tapping "新しい APN" actually opens the expected blank entry form.
   See `tests/test_real_shg10_fixtures.py` for the new fixture-backed tests.
+- *2026-09-11 (live client run — confirms the above, surfaces the next
+  bug):* Client ran the fully-updated automation. **Navigation, the "+"
+  tap, and field entry through MNC all worked** — the first real
+  confirmation of any of today's fixes. But the entry never actually
+  saved. Client's description ("input works up to MNC, then it's not
+  saved") plus two more real dumps
+  (`apn_accesshost_SHG10.xml`/`apn_accesshost_save_SHG10.xml`, captured
+  around the ⋮/保存 steps) pointed at the save step — but both dumps
+  turned out **byte-identical** to fixtures already captured and already
+  correctly handled (`apn_entry_top_SHG10.xml`,
+  `apn_overflow_menu_SHG10.xml`), so they don't show a bug in the ⋮/保存
+  taps themselves. The actual root cause was upstream: `_fill_labeled_field()`
+  (`src/phase2/apn_setup.py`), when the (best-guess, never-directly-captured)
+  `dialog_confirm_button_resource_id` ("android:id/button1") isn't found
+  after typing, only logged a *warning* and returned `True` anyway. If
+  that id is even slightly wrong for this specific dialog (it was only
+  ever inferred from the *validation-error* dialog's real ids, not
+  captured from the per-field dialog itself), the field's edit dialog is
+  left open with the typed value never committed — and every tap after
+  that (the next field's row, "その他のオプション", "保存") lands on or is
+  swallowed by that stuck modal instead of its intended target. The
+  eventual symptom several steps later — "apn save menu item not found"
+  — reads like a save-flow bug but actually originates here, at the very
+  first field. Same fix applied to the edit-field tap
+  (`dialog_edit_field_resource_id`) for the same reason: it also only
+  warned before typing into whatever happened to have focus. Both are now
+  hard failures — see `_fill_labeled_field()`'s docstring. This makes a
+  wrong id fail loud and immediately, at the exact field it's wrong for,
+  instead of cascading into a confusing late failure — but does **not**
+  resolve what the correct id actually is (still genuinely unconfirmed;
+  see PENDING_REAL_DEVICE_DATA.md — capturing a real dump of this dialog,
+  e.g. mid-way through tapping 名前 and before confirming, would settle it
+  for real). Not yet re-verified against a live run.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a

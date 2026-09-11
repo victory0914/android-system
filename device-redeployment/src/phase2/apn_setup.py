@@ -98,6 +98,21 @@ def _fill_labeled_field(
     tap_resource_id() simply returns False rather than mistapping, and this
     function surfaces that as a failure rather than pretending it worked.
 
+    Both the edit-field tap and the confirm-button tap are treated as HARD
+    failures if the (best-guess) id isn't found — NOT soft warnings that
+    let execution continue (2026-09-11 fix; an earlier version only warned
+    and returned True, on the theory the EditText might already be
+    auto-focused). Real-device testing showed why that was dangerous: if
+    the confirm button silently fails to be found, its dialog is left open,
+    and every subsequent tap (the next field's row, the overflow menu, the
+    save item) lands on — or is swallowed by — that still-open modal
+    instead of what it was aimed at, typing later fields' values into the
+    same stuck EditText and ultimately failing at the *save* step with a
+    confusing "menu item not found" error that looks like a save-flow bug
+    but actually originates here, several steps earlier. Failing loudly at
+    the field that actually didn't commit is far more diagnosable — see
+    docs/record.md, 2026-09-11.
+
     Uses input_text_direct() (Android's built-in `input text`), not
     inject_text() (ADB Keyboard broadcast) — confirmed necessary on real
     hardware, and not just for MCC/MNC as first thought: MCC/MNC needed it
@@ -121,22 +136,31 @@ def _fill_labeled_field(
 
     edit_field = apn.get("dialog_edit_field_resource_id")
     if edit_field and not tap_resource_id(client, edit_field):
-        logger.warning(
-            "apn field %r: dialog edit-field %r (best-guess id) not found; "
-            "attempting text entry anyway in case it's already focused",
+        logger.error(
+            "apn field %r: dialog edit-field %r (best-guess id) not found "
+            "— refusing to type blindly into whatever currently has focus "
+            "(see PENDING_REAL_DEVICE_DATA.md: this dialog has never been "
+            "captured in a real dump, so this id is unconfirmed)",
             label, edit_field,
         )
+        return False
 
     if not input_text_direct(client, value):
         return False
 
     confirm_button = apn.get("dialog_confirm_button_resource_id")
     if confirm_button and not tap_resource_id(client, confirm_button):
-        logger.warning(
+        logger.error(
             "apn field %r: dialog confirm button %r (best-guess id) not "
-            "found — value may not have been saved into the field",
+            "found — the value was typed but NOT committed, and the dialog "
+            "is likely still open. Failing here rather than continuing: "
+            "every later tap (next field, save) would otherwise land on "
+            "this stuck dialog instead of its intended target. See "
+            "PENDING_REAL_DEVICE_DATA.md — this id has never been "
+            "confirmed against a real dump of the per-field dialog.",
             label, confirm_button,
         )
+        return False
     return True
 
 

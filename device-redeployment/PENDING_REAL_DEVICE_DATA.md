@@ -8,29 +8,52 @@ here — this file is the checklist; that one is the evidence.
 
 **Status as of 2026-09-11 (Stage B, ongoing):** **Wi-Fi connects
 end-to-end on real hardware** — confirmed by a client screenshot showing
-`earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. SHG10 also has full
-APN data resolved, including the Save flow, and the root cause of every
-"apn menu navigation failed" error hit so far has been found and fixed
-(see "Highest priority" below) — but a full run has not yet completed
-successfully end-to-end with all current fixes in place; the last
-attempted run predates this latest fix. A 2026-09-11 real run surfaced one
-more navigation gap (the intent-reached screen's "APN" title wasn't
-recognized) plus the "+" add-button id — **both now fully resolved from a
-real dump** (`tests/fixtures/apn_restricted_SHG10.xml`, not just an
-estimate — see "Highest priority" below); not yet re-verified end-to-end.
-SHG10's wizard is on a photograph-derived, text-matching config — real
-dumps for the wizard are **not obtainable on any model, ever** (structural
-ADB/factory-reset constraint, see docs/record.md). **SOG08, SOG07, and
-SHG07 are entirely untouched** — still 100% Stage A placeholders, not
-started.
+`earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. **APN navigation,
+the "+" add-button, and field entry through MNC are now confirmed working
+on real hardware** (client run, 2026-09-11, after the screen-recognition +
+add-button fixes below) — the remaining blocker is the save step itself:
+the entry isn't actually persisting after name/APN/MCC/MNC are typed. Root
+cause found and fixed (see "Highest priority" below) but **not yet
+re-verified against a live run**. SHG10's wizard is on a
+photograph-derived, text-matching config — real dumps for the wizard are
+**not obtainable on any model, ever** (structural ADB/factory-reset
+constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
+untouched** — still 100% Stage A placeholders, not started.
 
 ## Highest priority
 
-### Re-verify against real hardware after the APN screen-recognition + add-button fixes (2026-09-11)
+### Re-verify against real hardware after hardening the per-field dialog confirm-button check (2026-09-11)
 
-Not yet re-verified end-to-end. Two related fixes, both now backed by a
-real dump (`tests/fixtures/apn_restricted_SHG10.xml`) rather than a
-screenshot-only guess:
+Not yet re-verified. Client report: typing name/APN/MCC/MNC "works
+correctly up to the MNC input stage", but the entry then never actually
+saves. Root cause: `_fill_labeled_field()`'s confirm-button tap
+(`dialog_confirm_button_resource_id`, a best-guess id — see "Best-guess"
+below, this per-field dialog has never itself been dumped) only logged a
+*warning* and continued when the tap wasn't found, instead of failing.
+If that id is wrong on this build, the field's dialog is left open and
+never actually commits the typed value; every tap after that (the next
+field's row, the "⋮" overflow icon, "保存" itself) lands on/is swallowed
+by that stuck dialog instead of its real target — which would surface,
+several steps later, as a confusing "save menu item not found" error that
+looks like a save-flow bug but actually originates at the very first
+field. Both the edit-field tap and the confirm-button tap in
+`_fill_labeled_field()` are now hard failures instead of soft warnings, so
+a wrong id now fails loudly and immediately at whichever field it happens
+on, rather than cascading. **This does not yet resolve the *actual* ids**
+— see "Best-guess" below for what's still needed to close this out for
+real. Two client-supplied real dumps this same day
+(`apn_accesshost_SHG10.xml`, `apn_accesshost_save_SHG10.xml`) turned out
+to be byte-identical to already-captured/already-correctly-handled
+fixtures (the edit form and the overflow "⋮"/"保存" popup) — they confirm
+those two structures are right, not the missing piece here.
+
+### Re-verify against real hardware after the APN screen-recognition + add-button fixes (2026-09-11) — CONFIRMED WORKING
+
+Two related fixes, both backed by a real dump
+(`tests/fixtures/apn_restricted_SHG10.xml`) rather than a screenshot-only
+guess, **now confirmed working by a live client run** (2026-09-11 — the
+run got through navigation, the "+" tap, and all four fields before
+stalling at save, per the entry above):
 
 1. **Screen recognition.** A real run's log showed
    `android.settings.APN_SETTINGS` repeatedly reporting "didn't land on a
@@ -49,11 +72,6 @@ screenshot-only guess:
    *replaces* the position-estimate fallback (`tap_left_of_content_desc()`)
    for SHG10 specifically; that fallback remains in the code for any
    model/screen where no real identifier is captured yet.
-
-**Neither has been confirmed against a live run yet** — the dump proves
-what's *on screen*, not that tapping it produces the expected next screen.
-Watch closely on the next run. See docs/record.md's 2026-09-11 entries for
-the full account.
 
 ### Re-verify against real hardware after the APN navigation root-cause fix
 
@@ -300,10 +318,21 @@ generalized to models with no data of their own yet.
   dialog's field/button *ids*, a separate and solvable gap.
 
 ### Best-guess (marked `TODO(real-device, best-guess-standard-id)` in YAML)
-- `apn_settings.dialog_edit_field_resource_id` = `android:id/edit` — still
-  not directly captured (the per-field entry dialog itself was never
-  dumped), but see the confirm-button note above for indirect supporting
-  evidence of the general "standard AlertDialog ids" assumption.
+- `apn_settings.dialog_edit_field_resource_id` = `android:id/edit` and
+  `dialog_confirm_button_resource_id` = `android:id/button1` — still not
+  directly captured (the per-field entry dialog itself has never been
+  dumped, only inferred from the *validation-error* dialog's real ids).
+  **This is now the single most important unresolved gap**: a 2026-09-11
+  real run got through typing name/APN/MCC/MNC but the entry never saved
+  — root cause traced to `_fill_labeled_field()` previously treating a
+  not-found confirm button as a soft warning and continuing anyway, which
+  leaves that dialog stuck open and derails every subsequent tap (see
+  "Highest priority" below). The soft-continue is now a hard failure, so
+  a wrong id fails loudly and immediately at the first field instead of
+  cascading into a confusing late "save menu item not found" error — but
+  the *actual* ids are still unconfirmed. **A real dump of this dialog
+  (tap 名前, dump before typing/confirming) would resolve this properly**
+  — the single highest-value capture left to get for SHG10.
 
 ### Toggle-tap safety (fixed, not just data)
 Real capture showed the Wi-Fi toggle is a plain `Switch` with a `checked`
