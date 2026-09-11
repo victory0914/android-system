@@ -11,21 +11,65 @@ end-to-end on real hardware** — confirmed by a client screenshot showing
 `earth5_1` / 接続済み (Connected), WPA3-Personal, 5GHz. **APN navigation,
 the "+" add-button, and field entry through MNC are now confirmed working
 on real hardware** (client run, 2026-09-11, after the screen-recognition +
-add-button fixes below) — the remaining blocker was the save step itself:
-the entry wasn't actually persisting after name/APN/MCC/MNC were typed.
-**Likely root cause found and fixed**: the client directly observed that
-MCC/MNC were being entered as FULL-WIDTH digits (４４０) instead of
-half-width/ASCII (440) — `input_text_direct()` ("input text") apparently
-picks up the device's Japanese-IME zenkaku conversion for digits even
-though it's meant to bypass the IME. MCC/MNC now go through
-`input_digits_direct()` (per-digit keyevents) instead — see "Highest
-priority" below. Not yet re-verified against a live run. SHG10's wizard is
-on a photograph-derived, text-matching config — real dumps for the wizard
-are **not obtainable on any model, ever** (structural ADB/factory-reset
-constraint, see docs/record.md). **SOG08, SOG07, and SHG07 are entirely
-untouched** — still 100% Stage A placeholders, not started.
+add-button fixes below) — the remaining blocker is still the save step:
+a client-supplied "before"/"after" dump pair
+(`apn_failure_setting_SHG10.xml` / `apn_success_setting_SHG10.xml`)
+confirmed the failing run produces **zero new APN entries** (the failure
+dump is byte-identical to the pristine empty list), not a malformed one —
+whatever blocks it does so before any entry is ever created. **Two fixes
+are in place, not yet re-verified against a run made with both applied
+together**:
+1. MCC/MNC full-width digit entry (client's direct observation) — fixed
+   via `input_digits_direct()`.
+2. A defensive guard against `config/network.yaml` silently falling back
+   to placeholder example data — added after the success dump revealed a
+   real leftover APN entry literally named "<APN value from client>" on
+   the device from some earlier run.
+See "Highest priority" below — it is not yet confirmed whether fix #1
+alone resolves the save failure; the exact terminal log from a run with
+both fixes applied is still the single most useful missing piece. SHG10's
+wizard is on a photograph-derived, text-matching config — real dumps for
+the wizard are **not obtainable on any model, ever** (structural
+ADB/factory-reset constraint, see docs/record.md). **SOG08, SOG07, and
+SHG07 are entirely untouched** — still 100% Stage A placeholders, not
+started.
 
 ## Highest priority
+
+### Re-verify against real hardware with BOTH the digit-entry fix and the config-safety guard (2026-09-11, latest)
+
+Not yet re-verified. Client supplied a "before"/"after" dump pair for a
+run that still failed to save:
+`tests/fixtures/apn_failure_setting_SHG10.xml` (after tapping 保存, still
+landed here) is **byte-identical** to `apn_restricted_SHG10.xml` (the
+pristine, zero-entries list) — confirming the save genuinely produces no
+new entry at all, consistent with a validation dialog blocking it (same
+conclusion as before, now with direct dump evidence instead of just a
+description). It's unconfirmed whether this specific failing run already
+included the MCC/MNC full-width-digit fix from immediately before this
+entry — if not, that fix (still itself unverified against a live run)
+may already resolve this.
+
+The paired `apn_success_setting_SHG10.xml` (client's own manual save, for
+comparison) also revealed something unrelated but worth fixing regardless:
+a **second, older APN entry on the same device, literally named "<APN
+value from client>"** — the exact placeholder string from
+`config/network.yaml.example`. Real proof that an earlier run (at some
+point, not necessarily recent) silently fell back to that example file
+instead of a real `config/network.yaml` and created a garbage entry on
+real hardware without erroring. Fixed: `main_phase2.py`'s
+`_load_network_config()` now refuses to run at all — raises
+`NetworkConfigError` — if `config/network.yaml` is missing, or if any
+value in it still matches one of the example file's known placeholder
+strings verbatim. This is unrelated to why *this* save failed (that
+leftover entry is unchecked/inactive, a different entry from the one
+being tested), but a real, concrete safety gap regardless.
+
+**Next run should have both fixes in place** (this commit plus the prior
+digit-entry one) — if it still doesn't save, the exact terminal log
+output remains the one thing that would settle this for real, since dumps
+of the failure state (now captured twice) show nothing more than "no
+entry got created," not *why*.
 
 ### Re-verify against real hardware after switching MCC/MNC to keyevent digit entry (2026-09-11)
 
@@ -388,6 +432,20 @@ attribute — Stage A's original code tapped it unconditionally every time,
 which would have **turned Wi-Fi off** on any device where it was already on
 (true in the captured dump). `wifi_setup.py` now checks `checked` via
 `node_is_checked()` before deciding whether to tap.
+
+### Network-config placeholder safety (fixed, not just data — 2026-09-11)
+`main_phase2.py._load_network_config()` used to silently fall back to
+`config/network.yaml.example`'s placeholder values (just a warning) if
+`config/network.yaml` didn't exist. Real proof this is a genuine hazard,
+not theoretical: `tests/fixtures/apn_success_setting_SHG10.xml` (a real
+dump) shows a leftover APN entry on the device literally named "<APN
+value from client>" — the example file's exact placeholder text, from
+some earlier run that took this fallback path. There is no dry-run mode
+(`main_phase2.py` always runs against real hardware), so this is now a
+hard failure: `NetworkConfigError` if the file is missing, and the same
+if any value inside it still matches a known placeholder string verbatim
+(`_PLACEHOLDER_VALUES`) — catches both "never copied the example" and
+"copied it but forgot to fill in one field."
 
 ### Wizard — hard constraint, not a temporary gap
 No `uiautomator dump` exists or ever will for OOBE wizard screens on any of

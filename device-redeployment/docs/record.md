@@ -413,6 +413,35 @@ accumulates.
   through this new function, while 名前/APN (arbitrary text, not just
   digits) keep using `input_text_direct()` exactly as before. Not yet
   re-verified against a live run — see PENDING_REAL_DEVICE_DATA.md.
+- *2026-09-11 (client attached a before/after dump pair — confirms "no
+  entry created", surfaces an unrelated real hazard):* Client attached
+  `tests/fixtures/apn_failure_setting_SHG10.xml` (landed here after
+  tapping 保存 — still failing) and `apn_success_setting_SHG10.xml`
+  (client's own manual save, for comparison). The failure dump is
+  **byte-identical** to `apn_restricted_SHG10.xml`, the pristine
+  zero-entries list — direct confirmation the save produces no new entry
+  at all (consistent with a validation dialog blocking it, matching the
+  full-width-digit theory above, though it's unconfirmed whether this
+  particular failing run already had that fix applied).
+
+  The success dump — showing the entry list with 2 items — incidentally
+  revealed something else: alongside the client's own manually-created
+  "test"/"test_apn" entry (checked/active), there's a second, *unchecked*
+  entry literally named **"<APN value from client>"** — the exact
+  placeholder string from `config/network.yaml.example`. Real proof that
+  at some point an automation run silently fell back to that example file
+  (the old behavior in `main_phase2._load_network_config()`, previously
+  just a warning) instead of a real `config/network.yaml`, and created a
+  garbage APN entry on the device without ever erroring. Unrelated to
+  today's specific save failure (that entry is inactive, a leftover from
+  a different run), but real, concrete evidence the old silent fallback
+  was a genuine hazard on real hardware, not a theoretical one — this
+  always runs against real hardware, there's no dry-run mode. Fixed:
+  `_load_network_config()` now raises `NetworkConfigError` (main_phase2.py
+  exits 1 with a clear message) if `config/network.yaml` is missing, or if
+  any value inside it still matches one of the example file's known
+  placeholder strings verbatim — catches both "never copied the example"
+  and "copied it but left one field unedited."
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
@@ -486,7 +515,7 @@ accumulates.
 
 | Model | Wi-Fi list | APN list | APN entry | APN save flow | Wizard (OOBE) |
 |---|---|---|---|---|---|
-| SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_restricted_SHG10.xml` (6,104 B) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B), `apn_accesshost_okbtn_SHG10.xml` (per-field dialog, open) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
+| SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_restricted_SHG10.xml` (6,104 B), `apn_failure_setting_SHG10.xml` (6,104 B, identical), `apn_success_setting_SHG10.xml` (10,009 B, 2 entries) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B), `apn_accesshost_okbtn_SHG10.xml` (per-field dialog, open) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
 | Xperia Ace III (SOG08) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
 | Xperia 10 IV (SOG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
 | AQUOS sense6s (SHG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
@@ -501,7 +530,13 @@ mid-edit) also added 2026-09-11 — resolved `dialog_edit_field_resource_id`/
 `dialog_confirm_button_resource_id` for real. `apn_accesshost_SHG10.xml`/
 `apn_accesshost_save_SHG10.xml`, supplied the same day, are byte-identical
 to `apn_entry_top_SHG10.xml`/`apn_overflow_menu_SHG10.xml` respectively —
-kept for provenance, not listed separately above.
+kept for provenance, not listed separately above. `apn_failure_setting_
+SHG10.xml`/`apn_success_setting_SHG10.xml` added 2026-09-11 (later the
+same day) — a before/after pair for a still-failing save attempt; the
+"failure" file is itself byte-identical to `apn_restricted_SHG10.xml`
+(confirms no entry was created), and the "success" file (a manual save,
+for comparison) surfaced the `config/network.yaml.example` placeholder-
+leak finding — see the dated entry above.
 
 Capture pattern used:
 ```

@@ -29,6 +29,8 @@ APN_ENTRY_MIDDLE_XML = (FIXTURES_DIR / "apn_entry_middle_SHG10.xml").read_text(e
 APN_ENTRY_BOTTOM_XML = (FIXTURES_DIR / "apn_entry_bottom_SHG10.xml").read_text(encoding="utf-8")
 APN_RESTRICTED_XML = (FIXTURES_DIR / "apn_restricted_SHG10.xml").read_text(encoding="utf-8")
 APN_OKBTN_DIALOG_XML = (FIXTURES_DIR / "apn_accesshost_okbtn_SHG10.xml").read_text(encoding="utf-8")
+APN_FAILURE_XML = (FIXTURES_DIR / "apn_failure_setting_SHG10.xml").read_text(encoding="utf-8")
+APN_SUCCESS_XML = (FIXTURES_DIR / "apn_success_setting_SHG10.xml").read_text(encoding="utf-8")
 
 # Real near-duplicate SSID pairs observed at the client site (docs/record.md).
 REAL_DUPLICATE_SSID_PAIRS = [
@@ -223,3 +225,58 @@ def test_dialog_title_renders_via_standard_alert_title_id():
     apn_setup.py had open when this was captured), not a custom layout that
     might have different button/field ids than the framework default."""
     assert get_node_text(APN_OKBTN_DIALOG_XML, "com.android.settings:id/alertTitle") == "名前"
+
+
+# --- Failure vs. success after tapping 保存 (real, 2026-09-11):
+# apn_failure_setting_SHG10.xml / apn_success_setting_SHG10.xml ------------
+
+
+def test_failure_screen_is_the_pristine_empty_apn_list():
+    """After a failed save, the screen client reported landing on is
+    byte-identical to the pristine, no-entries-yet APN list
+    (apn_restricted_SHG10.xml) — confirming the save genuinely produced
+    NO new entry at all, not a malformed one. Whatever blocked it did so
+    before any entry was ever created."""
+    assert APN_FAILURE_XML == APN_RESTRICTED_XML
+
+
+def test_success_screen_shows_a_checked_new_entry():
+    """A successful save (client's own manual verification, for comparison)
+    shows the new entry back on the list — 名前="test" / APN="test_apn" —
+    with its radio button `checked="true"` (selected as the active APN).
+    Confirms the real post-save success shape apn_setup.py's soft
+    find_by_text() check should be looking for: the entry's *name* value
+    appearing as `android:id/title` text on the list, exactly as
+    _save_apn() already checks."""
+    assert find_resource_id(APN_SUCCESS_XML, "android:id/title", text="test") is not None
+    # Two APN entries are present, sharing one generic radiobutton
+    # resource-id with no text of its own (NAF, empty text) — same
+    # ambiguous-without-a-disambiguator pattern (and the same `index=0`
+    # caveat: it never silently picks "the first match", it always raises
+    # unless a non-zero index is given — see _disambiguate_or_raise's
+    # docstring) as everywhere else on this screen. Document order: the
+    # placeholder entry first (unchecked), "test" second (checked — the
+    # one just saved/selected) — matches[1], i.e. index=1.
+    with pytest.raises(AmbiguousResourceIdError):
+        node_is_checked(APN_SUCCESS_XML, "com.android.settings:id/apn_radiobutton")
+    assert (
+        node_is_checked(APN_SUCCESS_XML, "com.android.settings:id/apn_radiobutton", index=1)
+        is True
+    )
+
+
+def test_success_screen_also_shows_an_unrelated_placeholder_entry():
+    """The list's *other* entry — unchecked — is literally named
+    "<APN value from client>": the exact placeholder string from
+    config/network.yaml.example (see src/main_phase2.py's
+    _PLACEHOLDER_VALUES). Real evidence this device had, at some point, an
+    automation run that silently fell back to the example file instead of
+    a real config/network.yaml — motivating main_phase2.py's
+    NetworkConfigError guard. Not today's bug (that entry is unchecked/
+    inactive, unrelated to the "test"/"test_apn" entry above), but real
+    confirmation the old silent-fallback behavior was a genuine hazard,
+    not just a theoretical one."""
+    assert (
+        find_resource_id(APN_SUCCESS_XML, "android:id/title", text="<APN value from client>")
+        is not None
+    )

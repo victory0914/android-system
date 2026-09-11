@@ -43,18 +43,61 @@ def _load_settings(path: Path) -> dict:
         return yaml.safe_load(fh) or {}
 
 
-def _load_network_config(logger_: logging.Logger) -> dict:
-    if DEFAULT_NETWORK_PATH.exists():
-        path = DEFAULT_NETWORK_PATH
-    else:
-        logger_.warning(
-            "config/network.yaml not found; falling back to config/network.yaml.example "
-            "(placeholder values only - this will not work against a real network)."
-        )
-        path = DEFAULT_NETWORK_EXAMPLE_PATH
+class NetworkConfigError(RuntimeError):
+    """config/network.yaml is missing, or still contains a placeholder value
+    copied verbatim from config/network.yaml.example."""
 
-    with open(path, "r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
+
+# Every placeholder string in config/network.yaml.example, verbatim — real
+# evidence this matters, not just theoretical: a real SHG10 dump
+# (tests/fixtures/apn_success_setting_SHG10.xml, 2026-09-11) showed a real
+# leftover APN entry literally named "<APN value from client>" on the
+# device — from some earlier run that silently fell back to this file
+# (the old behavior here) instead of refusing to proceed.
+_PLACEHOLDER_VALUES = {
+    "<client-provided SSID>",
+    "<client-provided password>",
+    "<carrier name>",
+    "<APN value from client>",
+    "<mobile country code>",
+    "<mobile network code>",
+}
+
+
+def _check_no_placeholder_values(config: dict, *, _path: str = "") -> None:
+    for key, value in config.items():
+        full_key = f"{_path}.{key}" if _path else str(key)
+        if isinstance(value, dict):
+            _check_no_placeholder_values(value, _path=full_key)
+        elif isinstance(value, str) and value in _PLACEHOLDER_VALUES:
+            raise NetworkConfigError(
+                f"config/network.yaml[{full_key!r}] is still the placeholder "
+                f"value {value!r} copied from network.yaml.example — fill in "
+                "a real value before running against real hardware."
+            )
+
+
+def _load_network_config(logger_: logging.Logger) -> dict:
+    """Load config/network.yaml. Refuses to run at all if it's missing or
+    still has a placeholder value — this always runs against real hardware
+    (no dry-run mode), so silently falling back to obviously-fake example
+    data isn't a safe default; it wastes a real device round-trip at best,
+    and at worst (confirmed on real hardware, 2026-09-11 — see
+    _PLACEHOLDER_VALUES's comment) leaves a garbage APN entry on the
+    device."""
+    if not DEFAULT_NETWORK_PATH.exists():
+        raise NetworkConfigError(
+            f"{DEFAULT_NETWORK_PATH} not found. Copy "
+            f"{DEFAULT_NETWORK_EXAMPLE_PATH} to {DEFAULT_NETWORK_PATH} and "
+            "fill in real values (it's gitignored — never committed) before "
+            "running against real hardware."
+        )
+
+    with open(DEFAULT_NETWORK_PATH, "r", encoding="utf-8") as fh:
+        config = yaml.safe_load(fh) or {}
+
+    _check_no_placeholder_values(config)
+    return config
 
 
 def _configure_logging(level_name: str, log_dir: str) -> None:
@@ -162,7 +205,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    network_config = _load_network_config(logger)
+    try:
+        network_config = _load_network_config(logger)
+    except NetworkConfigError as exc:
+        logger.error("%s", exc)
+        return 1
 
     adb_path = _resolve_adb_path(adb_cfg)
     client = AdbClient(args.serial, adb_path=adb_path)
