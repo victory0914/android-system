@@ -651,6 +651,26 @@ structure survives being committed.
 
 ---
 
+## SHG07 (SHARP AQUOS sense6s, Android 13)
+
+**Serial:** 353681650397052
+**Confirmed identity string (from adb):** not yet confirmed — no `adb
+devices`/`adb shell getprop` output recorded for this unit yet.
+
+Config (`config/models/sharp_aquos_sense6s.yaml`) currently holds values
+*inherited from SHG10*, not independently confirmed for this unit — see
+the 2026-09-14 entry under SHG10's section above and the file's own header
+comment. No dumps, screenshots, or test runs recorded against this serial
+yet.
+
+### Test Log — exactly what was run against this unit
+
+| Date | Test | Command | Result |
+|---|---|---|---|
+| | | | |
+
+---
+
 ## Dump capture status (all models)
 
 | Model | Wi-Fi list | APN list | APN entry | APN save flow | Wizard (OOBE) |
@@ -658,7 +678,7 @@ structure survives being committed.
 | SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_restricted_SHG10.xml` (6,104 B), `apn_failure_setting_SHG10.xml` (6,104 B, identical), `apn_success_setting_SHG10.xml` (10,009 B, 2 entries) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B), `apn_accesshost_okbtn_SHG10.xml` (per-field dialog, open) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
 | Xperia Ace III (SOG08) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
 | Xperia 10 IV (SOG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
-| AQUOS sense6s (SHG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
+| AQUOS sense6s (SHG07, 353681650397052) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
 
 Original 4 SHG10 files captured 2026-09-04. 4 more (save flow + a filled
 entry form) captured 2026-09-08, same session as the Save flow findings

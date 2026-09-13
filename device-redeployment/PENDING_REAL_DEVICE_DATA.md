@@ -472,6 +472,10 @@ positions, APN overflow menu, APN validation dialogs).
 
 ## SHG07 (AQUOS sense6s) — switched from Stage A placeholders to values inherited from SHG10 (2026-09-14)
 
+**Serial:** 353681650397052 (see docs/record.md's new SHG07 section).
+Confirmed identity string not yet recorded — no `adb`/log output from this
+specific unit exists yet, only the config change below.
+
 **Status change, client-directed:** previously in the same "entirely
 untouched" state as SOG08/SOG07 above. On 2026-09-14 the client asked to
 skip capturing new SHG07 dumps and instead reuse SHG10's confirmed real
