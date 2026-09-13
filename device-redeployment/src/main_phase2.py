@@ -13,6 +13,7 @@ production dashboard (out of scope for Phase 2; see Section 22 of the spec).
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import logging
 import os
 import sys
@@ -163,18 +164,47 @@ def _resolve_adb_path(adb_cfg: dict) -> str:
     return "adb"
 
 
+def _parse_device_spec(spec: str) -> tuple[str, str]:
+    """Parse one `--device` value: "SERIAL:MODEL" (e.g.
+    "352063910272451:SHG10"). Raises argparse.ArgumentTypeError (which
+    argparse turns into a clean CLI error, not a traceback) if the format
+    is wrong — a single serial with no `:` is a plausible typo (forgetting
+    the model half), so this fails loud rather than guessing."""
+    serial, sep, model = spec.partition(":")
+    if not sep or not serial or not model:
+        raise argparse.ArgumentTypeError(
+            f"--device value {spec!r} must be SERIAL:MODEL "
+            "(e.g. 352063910272451:SHG10)"
+        )
+    return serial, model
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the Phase 2 device-redeployment flow (wizard, Wi-Fi, "
-        "APN) against one real, connected Android device."
+        "APN) against one or more real, connected Android devices."
     )
     parser.add_argument(
-        "--serial", required=True, help="adb device serial (see `adb devices`)"
+        "--serial",
+        help="adb device serial (see `adb devices`) — single-device mode. "
+        "Mutually exclusive with --device.",
     )
     parser.add_argument(
         "--model",
-        required=True,
-        help="model_number of this device's profile (e.g. SOG08, SOG07, SHG07, SHG10)",
+        help="model_number of this device's profile (e.g. SOG08, SOG07, "
+        "SHG07, SHG10) — single-device mode, used with --serial.",
+    )
+    parser.add_argument(
+        "--device",
+        action="append",
+        dest="devices",
+        metavar="SERIAL:MODEL",
+        type=_parse_device_spec,
+        help="Run multiple devices IN PARALLEL, at the same time, against "
+        "the same config/network.yaml — repeat for each device: "
+        "--device 352063910272451:SHG10 --device <serial2>:SHG07. Each "
+        "device gets its own retry loop; one device's failure never blocks "
+        "or delays the others. Mutually exclusive with --serial/--model.",
     )
     parser.add_argument(
         "--models-dir",
@@ -199,8 +229,59 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _resolve_devices(args: argparse.Namespace, parser: argparse.ArgumentParser) -> list[tuple[str, str]]:
+    """Reconcile --device (repeatable, multi-device) against --serial/--model
+    (single-device convenience) into one list of (serial, model_number)
+    pairs. Exactly one of the two forms must be used — calls parser.error()
+    (prints usage, exits 2) otherwise, matching argparse's own convention
+    for CLI-usage mistakes."""
+    if args.devices and (args.serial or args.model):
+        parser.error("--device cannot be combined with --serial/--model")
+    if not args.devices and not (args.serial and args.model):
+        parser.error(
+            "either --device (one or more) or both --serial and --model are required"
+        )
+    return args.devices if args.devices else [(args.serial, args.model)]
+
+
+def _run_one_device(
+    serial: str,
+    model_number: str,
+    *,
+    profiles: dict[str, ModelProfile],
+    network_config: dict,
+    max_retry: int,
+    adb_path: str,
+    skip_wizard: bool,
+) -> tuple[str, SlotState, str | None]:
+    """Run Phase 2 against one device and return (serial, final_state,
+    last_error) — never raises, so one device's problem can't take down a
+    parallel batch of others (same philosophy as
+    orchestration/scheduler.py's run_phase2_batch())."""
+    profile = profiles.get(model_number)
+    if profile is None:
+        error = f"unknown model {model_number!r}; available: {sorted(profiles.keys())}"
+        logger.error("device %s: %s", serial, error)
+        return serial, SlotState.ESCALATED, error
+
+    client = AdbClient(serial, adb_path=adb_path)
+    slot = Slot(serial, client, max_retry=max_retry)
+    logger.info(
+        "starting Phase 2 run: serial=%s model=%s (%s)%s",
+        serial, model_number, profile.model,
+        " [skip_wizard]" if skip_wizard else "",
+    )
+
+    final_state = run_slot_with_retries(
+        slot, profile, network_config, skip_wizard=skip_wizard
+    )
+    return serial, final_state, slot.last_error
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = build_arg_parser().parse_args(argv)
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    devices = _resolve_devices(args, parser)
 
     settings = _load_settings(Path(args.settings))
     logging_cfg = settings.get("logging", {})
@@ -219,13 +300,6 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("failed to load model profiles: %s", exc)
         return 1
 
-    profile = profiles.get(args.model)
-    if profile is None:
-        logger.error(
-            "unknown model %r; available: %s", args.model, sorted(profiles.keys())
-        )
-        return 1
-
     try:
         network_config = _load_network_config(logger)
     except NetworkConfigError as exc:
@@ -233,28 +307,50 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     adb_path = _resolve_adb_path(adb_cfg)
-    client = AdbClient(args.serial, adb_path=adb_path)
 
-    slot = Slot(args.serial, client, max_retry=max_retry)
-    logger.info(
-        "starting Phase 2 run: serial=%s model=%s (%s)%s",
-        args.serial, args.model, profile.model,
-        " [skip_wizard]" if args.skip_wizard else "",
-    )
+    # Single device: run inline, exactly as before (no thread pool overhead
+    # or interleaved logging from a second thread for the common case).
+    # Multiple devices: dispatch all of them AT THE SAME TIME via a thread
+    # pool — each has its own Slot/AdbClient/retry loop, sharing only the
+    # loaded model profiles and network_config (same real network target
+    # for every device in the batch, matching how config/network.yaml is
+    # structured — one Wi-Fi/APN pair, not one per device).
+    if len(devices) == 1:
+        serial, model_number = devices[0]
+        results = [
+            _run_one_device(
+                serial, model_number,
+                profiles=profiles, network_config=network_config,
+                max_retry=max_retry, adb_path=adb_path, skip_wizard=args.skip_wizard,
+            )
+        ]
+    else:
+        logger.info(
+            "running %d devices in parallel: %s",
+            len(devices), ", ".join(f"{serial}:{model}" for serial, model in devices),
+        )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(devices)) as executor:
+            futures = [
+                executor.submit(
+                    _run_one_device, serial, model_number,
+                    profiles=profiles, network_config=network_config,
+                    max_retry=max_retry, adb_path=adb_path, skip_wizard=args.skip_wizard,
+                )
+                for serial, model_number in devices
+            ]
+            results = [future.result() for future in concurrent.futures.as_completed(futures)]
 
-    final_state = run_slot_with_retries(
-        slot, profile, network_config, skip_wizard=args.skip_wizard
-    )
-
-    if final_state == SlotState.LOGIN_INSTALL:
-        logger.info("SUCCESS: device %s reached LOGIN_INSTALL", args.serial)
-        return 0
-
-    logger.error(
-        "FAILED: device %s ended in state %s (last_error=%s)",
-        args.serial, final_state.name, slot.last_error,
-    )
-    return 1
+    exit_code = 0
+    for serial, final_state, last_error in results:
+        if final_state == SlotState.LOGIN_INSTALL:
+            logger.info("SUCCESS: device %s reached LOGIN_INSTALL", serial)
+        else:
+            logger.error(
+                "FAILED: device %s ended in state %s (last_error=%s)",
+                serial, final_state.name, last_error,
+            )
+            exit_code = 1
+    return exit_code
 
 
 if __name__ == "__main__":

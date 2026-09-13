@@ -10,6 +10,7 @@ from client>" on the device — evidence that silently falling back to
 config/network.yaml.example's placeholder data, the old behavior, is
 unsafe: this always runs against real hardware, there is no dry-run mode)."""
 
+import argparse
 import logging
 import os
 
@@ -20,9 +21,12 @@ import src.main_phase2 as main_phase2
 from src.main_phase2 import (
     NetworkConfigError,
     _load_network_config,
+    _parse_device_spec,
     _resolve_adb_path,
+    _resolve_devices,
     build_arg_parser,
 )
+from src.orchestration.slot import SlotState
 
 
 def test_resolve_adb_path_joins_directory_with_executable_name(tmp_path):
@@ -54,6 +58,81 @@ def test_skip_wizard_flag_can_be_set():
         ["--serial", "ABC123", "--model", "SHG10", "--skip-wizard"]
     )
     assert args.skip_wizard is True
+
+
+# --- --device (multi-device parallel mode, 2026-09-14) ---------------------
+
+
+def test_parse_device_spec_splits_serial_and_model():
+    assert _parse_device_spec("352063910272451:SHG10") == ("352063910272451", "SHG10")
+
+
+@pytest.mark.parametrize("bad_spec", ["no-colon-here", ":SHG10", "352063910272451:", ""])
+def test_parse_device_spec_rejects_malformed_input(bad_spec):
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_device_spec(bad_spec)
+
+
+def test_build_arg_parser_accepts_repeated_device_flag():
+    args = build_arg_parser().parse_args(
+        ["--device", "SERIAL1:SHG10", "--device", "SERIAL2:SHG07"]
+    )
+    assert args.devices == [("SERIAL1", "SHG10"), ("SERIAL2", "SHG07")]
+    assert args.serial is None
+    assert args.model is None
+
+
+def test_build_arg_parser_devices_defaults_to_none_in_single_device_mode():
+    args = build_arg_parser().parse_args(["--serial", "ABC123", "--model", "SHG10"])
+    assert args.devices is None
+
+
+def test_resolve_devices_single_device_mode():
+    args = build_arg_parser().parse_args(["--serial", "ABC123", "--model", "SHG10"])
+    devices = _resolve_devices(args, build_arg_parser())
+    assert devices == [("ABC123", "SHG10")]
+
+
+def test_resolve_devices_multi_device_mode():
+    args = build_arg_parser().parse_args(
+        ["--device", "SERIAL1:SHG10", "--device", "SERIAL2:SHG07"]
+    )
+    devices = _resolve_devices(args, build_arg_parser())
+    assert devices == [("SERIAL1", "SHG10"), ("SERIAL2", "SHG07")]
+
+
+def test_resolve_devices_rejects_device_combined_with_serial():
+    args = build_arg_parser().parse_args(
+        ["--serial", "ABC123", "--model", "SHG10", "--device", "SERIAL2:SHG07"]
+    )
+    with pytest.raises(SystemExit):
+        _resolve_devices(args, build_arg_parser())
+
+
+def test_resolve_devices_rejects_neither_form_given():
+    args = build_arg_parser().parse_args([])
+    with pytest.raises(SystemExit):
+        _resolve_devices(args, build_arg_parser())
+
+
+def test_run_one_device_reports_unknown_model_without_touching_adb():
+    """One device with a bad --device model_number must fail loud and
+    return (not raise) — same philosophy as orchestration/scheduler.py's
+    run_phase2_batch(): one bad device can't be allowed to crash a
+    parallel batch for the others. Never even constructs an AdbClient for
+    an unknown model, so this needs no real device."""
+    serial, final_state, last_error = main_phase2._run_one_device(
+        "ABC123",
+        "NOT_A_REAL_MODEL",
+        profiles={},
+        network_config={},
+        max_retry=3,
+        adb_path="adb",
+        skip_wizard=True,
+    )
+    assert serial == "ABC123"
+    assert final_state == SlotState.ESCALATED
+    assert "NOT_A_REAL_MODEL" in last_error
 
 
 # --- _load_network_config placeholder-value guard (2026-09-11) -------------

@@ -533,6 +533,56 @@ Phase 2 run confirmed end-to-end" for the consolidated list. The wizard
 (2 of 9 screens' button labels still unverified) and SOG08/SOG07/SHG07
 (entirely untouched) are now the real remaining priorities.
 
+### 2026-09-14: SHG07 switched to inherit SHG10's values; multi-device parallel mode added
+
+Client asked to begin SHG07 (AQUOS sense6s, Android 13) work, explicitly
+requesting that no new dumps be captured for it — reasoning that SHG07 and
+SHG10 (AQUOS sense7, Android 14) are the same SHARP AQUOS lineup, closely
+enough related to reuse SHG10's confirmed real dump-derived values
+directly. Also requested all devices be run in parallel, at the same
+timing, rather than one at a time.
+
+**SHG07 config change**: `config/models/sharp_aquos_sense6s.yaml` rewritten
+from Stage A's from-scratch invented placeholders to SHG10's exact schema
+and real values (screen-driven wizard, labeled APN fields, all the
+resolved dialog/add-button/overflow/save ids). This is a reasoned
+improvement over pure invention, but explicitly not independent
+confirmation — flagged at length in the file's own header and in
+PENDING_REAL_DEVICE_DATA.md's new "SHG07 (AQUOS sense6s)..." section,
+which also carries forward this project's own repeated real lesson: SHG10
+itself had multiple real surprises (APN screen title, MCC/MNC digit
+encoding, per-field dialog ids) found only once actual hardware was
+touched, all on the *same* unit/OS build — a different model on a
+different Android version carries meaningfully more of that same risk,
+not less. Recommended a supervised, one-device-at-a-time first pass
+before trusting this config in the new parallel mode or leaving it
+unattended.
+
+**Parallel multi-device mode**: `main_phase2.py` gained `--device
+SERIAL:MODEL` (repeatable), replacing `--serial`/`--model` for this mode —
+dispatches every listed device to its own thread via
+`concurrent.futures.ThreadPoolExecutor`, all starting at the same time,
+sharing only the loaded model profiles and `config/network.yaml`. Built
+directly on `run_slot_with_retries()` (same function the existing
+single-device path already used) rather than
+`orchestration/scheduler.py`'s `run_phase2_batch()`, specifically to keep
+`--skip-wizard` available — `run_phase2_batch()` deliberately omits it so
+a real production batch run can never skip the wizard by accident; this
+is a manual/testing tool in the same spirit as `--skip-wizard` itself, not
+a replacement for that production path. `--serial`/`--model` still works
+unchanged for a single device (no thread pool, identical behavior/logs to
+before). See README.md, PENDING_REAL_DEVICE_DATA.md's new `--device`
+entry, and `tests/test_main_phase2.py` for the new tests.
+
+**Fixture reorganization**: `tests/fixtures/` was reorganized (outside
+this session, found already done when tests were next run) into one
+subfolder per model — e.g. every `*_SHG10.xml` file moved into
+`tests/fixtures/AQUOS sense7（SHG10）/` — with matching empty folders
+reserved for SHG07/SOG07/SOG08's own future real dumps.
+`tests/test_real_shg10_fixtures.py`'s `FIXTURES_DIR` updated to match;
+`.gitkeep` files added to the three currently-empty model folders so the
+structure survives being committed.
+
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
   *directory* (`C:\platform-tools`), but was being passed straight through

@@ -46,10 +46,17 @@ sections rather than duplicated here):
   accepting the risk and testing anyway) is what's needed to confirm a
   *complete* fresh-device flow (wizard + Wi-Fi + APN), not just Wi-Fi +
   APN with `--skip-wizard`.
-- **"SOG08 / SOG07 / SHG07 — no real data of any kind yet"** (same
-  section) — entirely untouched, still 100% Stage A placeholders. Now the
-  next real priority for Stage B to expand to, if/when hardware for them
-  becomes available.
+- **A supervised first real test of SHG07** — its config now inherits
+  SHG10's confirmed values (client-directed, 2026-09-14) rather than
+  Stage A's from-scratch placeholders, but that's a reasoned starting
+  point, not independent confirmation for this specific model/Android
+  version. See "SHG07 (AQUOS sense6s)..." further below for the full
+  reasoning and the recommended supervised, one-at-a-time first pass
+  before trusting it in the new parallel multi-device mode (`--device`,
+  see README.md).
+- **"SOG08 / SOG07 — entirely untouched"** (same section) — still 100%
+  Stage A placeholders, no real data of any kind. Next priority once
+  hardware for them is available.
 
 ### Re-verify the destructive-tap safety fix's retry path specifically
 
@@ -92,11 +99,12 @@ may be icon-only (no text at all), which would mean the fix isn't just
 `tap_by_content_desc`. Needs a live look or a fresh photo during the next
 factory reset.
 
-### SOG08 / SOG07 / SHG07 — no real data of any kind yet
+### SOG08 / SOG07 — entirely untouched, no real data of any kind
 
-Same Wi-Fi list + APN dump process used for SHG10 hasn't been run for any
-of the other three models. Highest-value next step once SHG10's remaining
-gaps are closed.
+Same Wi-Fi list + APN dump process used for SHG10 hasn't been run for
+either. Highest-value next step once hardware is available. (SHG07 is no
+longer in this category as of 2026-09-14 — see "SHG07 (AQUOS sense6s)..."
+further below.)
 
 ## Resolved — full Phase 2 run confirmed end-to-end (2026-09-11)
 
@@ -422,6 +430,24 @@ both requiring an explicit, per-call opt-in. (`--skip-wifi` was proposed
 the same day, same pattern, but wasn't ultimately needed once Wi-Fi
 started working — not wired up.)
 
+### `--device` multi-device parallel mode (infrastructure, not device data — 2026-09-14)
+Client asked for all devices to be run "at the same timing" rather than
+one `main_phase2.py` invocation per device in sequence.
+`main_phase2.py --device SERIAL1:MODEL1 --device SERIAL2:MODEL2 ...`
+(repeatable, replaces `--serial`/`--model` for this mode) dispatches every
+device to its own thread via `concurrent.futures.ThreadPoolExecutor`, all
+starting at once, each with its own `Slot`/`AdbClient`/retry loop sharing
+only the loaded model profiles and `config/network.yaml` — one device's
+failure or retry can't block or delay the others. `--serial`/`--model`
+still works unchanged for the single-device case (runs inline, no thread
+pool). Distinct from `orchestration/scheduler.py`'s existing
+`run_phase2_batch()` (used by Phase 3's eventual production dashboard,
+out of scope here): that function deliberately has no `skip_wizard`
+parameter so a real batch run can never accidentally skip the wizard —
+`--device` is for manual/testing use exactly like `--skip-wizard` already
+was, so it's built directly on `run_slot_with_retries()` instead, keeping
+that same opt-in safety property. See README.md's usage section.
+
 ### `dump_ui()` retry on transient pull failure (infrastructure, not device data)
 Added 2026-09-08 after a real crash: `uiautomator dump`'s pull is known to
 intermittently fail right after a screen transition, and `dump_ui()` never
@@ -432,28 +458,69 @@ giving up. Fixed in the shared `dump_ui()`, so it protects every
 tap/find call across wizard, Wi-Fi, and APN — not specific to where it
 happened to first surface (APN menu navigation).
 
-## SOG08 (Xperia Ace III), SOG07 (Xperia 10 IV), SHG07 (AQUOS sense6s) —
-## entirely untouched, out of scope for this pass
+## SOG08 (Xperia Ace III), SOG07 (Xperia 10 IV) — entirely untouched
 
-Per the Stage B task's explicit scope, these three still carry 100% of
-their original Stage A placeholders — every `wizard_steps[*].resource_id`,
+Per the Stage B task's original scope, these two still carry 100% of their
+original Stage A placeholders — every `wizard_steps[*].resource_id`,
 `wifi_settings.*`, and `apn_settings.*` value remains an invented
-placeholder with a `TODO(real-device)` marker. No captures exist for any of
-them (Wi-Fi, APN, or wizard). Same wizard constraint applies (no dump will
-ever be possible) — they'll need the same photograph-derived, screen-driven
-approach as SHG10, plus real Wi-Fi/APN dumps captured the same way as
-SHG10's were (Wi-Fi list, APN entry form at multiple scroll positions, APN
-overflow menu, APN validation dialogs).
+placeholder with a `TODO(real-device)` marker. No captures exist for
+either (Wi-Fi, APN, or wizard). Same wizard constraint applies (no dump
+will ever be possible) — they'll need the same photograph-derived,
+screen-driven approach as SHG10, plus real Wi-Fi/APN dumps captured the
+same way as SHG10's were (Wi-Fi list, APN entry form at multiple scroll
+positions, APN overflow menu, APN validation dialogs).
 
-Package-name assumptions are a bigger open question for the two SHARP
-models (SHG07, and previously SHG10 before its real data came in) than for
-the two Sony models — SHG10's real data showed the Settings/Phone app
-package names (`com.android.settings`, `com.android.phone`) were actually
-right, but the *setup-wizard* package assumption was moot (text-matching
-replaced it entirely) and SHARP-specific screens turned out to need
-SHARP-specific handling regardless of package name. Don't assume SHG07 will
-behave identically to SHG10 just because both are SHARP/AQUOS — confirm
-independently.
+## SHG07 (AQUOS sense6s) — switched from Stage A placeholders to values inherited from SHG10 (2026-09-14)
+
+**Status change, client-directed:** previously in the same "entirely
+untouched" state as SOG08/SOG07 above. On 2026-09-14 the client asked to
+skip capturing new SHG07 dumps and instead reuse SHG10's confirmed real
+values directly, reasoning that SHG07 and SHG10 are the same SHARP AQUOS
+lineup, in order to test all devices in parallel at once. Done —
+`config/models/sharp_aquos_sense6s.yaml` now uses SHG10's exact schema and
+real values throughout (screen-driven wizard, labeled APN fields, the
+resolved dialog/add-button/overflow ids) instead of Stage A's from-scratch
+invented placeholders.
+
+**This is a reasoned starting point, explicitly NOT independent
+confirmation for SHG07.** The paragraph this replaced said, in almost
+these exact words: *"Don't assume SHG07 will behave identically to SHG10
+just because both are SHARP/AQUOS — confirm independently."* That caution
+was correct and is still true — it's being overridden by the client's
+explicit choice to accept the risk for the sake of moving faster, not
+because the underlying uncertainty went away. Concretely, from this
+project's own history *on SHG10 itself*: the APN screen's title, MCC/MNC's
+digit encoding, and the per-field dialog's ids all had real surprises
+between "looks like it should work" and "confirmed correct" — all found on
+the exact same unit, same Android version, same APK builds. SHG07 is a
+different model on a different Android version (13 vs 14), which
+routinely means different Settings/SetupWizard APK builds with their own
+resource-ids. The setup wizard specifically is the least likely part to
+carry over unchanged — Android's OOBE flow is known to change meaningfully
+between major versions (screens added/removed/reordered), and SHG10's own
+wizard config was never fully confirmed even for SHG10 itself (2 of 9
+button labels still unknown).
+
+**Recommended before any unattended or batch run against a real SHG07
+unit:** a supervised first pass — `--skip-wizard` only, one device at a
+time, client watching every screen exactly like the SHG10 process in
+docs/record.md — before trusting this config in the parallel multi-device
+mode (`--device`, see README.md) or leaving it unattended. A wrong
+resource-id fails loud (a tap that finds nothing) rather than silently
+misfiring, by this project's design throughout — but "fails loud" still
+means watching for it.
+
+See `config/models/sharp_aquos_sense6s.yaml`'s file-level comment for the
+full reasoning, and `tests/test_model_profile.py::test_load_shg07_model_file_inherited_from_shg10`
+for what's pinned down.
+
+Package-name note, carried over from before this change: SHG10's real
+data showed the Settings/Phone app package names (`com.android.settings`,
+`com.android.phone`) were right for SHG10, but the *setup-wizard* package
+assumption was moot there (text-matching replaced it entirely) and
+SHARP-specific screens needed SHARP-specific handling regardless of
+package name — there's no strong reason to expect SHG07's package names
+to differ from SHG10's, but it hasn't been checked.
 
 ## Schema additions beyond the original task prompt's illustrative example
 

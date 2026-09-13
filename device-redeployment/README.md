@@ -68,6 +68,19 @@ directory pytest is invoked from.
    Model numbers: `SOG08` (Xperia Ace III), `SOG07` (Xperia 10 IV), `SHG07`
    (AQUOS sense6s), `SHG10` (AQUOS sense7).
 
+   To run **multiple devices at the same time** (2026-09-14), use `--device
+   SERIAL:MODEL` instead, once per device, in place of `--serial`/`--model`:
+
+   ```bash
+   python src/main_phase2.py --device R3CN123ABC:SOG08 --device 352063910272451:SHG10
+   ```
+
+   All devices in the list start at the same time (a thread per device) and
+   run independently against the same `config/network.yaml` — one device's
+   failure or retry never delays or blocks the others. Exit code is `1` if
+   *any* device failed; check the per-device `SUCCESS`/`FAILED` log lines
+   for which one(s).
+
 Logging goes to stdout and to `logs/main_phase2.log` (level controlled by
 `config/settings.yaml`'s `logging.level`). Exit code is `0` on success
 (device reached the `LOGIN_INSTALL` state — Phase 2's success condition;

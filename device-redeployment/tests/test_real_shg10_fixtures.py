@@ -21,7 +21,11 @@ from src.device.ui_automator import (
 )
 from src.phase2.apn_setup import _looks_like_apn_list_screen
 
-FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+# Real dumps are organized per-model under tests/fixtures/ (folder names
+# match the device's marketing name + model number, e.g. this one holds
+# every *_SHG10.xml fixture) — SHG07/SOG07/SOG08 have matching empty
+# folders reserved for their own real dumps once captured.
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "AQUOS sense7（SHG10）"
 
 WIFI_LIST_XML = (FIXTURES_DIR / "wifi_list_SHG10.xml").read_text(encoding="utf-8")
 APN_ENTRY_TOP_XML = (FIXTURES_DIR / "apn_entry_top_SHG10.xml").read_text(encoding="utf-8")
