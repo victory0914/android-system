@@ -26,48 +26,67 @@ state. Not a real failure (the check is soft — it never blocks success on
 its own), but misleading. `_save_apn()` now retries the check once after
 a short delay before giving up. See "Resolved" below.
 
+**⚠️ 2026-09-15 update: SHG10's known-working state above may no longer
+hold.** A later change (client request, "same input method across every
+device") set `use_keyevent_text_entry: true` on SHG10 too — and a
+subsequent SHG07 finding proved that mechanism doesn't actually bypass a
+Japanese-conversion IME for letters (it silently turned "rakuten.jp" into
+「らくてん。」 there). SHG10 hasn't been re-tested since either change. See
+"🚨 SHG07 cannot currently save a real APN entry at all — and SHG10 may
+now be at risk of the same regression" immediately below — this is now
+the single most important open item, ahead of the wizard/other-models
+priorities that follow it.
+
 SHG10's wizard is on a photograph-derived, text-matching config — real
 dumps for the wizard are **not obtainable on any model, ever** (structural
 ADB/factory-reset constraint, see docs/record.md); 2 of 9 screens' button
-labels are still unverified (see "Highest priority" below). **SOG08,
-SOG07, and SHG07 are entirely untouched** — still 100% Stage A
-placeholders, not started — now the next real priority since SHG10 itself
-is working.
+labels are still unverified. **SOG08 and SOG07 are entirely untouched** —
+still 100% Stage A placeholders, not started.
 
 ## Highest priority
 
-With SHG10's Wi-Fi + APN flow now confirmed working end to end, the two
-remaining priorities are both further below (kept in their original
-sections rather than duplicated here):
+### 🚨 SHG07 cannot currently save a real APN entry at all — and SHG10 may now be at risk of the same regression
+
+**This supersedes the "low risk" framing below and in the 2026-09-15
+commit that enabled `use_keyevent_text_entry` on SHG10.** A client
+screenshot (2026-09-15) proved the round-1 SHG07 "fix" was itself wrong:
+per-keyevent text entry does NOT bypass this device's IME for *letters*
+the way it does for digits — Gboard's Japanese romaji-to-kana conversion
+intercepts individual `KEYCODE_A`/`KEYCODE_K`/etc. events exactly like it
+would intercept typed romaji, turning "rakuten.jp" into 「らくてん。」. See
+"SHG07 text entry: root cause now confirmed, still NOT actually solved"
+further below for the full account.
+
+**Consequences:**
+1. **SHG07**: still cannot save a correct APN entry. A real fix (not yet
+   attempted) needs real investigation — `adb shell ime list -a` to find
+   an actual available non-converting input method, or the Telephony
+   ContentProvider direct-write path. Not something to guess at further.
+2. **SHG10 is now a genuine regression risk, not just "unverified"**: its
+   profile also has `use_keyevent_text_entry: true` set (per client
+   request, 2026-09-15, applied *before* round 2's finding). Since SHG10's
+   own MCC/MNC problem was also IME-driven, there's real reason to expect
+   SHG10 has the same kind of Japanese-conversion IME active — meaning its
+   next run may ALSO produce a transformed 名前/APN value instead of the
+   "rakuten.jp" that worked in its last real success (2026-09-11). The
+   2026-09-15 read-back-verification fix means this would now fail loud
+   (safe) rather than silently save garbage (which is what would have
+   happened before that fix) — but it would still be a real functional
+   regression on a device that was working. **Recommend confirming with
+   the client whether to revert SHG10's `use_keyevent_text_entry` back to
+   unset** (restoring its known-working `input_text_direct()` path) until
+   SHG07's actual fix is found and can be evaluated for whether it's safe
+   to extend to SHG10 too.
+
+Both devices need a supervised, one-at-a-time re-test — not the parallel
+`--device` mode — until this is resolved.
+
+### Other priorities (unchanged, kept in their original sections below)
 
 - **"Two wizard button labels — still the only wizard gap"** (under
-  "SHG10 (AQUOS sense7...)" below) — now the main SHG10 gap: everything
-  else is implemented and confirmed working. Resolving these (or
-  accepting the risk and testing anyway) is what's needed to confirm a
-  *complete* fresh-device flow (wizard + Wi-Fi + APN), not just Wi-Fi +
-  APN with `--skip-wizard`.
-- **A supervised re-test of SHG07 with the IME/keyevent fix applied** —
-  the first real contact with this unit already found one real divergence
-  from SHG10 (the active IME affects 名前/APN text entry there, not just
-  MCC/MNC as on SHG10) — see "First real SHG07 finding..." further below
-  for the fix (`use_keyevent_text_entry`) and its limitations. Not yet
-  re-verified against a live run. This is exactly the kind of divergence
-  the inheritance decision was flagged as risking, so treat every
-  subsequent SHG07 screen the same way — supervised, one device at a time
-  — until proven otherwise, not just this one.
-- **A supervised re-test of SHG10 too**, for a different reason: client
-  requested the same input method (keyevent-based text entry) be applied
-  to every device, not just where the problem first surfaced — SHG10's
-  profile now also sets `use_keyevent_text_entry: true`, even though its
-  own real, confirmed end-to-end success (2026-09-11) used
-  `input_text_direct()` for these exact fields. The underlying mechanism
-  is already proven on this device (it's what fixed SHG10's own MCC/MNC),
-  but this specific combination — keyevents for 名前/APN on SHG10 — has
-  not itself been run against real hardware. Low risk (same proven
-  primitive, same real value "rakuten.jp" fits its character set, fails
-  loud on anything it doesn't support) but still a behavior change to a
-  path that currently works, so it should be watched on the next run
-  rather than assumed safe.
+  "SHG10 (AQUOS sense7...)" below) — everything else about SHG10 is
+  implemented; this is what's needed for a *complete* fresh-device flow
+  (wizard + Wi-Fi + APN), not just Wi-Fi + APN with `--skip-wizard`.
 - **"SOG08 / SOG07 — entirely untouched"** (same section) — still 100%
   Stage A placeholders, no real data of any kind. Next priority once
   hardware for them is available.
@@ -550,54 +569,92 @@ SHARP-specific screens needed SHARP-specific handling regardless of
 package name — there's no strong reason to expect SHG07's package names
 to differ from SHG10's, but it hasn't been checked.
 
-### First real SHG07 finding, confirming the caution above (2026-09-14): IME affects text entry, not just digits
+### SHG07 text entry: root cause now confirmed, still NOT actually solved (2026-09-14/15)
 
-Client's first real dump against this unit
-(`tests/fixtures/AQUOS sense6s（SHG07）/apn_input_dialog_SHG07.xml`) and
-accompanying report: the active Japanese input method prevents entering
-the intended half-width alphanumeric characters into 名前/APN, not just
-MCC/MNC as was true on SHG10. This is exactly the category of divergence
-the inheritance warning above predicted — real, on a real SHG07 unit,
-found on first contact.
+**Status: real APN entries on SHG07 still cannot be correctly saved.**
+This took two rounds to get right — the first "fix" below was itself
+wrong, caught only because a second real screenshot proved it.
 
-- **Structure confirmed matching**: the dialog itself (title at
-  `com.android.settings:id/alertTitle`, EditText at `android:id/edit`, "OK"
-  at `android:id/button1`, "キャンセル" at `android:id/button2`) is
-  byte-for-byte the same shape as SHG10's own confirmed dialog — the
-  inherited ids were right for this part.
-- **Character entry was not** — `input_text_direct()` ("input text"),
-  proven working for SHG10's 名前/APN, is affected by SHG07's active IME.
-  Root cause not fully diagnosed (unlike SHG10's full-width-digit finding,
-  no dump exists showing the actual wrong committed characters — the
-  client's report describes entry being blocked/wrong, not a specific
-  garbled string), but the fix doesn't require knowing the exact
-  mechanism: `input_ascii_direct()` (`src/device/ui_automator.py`) sends
-  each character as its own `adb shell input keyevent KEYCODE_<X>`,
-  generalizing the same per-keyevent strategy that already fixed SHG10's
-  MCC/MNC. New `apn_settings.use_keyevent_text_entry: true` opts SHG07's
-  profile into it for 名前/APN too (MCC/MNC already used keyevents
-  regardless of this flag). **Not set on SHG10** — `input_text_direct()`
-  stays SHG10's proven-working path, unchanged.
-- **Limitation, by design**: `input_ascii_direct()` only supports
-  lowercase a-z, 0-9, `.`, and `-` — every real APN value seen in this
-  project so far (docs/record.md) fits that set. Uppercase specifically
-  isn't supported (a per-keyevent shift chord isn't reliably achievable
-  via `adb shell input keyevent`, which sends one bare press+release per
-  call) — raises `ValueError` rather than silently mishandling it if a
-  real value ever needs it.
-- **Deliberately not attempted**: detecting and switching the device's
-  active IME directly (e.g. `adb shell ime set <id>` /
-  `settings put secure default_input_method`). No real, confirmed IME
-  component id exists for this device — guessing one risks silently
-  switching to the wrong (or no) keyboard, a global device-state change
-  with no clear undo path, which is a materially worse failure mode than
-  routing around the problem entirely. A new read-only diagnostic,
-  `get_current_ime()`, logs the active IME's id (via `dumpsys
-  input_method`) on every `configure_apn()` call without acting on it —
-  purely so a future run's log carries real evidence if this class of
-  problem shows up on another device.
+**Round 1 (2026-09-14):** client's first real dump/report — the active
+Japanese IME prevents entering intended half-width alphanumeric
+characters into 名前/APN, not just MCC/MNC as on SHG10. Structure was
+confirmed matching SHG10 (same dialog ids throughout). Hypothesis at the
+time: `input_ascii_direct()` (per-character `adb shell input keyevent
+KEYCODE_<X>`) would bypass the IME the same way it already does for
+digits, since that's exactly what fixed SHG10's MCC/MNC full-width-digit
+bug. `apn_settings.use_keyevent_text_entry: true` was set on SHG07 (and
+later, per a separate client request, on SHG10 too — see the
+"Highest priority" entry above) on that theory.
 
-Still not re-verified against a live SHG07 run with this fix applied.
+**Round 2 (2026-09-15) — the theory was wrong, proven by a client
+screenshot:** with the "fix" from round 1 active, the client typed
+"rakuten.jp" into the 名前 field and the dialog showed **「らくてん。」**
+instead — hiragana "rakuten" plus a Japanese full-width period. This
+directly disproves the round-1 assumption: individual key**events**
+for *letters* are NOT immune to the IME's conversion the way key**events**
+for *digits* are. The real mechanism: Gboard's Japanese input mode
+performs live romaji-to-kana conversion on Latin letter keys as they
+arrive — `a`, `k`, `u` etc. are romaji syllable input, so the IME
+intercepts and converts them regardless of whether they arrive via
+`input text` (already known broken, round 1) or via individual
+`KEYCODE_A`/`KEYCODE_K`/`KEYCODE_U` keyevents (the round-1 "fix" — turns
+out equally affected). Digit keycodes are immune only because digits
+aren't romaji syllables, so the IME's conversion table has nothing to do
+with them — this is why `input_digits_direct()` has never actually failed
+on any device tested so far, but `input_ascii_direct()`'s promise for
+*letters* never held.
+
+**Confirms `get_current_ime()` alone isn't enough of a diagnostic**: the
+run's own log showed `mCurMethodId=com.google.android.inputmethod.latin/
+com.android.inputmethod.latin.LatinIME` (Gboard) at the exact moment this
+happened — that's Gboard's **package id**, which stays constant across
+every language it supports; it says nothing about which **subtype**
+(language/layout — Japanese kana vs. English) is currently active, which
+is what actually matters here. A future diagnostic would need
+`dumpsys input_method`'s subtype/locale info too, not just
+`mCurMethodId`.
+
+**What's actually fixed vs. still broken:**
+- ✅ **Fixed**: `_fill_labeled_field()` now reads back the field's actual
+  committed text right after typing, before ever tapping confirm — if it
+  doesn't match what was intended, this is a hard failure (see
+  "Resolved" below for the mechanism). Before this, the entire
+  configure_apn() call reported `SUCCESS`/`reached LOGIN_INSTALL` with
+  「らくてん。」 silently saved as the APN name — a real instance of
+  exactly the "silent wrong action" this project has tried hardest to
+  avoid throughout. This is now impossible for this specific failure
+  mode: a transformed value fails loudly instead.
+- ❌ **NOT fixed**: there is still no known way to get correct half-width
+  alphanumeric text into an SHG07 APN field at all. `use_keyevent_text_entry`
+  remains set (harmless now that the read-back check guards it, and it
+  may still matter for a device where only digits are affected, as
+  originally seen on SHG10) but does not solve this. Real APN entries on
+  SHG07 cannot currently be saved by this automation.
+- **Real options for an actual fix, none yet attempted (need real
+  investigation before any of these are implemented, not more guessing)**:
+  1. Find and switch to a non-converting input subtype/IME. `adb shell ime
+     list -a` (read-only, safe) would show what's actually installed and
+     available on this device — real data this project doesn't have yet.
+  2. Write the APN directly via Android's Telephony ContentProvider (`adb
+     shell content insert/update --uri content://telephony/carriers ...`),
+     bypassing UI text entry (and therefore the IME) entirely. Real,
+     documented Android mechanism, but whether the plain `shell` UID has
+     the necessary permission on this device (non-rooted) is unconfirmed —
+     needs a real test, not an assumption.
+  3. Investigate whether a genuinely different injection path (not
+     `input text`, not `input keyevent`) exists that bypasses IME
+     composition entirely for Latin text specifically.
+- **Deliberately still not attempted**: blindly switching the device's
+  default IME/subtype via a guessed id (e.g. `settings put secure
+  default_input_method`) — same reasoning as before, now reinforced: round
+  1 already showed once that a plausible-sounding "bypass" theory can be
+  wrong in a way that isn't obvious until real hardware proves it. Guessing
+  an IME/subtype id risks a worse, harder-to-diagnose failure than the one
+  it would replace.
+
+Not yet re-verified against a live SHG07 run — the read-back check should
+now make the *next* attempt fail loudly and immediately at 名前, rather
+than reporting false success.
 
 ## Schema additions beyond the original task prompt's illustrative example
 

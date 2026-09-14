@@ -596,11 +596,22 @@ own real, confirmed end-to-end success (2026-09-11) used
 mechanism isn't new to SHG10 — the same per-keyevent strategy already
 fixed this device's own MCC/MNC full-width-digit bug — but this precise
 combination (keyevents for 名前/APN specifically, on SHG10) hasn't itself
-been run against real hardware. Low risk (proven primitive, "rakuten.jp"
-fits the supported character set, fails loud on anything it doesn't) but
-still an unverified behavior change to a path that currently works — see
-PENDING_REAL_DEVICE_DATA.md's "Highest priority" for the recommendation to
-watch this on the next SHG10 run rather than assume it's a no-op.
+been run against real hardware. Assessed at the time as low risk (proven
+primitive, "rakuten.jp" fits the supported character set, fails loud on
+anything it doesn't).
+
+**⚠️ Correction, same day, see SHG07's section below**: that risk
+assessment turned out to be wrong. A subsequent SHG07 finding proved
+per-keyevent text entry does NOT actually bypass a Japanese-conversion
+IME for *letters* (only digits) — it silently transformed "rakuten.jp"
+into 「らくてん。」 there. Since SHG10's own MCC/MNC issue was also
+IME-driven, this flag may cause the same failure on SHG10's next run, not
+a no-op as assessed here. The 2026-09-15 read-back-verification fix means
+this would now fail loud rather than silently regress, but it would still
+be a real functional break on a path proven working 2026-09-11. See
+PENDING_REAL_DEVICE_DATA.md's "🚨 SHG07 cannot currently save a real APN
+entry..." entry — recommending confirming with the client whether to
+revert this flag on SHG10 until SHG07's actual fix is found.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
@@ -731,6 +742,71 @@ below).
   every device, not just SHG07 where the problem first surfaced. See the
   matching entry under SHG10's section — `use_keyevent_text_entry: true`
   is now also set on SHG10's profile.
+- *2026-09-15 (same day — the fix above was wrong, proven by a client
+  screenshot):* Client typed "rakuten.jp" into the 名前 field with
+  `use_keyevent_text_entry` active and the dialog showed **「らくてん。」**
+  instead — hiragana "rakuten" plus a Japanese full-width period, not the
+  intended half-width ASCII text. This disproves 2026-09-14's core
+  assumption: individual keyevents for *letters* are NOT immune to this
+  device's IME the way keyevents for *digits* are. Real mechanism: Gboard's
+  Japanese input mode performs live romaji-to-kana conversion on Latin
+  letter keys as they arrive (`a`/`k`/`u`/etc. are romaji syllable input,
+  so the IME intercepts and converts them) — this happens whether the
+  letters arrive via `input text` (already known broken) or via individual
+  `KEYCODE_A`/`KEYCODE_K`/`KEYCODE_U` events (2026-09-14's "fix" — turns
+  out equally affected). Digit keycodes are immune only because digits
+  aren't romaji syllables, which is why `input_digits_direct()` has never
+  actually failed on any device tested — but `input_ascii_direct()`'s
+  promise for *letters* never held.
+
+  Also settles why `get_current_ime()` didn't already reveal this: the
+  run's log showed `mCurMethodId=com.google.android.inputmethod.latin/
+  com.android.inputmethod.latin.LatinIME` (Gboard) at the exact moment
+  this happened — that's Gboard's **package id**, constant across every
+  language it supports, not the currently active **subtype** (language/
+  layout). A future diagnostic would need subtype/locale info too, not
+  just `mCurMethodId`.
+
+  **The serious part**: every step up to this point — the row tap, the
+  edit-field tap, the typing call itself, even the confirm-button tap —
+  reported success with no error. The *previous* run (before this was
+  caught) actually logged `SUCCESS: reached LOGIN_INSTALL` while silently
+  saving 「らくてん。」 as the real APN name — a genuine instance of the
+  "silent wrong action" this project has tried hardest to avoid throughout.
+  Fixed: `_fill_labeled_field()` now reads back the field's actual
+  committed text immediately after typing, before ever tapping confirm —
+  if it doesn't match what was intended, this is now a hard failure
+  (logged with both the intended and actual value) instead of proceeding.
+  This does not solve the underlying "how do we type correct text on
+  SHG07" problem — it only guarantees a wrong value can no longer be
+  silently saved; the automation still cannot successfully save a real
+  APN entry on SHG07 as of this entry. New regression test,
+  `test_fill_labeled_field_fails_loudly_when_typed_text_is_transformed`,
+  pins this exact scenario down directly.
+
+  **Consequence for SHG10**: since `use_keyevent_text_entry` was just set
+  there too (previous entry, same day) on the assumption it was safe, and
+  SHG10's own MCC/MNC problem was also IME-driven, there's real reason to
+  suspect SHG10 may hit the same letter-conversion issue on its next real
+  run — which would now fail loud (safe, thanks to the fix above) rather
+  than silently regress, but would still be a real functional regression
+  on a device whose 名前/APN entry was previously proven working
+  (2026-09-11). Flagged in PENDING_REAL_DEVICE_DATA.md as the top
+  priority — recommending confirming with the client whether to revert
+  SHG10's flag until SHG07's actual fix is found.
+
+  Real options for an actual SHG07 fix, none yet attempted: (1) `adb
+  shell ime list -a` (read-only, safe) to find a genuinely available
+  non-converting input method/subtype on this device — real data this
+  project doesn't have yet; (2) writing the APN directly via Android's
+  Telephony ContentProvider (`content insert/update --uri
+  content://telephony/carriers`), bypassing UI text entry (and the IME)
+  entirely — whether the plain `shell` UID has permission for this on a
+  non-rooted device is unconfirmed, needs a real test; (3) some other
+  injection path not yet identified. Blindly guessing an IME/subtype id
+  to switch to remains explicitly ruled out — round 1 of this same
+  investigation already showed once that a plausible-sounding "bypass"
+  theory can be wrong in a way only real hardware reveals.
 
 ---
 

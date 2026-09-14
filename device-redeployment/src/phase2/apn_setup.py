@@ -199,6 +199,32 @@ def _fill_labeled_field(
     elif not input_text_direct(client, value):
         return False
 
+    # Read back what actually landed in the field BEFORE confirming —
+    # real, concrete proof this matters (client screenshot, 2026-09-15,
+    # SHG07): the active IME silently transformed keyevent-typed
+    # "rakuten.jp" into "らくてん。" (romaji-to-kana conversion, the "."
+    # becoming a Japanese full-width "。") — the field-row tap, the
+    # edit-field tap, input_ascii_direct() itself, and the confirm-button
+    # tap all "succeeded" with no error at any step, so nothing before
+    # this point could have caught it. Only the field's own committed text
+    # reveals whether typing actually produced what was intended, for
+    # EITHER text-entry mechanism (input_text_direct() is not assumed safe
+    # here either — it was never actually proven immune to this on SHG07,
+    # only on SHG10). Skipped when edit_field isn't configured (nothing to
+    # read back from).
+    if edit_field:
+        ui_xml = dump_ui(client)
+        actual = get_node_text(ui_xml, edit_field)
+        if actual != value:
+            logger.error(
+                "apn field %r: typed %r but the field now reads %r — the "
+                "active input method appears to have transformed it "
+                "(see docs/record.md, 2026-09-15). Refusing to confirm/save "
+                "a value that doesn't match what was actually intended.",
+                label, value, actual,
+            )
+            return False
+
     confirm_button = apn.get("dialog_confirm_button_resource_id")
     if confirm_button and not tap_resource_id(client, confirm_button):
         logger.error(

@@ -10,10 +10,73 @@ rendered via content-desc on the toolbar (same pattern as the edit form's
 there to find, not a resource-id/text mismatch to work around."""
 
 import logging
+import xml.etree.ElementTree as ET
 
 from src.device.model_profile import ModelProfile
 from src.phase2.apn_setup import configure_apn
 from tests.fakes import FakeAdbClient
+
+# Reverse of ui_automator.py's input_digits_direct()/input_ascii_direct()
+# keycode maps — used only by _EchoingEditFieldMixin below to reconstruct
+# what a real device's EditText would actually show after typing.
+_KEYEVENT_TO_CHAR = {
+    **{f"KEYCODE_{d}": d for d in "0123456789"},
+    **{f"KEYCODE_{c.upper()}": c for c in "abcdefghijklmnopqrstuvwxyz"},
+    "KEYCODE_PERIOD": ".",
+    "KEYCODE_MINUS": "-",
+}
+
+
+class _EchoingEditFieldMixin:
+    """Mix into a FakeAdbClient subclass so that after input_text_direct()/
+    input_ascii_direct()/input_digits_direct() "type" a value via shell(),
+    the *next* dump reflects it on the `android:id/edit` node — modeling a
+    real device's IME correctly committing what was typed. This is the
+    happy-path counterpart to the 2026-09-15 read-back verification added
+    to _fill_labeled_field() (real finding: SHG07's IME silently
+    transformed typed text instead) — without this, every hand-written
+    static fixture's edit node has no `text` at all, which the new check
+    would now (correctly) treat as every field failing to commit.
+
+    Resets whenever a new `input tap` happens (a new dialog's own typing
+    session starting) — every profile fixture in this file uses
+    "android:id/edit" for dialog_edit_field_resource_id, so that's hardcoded
+    here rather than threaded through every call site.
+    """
+
+    _EDIT_FIELD_RESOURCE_ID = "android:id/edit"
+    _typed = ""
+
+    def shell(self, command, timeout=30):
+        result = super().shell(command, timeout=timeout)
+        if command.startswith("input tap"):
+            self._typed = ""
+        elif command.startswith('input text "'):
+            self._typed = command[len('input text "') : -1]
+        elif command.startswith("input keyevent "):
+            keycode = command[len("input keyevent ") :]
+            self._typed += _KEYEVENT_TO_CHAR.get(keycode, "")
+        return result
+
+    def pull(self, remote_path, local_path):
+        result = super().pull(remote_path, local_path)
+        if self._typed:
+            with open(local_path, encoding="utf-8") as fh:
+                xml_text = fh.read()
+            if f'resource-id="{self._EDIT_FIELD_RESOURCE_ID}"' in xml_text:
+                root = ET.fromstring(xml_text)
+                for node in root.iter("node"):
+                    if node.get("resource-id") == self._EDIT_FIELD_RESOURCE_ID:
+                        node.set("text", self._typed)
+                with open(local_path, "w", encoding="utf-8") as fh:
+                    fh.write(ET.tostring(root, encoding="unicode"))
+        return result
+
+
+class EchoingFakeAdbClient(_EchoingEditFieldMixin, FakeAdbClient):
+    """Plain FakeAdbClient + _EchoingEditFieldMixin, for tests that need
+    correct field-typing echo but none of ApnPostSaveClient's/
+    ScrollRevealsMncClient's other stateful behavior."""
 
 LEGACY_PROFILE = ModelProfile(
     {
@@ -86,6 +149,31 @@ LABELED_SCREEN_XML = """<hierarchy>
   <node resource-id="android:id/button1" bounds="[0,800][100,900]" />
 </hierarchy>"""
 
+# Real bug (client screenshot, 2026-09-15, SHG07): typing "rakuten.jp"
+# produced "らくてん。" in the field — the active IME's romaji-to-kana
+# auto-conversion silently transformed it. Every step up to and including
+# the typing call itself "succeeded" with no error from ui_automator's
+# point of view; only reading back the field's actual committed text
+# reveals the mismatch.
+MISTRANSLATED_EDIT_FIELD_XML = LABELED_SCREEN_XML.replace(
+    '<node resource-id="android:id/edit" bounds="[0,700][100,800]" />',
+    '<node resource-id="android:id/edit" text="らくてん。" bounds="[0,700][100,800]" />',
+)
+
+
+def test_fill_labeled_field_fails_loudly_when_typed_text_is_transformed():
+    """The actual real-world failure this project hit: nothing before the
+    2026-09-15 read-back check could have caught this (the row tap, the
+    edit-field tap, and the typing call itself all "succeed"). Must fail
+    loud and — critically — never tap confirm on a field that doesn't
+    actually contain what was typed, so a transformed value is never
+    silently saved."""
+    client = FakeAdbClient(ui_dumps=[MISTRANSLATED_EDIT_FIELD_XML] * 30)
+    result = configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+    assert result is False
+    confirm_tap = "input tap {} {}".format((0 + 100) // 2, (800 + 900) // 2)
+    assert confirm_tap not in client.shell_calls
+
 
 def test_configure_apn_legacy_shape_succeeds():
     client = FakeAdbClient(ui_dumps=[LEGACY_SCREEN_XML] * 10)
@@ -110,7 +198,7 @@ def test_configure_apn_labeled_shape_injects_correct_values_before_failing_at_sa
     (per-digit keyevents) instead of input_text_direct() — a *later* real
     finding (2026-09-11) showed `input text` commits full-width digits on
     this device; see _fill_labeled_field()'s docstring."""
-    client = FakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
     configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
     direct_injected = [c for c in client.shell_calls if c.startswith("input text ")]
     assert not any("ADB_INPUT_TEXT" in c for c in client.shell_calls)
@@ -148,7 +236,7 @@ def test_configure_apn_uses_keyevents_for_all_fields_when_flagged():
     input_ascii_direct() (per-character keyevents) instead of
     input_text_direct() — MCC/MNC already did via numeric_only regardless
     of this flag, so this only changes the two text fields."""
-    client = FakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
     configure_apn(client, KEYEVENT_TEXT_ENTRY_PROFILE, "rakuten.jp", "440", "11")
     assert not any(c.startswith("input text ") for c in client.shell_calls)
     # "rakuten.jp" typed via keyevents: r-a-k-u-t-e-n-.-j-p
@@ -161,7 +249,7 @@ def test_configure_apn_labeled_shape_still_uses_input_text_by_default():
     """Confirms the flag is opt-in, not a global behavior change — SHG10's
     profile (LABELED_PROFILE here has no use_keyevent_text_entry key) must
     keep using input_text_direct() for 名前/APN exactly as before."""
-    client = FakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
     configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
     assert 'input text "rakuten.jp"' in client.shell_calls
 
@@ -406,7 +494,7 @@ def test_mcc_mnc_length_patterns():
 # MCC/MNC rows are below the fold in the scrollable form) ------------------
 
 
-class ScrollRevealsMncClient(FakeAdbClient):
+class ScrollRevealsMncClient(_EchoingEditFieldMixin, FakeAdbClient):
     """The MNC row is stripped out of every dump until at least one scroll
     (`input swipe`) has happened, then present afterward — models the real
     finding (2026-09-08): MCC/MNC rows are below the fold in the
@@ -448,7 +536,7 @@ def test_fill_labeled_field_scrolls_when_row_not_immediately_present():
 # blocked by a validation dialog if any required field was empty/invalid ---
 
 
-class ApnPostSaveClient(FakeAdbClient):
+class ApnPostSaveClient(_EchoingEditFieldMixin, FakeAdbClient):
     """After the "保存" tap (bounds hardcoded to match SAVE_FLOW_SCREEN_XML
     below), subsequent uiautomator dumps return `post_save_xml` instead of
     whatever the base ui_dumps list would serve next — models the real
@@ -567,7 +655,10 @@ class ApnPostSaveDelayedVisibilityClient(ApnPostSaveClient):
                 fh.write(xml)
             self.pulled_files[remote_path] = local_path
             return self.pull_result
-        return FakeAdbClient.pull(self, remote_path, local_path)
+        # super().pull() — not FakeAdbClient.pull() directly — so the MRO
+        # still reaches _EchoingEditFieldMixin.pull() (via ApnPostSaveClient)
+        # while not-yet-save-tapped, letting field-typing echo correctly.
+        return super().pull(remote_path, local_path)
 
 
 def test_configure_apn_retries_post_save_check_before_warning(monkeypatch, caplog):
