@@ -98,6 +98,12 @@ def test_load_shg10_model_file_screen_driven_wizard_and_labeled_apn_fields():
     assert apn["save_button_resource_id"] is None
     assert apn["overflow_menu_content_desc"] == "その他のオプション"
     assert apn["save_menu_item_text"] == "保存"
+    # Client request (2026-09-15): same input method across every device —
+    # SHG10 now opts into the same keyevent-based text entry SHG07 needed,
+    # even though SHG10's own real end-to-end success (2026-09-11) used
+    # input_text_direct() for 名前/APN. Not itself re-verified on real
+    # SHG10 hardware yet — see docs/record.md, PENDING_REAL_DEVICE_DATA.md.
+    assert apn["use_keyevent_text_entry"] is True
 
 
 @pytest.mark.parametrize("filename", SCREEN_DRIVEN_MODEL_FILES)
@@ -165,6 +171,11 @@ def test_load_shg07_model_file_inherited_from_shg10():
     assert apn["add_button_content_desc"] == "新しい APN"
     assert apn["overflow_menu_content_desc"] == "その他のオプション"
     assert apn["save_menu_item_text"] == "保存"
+    # This one is real SHG07 data, not inherited — see docs/record.md,
+    # 2026-09-14: the client's first real SHG07 dump/report found the
+    # active IME interferes with plain `input text` entry for 名前/APN
+    # there, unlike SHG10.
+    assert apn["use_keyevent_text_entry"] is True
 
 
 def test_load_all_keys_by_model_number():

@@ -202,6 +202,22 @@ apn_settings:
   # elsewhere in this device's mostly-Japanese UI).
   dialog_confirm_button_resource_id: "android:id/button1"
 
+  # Client request (2026-09-15): use the same input method across every
+  # device, not just where a problem happened to surface first. Originally
+  # added only for SHG07, where the active IME was found to interfere with
+  # plain `input text` alphanumeric entry (docs/record.md, 2026-09-14).
+  # SHG10 itself never showed that specific symptom for 名前/APN — real,
+  # confirmed end-to-end success used input_text_direct() for these two
+  # fields (2026-09-11) — but the underlying keyevent mechanism this
+  # enables IS already proven on this exact device, just for MCC/MNC
+  # (full-width-digit fix, same date). Real value "rakuten.jp" fits
+  # input_ascii_direct()'s supported character set (a-z/0-9/./-) fine.
+  # UNVERIFIED IN THIS SPECIFIC COMBINATION: input_ascii_direct() has not
+  # itself been used for 名前/APN on real SHG10 hardware yet — recommend a
+  # supervised re-test before the next unattended/parallel run, same as
+  # any other behavior change here.
+  use_keyevent_text_entry: true
+
   # Has no resource-id at all on this build (icon-only button, standard
   # AOSP-style Button/ImageButton with no android:id set) — confirmed by a
   # real dump, not just absence of evidence: tests/fixtures/

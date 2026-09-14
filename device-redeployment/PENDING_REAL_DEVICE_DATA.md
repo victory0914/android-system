@@ -55,6 +55,19 @@ sections rather than duplicated here):
   the inheritance decision was flagged as risking, so treat every
   subsequent SHG07 screen the same way — supervised, one device at a time
   — until proven otherwise, not just this one.
+- **A supervised re-test of SHG10 too**, for a different reason: client
+  requested the same input method (keyevent-based text entry) be applied
+  to every device, not just where the problem first surfaced — SHG10's
+  profile now also sets `use_keyevent_text_entry: true`, even though its
+  own real, confirmed end-to-end success (2026-09-11) used
+  `input_text_direct()` for these exact fields. The underlying mechanism
+  is already proven on this device (it's what fixed SHG10's own MCC/MNC),
+  but this specific combination — keyevents for 名前/APN on SHG10 — has
+  not itself been run against real hardware. Low risk (same proven
+  primitive, same real value "rakuten.jp" fits its character set, fails
+  loud on anything it doesn't support) but still a behavior change to a
+  path that currently works, so it should be watched on the next run
+  rather than assumed safe.
 - **"SOG08 / SOG07 — entirely untouched"** (same section) — still 100%
   Stage A placeholders, no real data of any kind. Next priority once
   hardware for them is available.
@@ -335,6 +348,16 @@ recognize full-width digits as digits at all.
 Legacy-shape models (the 3 untouched by Stage B) still default to
 `inject_text()` — this finding is specific to this real device, not
 generalized to models with no data of their own yet.
+
+Fourth finding, 2026-09-14 (SHG07, a *different* device): unlike SHG10, on
+SHG07 the active IME was reported to affect plain alphanumeric `input
+text` entry too — not just digits. `input_ascii_direct()` generalizes
+`input_digits_direct()`'s per-keyevent strategy to lowercase a-z/0-9/./- ;
+`apn_settings.use_keyevent_text_entry: true` opts a model's 名前/APN
+fields into it. Set on SHG07 (where the problem was found) and, per
+client request 2026-09-15, on SHG10 too (see "Highest priority" above) for
+consistency across every device — even though SHG10 itself never showed
+this specific symptom for 名前/APN.
 
 ### Not resolved (genuinely absent from available data — not guessed)
 - `wifi_settings.password_field_resource_id` / `connect_button_resource_id`

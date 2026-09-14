@@ -583,6 +583,25 @@ reserved for SHG07/SOG07/SOG08's own future real dumps.
 `.gitkeep` files added to the three currently-empty model folders so the
 structure survives being committed.
 
+### 2026-09-15: SHG10 also opted into SHG07's keyevent-based text entry
+
+Client asked for the same input method to be applied across every device,
+not just SHG07 (where the active IME was found, 2026-09-14, to interfere
+with plain alphanumeric `input text` entry into 名前/APN). SHG10's profile
+now also sets `apn_settings.use_keyevent_text_entry: true`, routing
+名前/APN through `input_ascii_direct()` (per-character keyevents) there
+too — even though SHG10 never showed this specific symptom itself: its
+own real, confirmed end-to-end success (2026-09-11) used
+`input_text_direct()` for these exact two fields. The underlying
+mechanism isn't new to SHG10 — the same per-keyevent strategy already
+fixed this device's own MCC/MNC full-width-digit bug — but this precise
+combination (keyevents for 名前/APN specifically, on SHG10) hasn't itself
+been run against real hardware. Low risk (proven primitive, "rakuten.jp"
+fits the supported character set, fails loud on anything it doesn't) but
+still an unverified behavior change to a path that currently works — see
+PENDING_REAL_DEVICE_DATA.md's "Highest priority" for the recommendation to
+watch this on the next SHG10 run rather than assume it's a no-op.
+
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
   *directory* (`C:\platform-tools`), but was being passed straight through
@@ -708,6 +727,10 @@ below).
   carries real evidence if this class of problem shows up on another
   device, rather than needing to guess again.
 - Not yet re-verified against a live SHG07 run with this fix applied.
+- *2026-09-15:* Client requested the same input method be applied across
+  every device, not just SHG07 where the problem first surfaced. See the
+  matching entry under SHG10's section — `use_keyevent_text_entry: true`
+  is now also set on SHG10's profile.
 
 ---
 
