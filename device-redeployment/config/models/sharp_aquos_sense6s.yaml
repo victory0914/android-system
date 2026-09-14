@@ -163,6 +163,14 @@ apn_settings:
   mnc_field_label: "MNC"
   dialog_edit_field_resource_id: "android:id/edit"
   dialog_confirm_button_resource_id: "android:id/button1"
+  # RESOLVED (real, tests/fixtures/AQUOS sense6s（SHG07）/apn_input_dialog_
+  # SHG07.xml — same dump that confirmed the two ids above): "キャンセル" at
+  # android:id/button2, matching SHG10's exact same structure. Added
+  # 2026-09-15 so apn_setup.py can back out of a dialog whose typed text
+  # didn't commit correctly (see use_keyevent_text_entry below) instead of
+  # leaving it open — real finding the same day: a left-open dialog caused
+  # every subsequent run/retry to fail navigation too.
+  dialog_cancel_button_resource_id: "android:id/button2"
   add_button_resource_id: null
   add_button_content_desc: "新しい APN"
   overflow_menu_content_desc: "その他のオプション"

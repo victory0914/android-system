@@ -201,6 +201,14 @@ apn_settings:
   # (not by the English "OK" text, which would be a translation trap
   # elsewhere in this device's mostly-Japanese UI).
   dialog_confirm_button_resource_id: "android:id/button1"
+  # RESOLVED (same dump) — the "キャンセル" button noted above. Added
+  # 2026-09-15: apn_setup.py now taps this to back out of a dialog whose
+  # typed text didn't commit correctly (see use_keyevent_text_entry's
+  # note above), rather than just leaving it open. Real finding the same
+  # day: leaving a failed dialog open caused every subsequent run/retry to
+  # fail navigation too, since android.settings.APN_SETTINGS doesn't land
+  # on the expected list screen while a stuck dialog covers it.
+  dialog_cancel_button_resource_id: "android:id/button2"
 
   # Client request (2026-09-15): use the same input method across every
   # device, not just where a problem happened to surface first. Originally

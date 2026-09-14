@@ -223,6 +223,24 @@ def _fill_labeled_field(
                 "a value that doesn't match what was actually intended.",
                 label, value, actual,
             )
+            # Real finding (2026-09-15): simply returning False here left
+            # this dialog open on the device — the *next* run then found
+            # android.settings.APN_SETTINGS "didn't land on a recognizable
+            # APN list screen" on every attempt (including its very first,
+            # before any retry), because the stuck dialog from the PREVIOUS
+            # run's failure was still covering the screen. A hard failure
+            # must not also leave the device in a worse state for whatever
+            # runs next — tap Cancel (best-effort: this must never mask the
+            # real error above, so its own failure is only logged, not
+            # raised) to back out of the dialog cleanly before returning.
+            cancel_button = apn.get("dialog_cancel_button_resource_id")
+            if cancel_button and not tap_resource_id(client, cancel_button):
+                logger.warning(
+                    "apn field %r: also could not tap the cancel button "
+                    "%r to back out of the mismatched dialog — the device "
+                    "may be left showing it; check before the next run.",
+                    label, cancel_button,
+                )
             return False
 
     confirm_button = apn.get("dialog_confirm_button_resource_id")

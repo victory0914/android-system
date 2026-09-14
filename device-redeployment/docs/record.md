@@ -807,6 +807,30 @@ below).
   to switch to remains explicitly ruled out — round 1 of this same
   investigation already showed once that a plausible-sounding "bypass"
   theory can be wrong in a way only real hardware reveals.
+- *2026-09-15 (round 3, same day — the round-2 fix caused a new cascading
+  failure):* Client ran the automation again with the read-back check
+  active. It correctly failed loud at the 名前 mismatch on the first
+  attempt — but then **every subsequent attempt** (the scheduler's 3
+  retries, then a fresh invocation afterward) failed differently:
+  `android.settings.APN_SETTINGS` reported "didn't land on a recognizable
+  APN list screen" every single time, including the very first try of the
+  next run, not just the retries. Root cause: returning `False` on the
+  mismatch left the field's dialog genuinely *open* on the device — never
+  dismissed. A fresh `am start -a android.settings.APN_SETTINGS` intent
+  doesn't dismiss an unrelated already-open dialog, so every following
+  dump kept showing the stuck dialog instead of the expected list,
+  explaining the navigation failures completely. Fixed: new
+  `apn_settings.dialog_cancel_button_resource_id` (real, confirmed —
+  "キャンセル"/`android:id/button2`, already seen in both devices' real
+  dumps) is now tapped to back out of a mismatched dialog cleanly before
+  `_fill_labeled_field()` returns `False`. Best-effort only (its own
+  failure only logs a warning, never masks the real underlying error) —
+  new test, `test_fill_labeled_field_taps_cancel_to_back_out_of_mismatched_dialog`.
+
+  **This fix is forward-looking only** — it does not retroactively clean
+  up whatever the SHG07 unit's screen currently shows from before this fix
+  existed. Client needs to check the actual device (or a fresh dump) and
+  manually dismiss anything unexpected before the next attempt.
 
 ---
 

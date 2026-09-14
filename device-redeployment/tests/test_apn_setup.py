@@ -175,6 +175,45 @@ def test_fill_labeled_field_fails_loudly_when_typed_text_is_transformed():
     assert confirm_tap not in client.shell_calls
 
 
+# Real finding (2026-09-15): simply returning False on a mismatch left the
+# dialog open — the *next* run's android.settings.APN_SETTINGS intent then
+# failed to land on a recognizable screen on every attempt, including its
+# very first, because the stuck dialog from the previous run's failure was
+# still covering it. dialog_cancel_button_resource_id lets apn_setup.py
+# back out cleanly instead.
+CANCEL_BUTTON_PROFILE = ModelProfile(
+    {
+        "model": "SHG-like Cancel-Button Test",
+        "model_number": "TST06",
+        "manufacturer": "Test",
+        "android_version": 13,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+        "apn_settings": {**LABELED_PROFILE.apn_settings(), "dialog_cancel_button_resource_id": "android:id/button2"},
+    }
+)
+
+MISTRANSLATED_EDIT_FIELD_WITH_CANCEL_XML = MISTRANSLATED_EDIT_FIELD_XML.replace(
+    '<node resource-id="android:id/button1" bounds="[0,800][100,900]" />',
+    '<node resource-id="android:id/button2" bounds="[0,900][100,1000]" />\n'
+    '  <node resource-id="android:id/button1" bounds="[0,800][100,900]" />',
+)
+
+
+def test_fill_labeled_field_taps_cancel_to_back_out_of_mismatched_dialog():
+    """When dialog_cancel_button_resource_id is configured, a mismatch must
+    tap it to leave the device in a clean state — not just fail and leave
+    the dialog open, which is what caused the real cascading navigation
+    failure on the next run."""
+    client = FakeAdbClient(ui_dumps=[MISTRANSLATED_EDIT_FIELD_WITH_CANCEL_XML] * 30)
+    result = configure_apn(client, CANCEL_BUTTON_PROFILE, "rakuten.jp", "440", "11")
+    assert result is False
+    cancel_tap = "input tap {} {}".format((0 + 100) // 2, (900 + 1000) // 2)
+    assert cancel_tap in client.shell_calls
+    confirm_tap = "input tap {} {}".format((0 + 100) // 2, (800 + 900) // 2)
+    assert confirm_tap not in client.shell_calls
+
+
 def test_configure_apn_legacy_shape_succeeds():
     client = FakeAdbClient(ui_dumps=[LEGACY_SCREEN_XML] * 10)
     result = configure_apn(client, LEGACY_PROFILE, "internet", "310", "260")

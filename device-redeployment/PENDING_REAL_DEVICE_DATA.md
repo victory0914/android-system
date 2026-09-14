@@ -78,6 +78,31 @@ further below for the full account.
    SHG07's actual fix is found and can be evaluated for whether it's safe
    to extend to SHG10 too.
 
+**Round 3 (2026-09-15, same day): the round-2 fix caused a new cascading
+failure, also fixed.** A live client run (with the read-back check active)
+correctly failed loud on the 名前 mismatch — but then **every subsequent
+run/retry** failed differently: `android.settings.APN_SETTINGS`
+"didn't land on a recognizable APN list screen" on every single attempt,
+including the very first of the next invocation, not just retries. Root
+cause: returning `False` on the mismatch left the field's dialog *open* on
+the device (never dismissed) — the next attempt's fresh intent doesn't
+dismiss an unrelated open dialog, so every subsequent dump kept showing
+the stuck dialog instead of the expected list. Fixed: a new
+`apn_settings.dialog_cancel_button_resource_id` (real, confirmed — the
+same "キャンセル"/`android:id/button2` already seen in both devices' real
+dumps) is now tapped to cleanly back out of a mismatched dialog before
+`_fill_labeled_field()` returns `False`, instead of just abandoning it.
+Best-effort only — its own failure is logged as a warning, never allowed
+to mask the real underlying error.
+
+**⚠️ The device's screen may currently still show the stuck dialog from
+before this fix existed** — this fix only prevents the problem on *future*
+runs; it does not retroactively clean up whatever state the SHG07 unit is
+in right now. Recommend checking the physical/mirrored screen (or a fresh
+`uiautomator dump`) before the next attempt and manually dismissing
+anything unexpected (tap キャンセル/back) rather than assuming a fresh run
+will self-correct.
+
 Both devices need a supervised, one-at-a-time re-test — not the parallel
 `--device` mode — until this is resolved.
 
