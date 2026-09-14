@@ -124,6 +124,48 @@ def test_configure_apn_labeled_shape_injects_correct_values_before_failing_at_sa
     assert 'input text "11"' not in client.shell_calls
 
 
+# SHG07 (2026-09-14): unlike SHG10, plain `input text` alphanumeric entry
+# is affected by the active IME there too, not just MCC/MNC — client
+# report + tests/fixtures/apn_input_dialog_SHG07.xml. Opt-in per model via
+# apn_settings.use_keyevent_text_entry, since SHG10 already proved
+# input_text_direct() works fine for it there (real end-to-end success,
+# 2026-09-11) and this must not change SHG10's already-working behavior.
+KEYEVENT_TEXT_ENTRY_PROFILE = ModelProfile(
+    {
+        "model": "SHG07-like Test",
+        "model_number": "TST05",
+        "manufacturer": "Test",
+        "android_version": 13,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+        "apn_settings": {**LABELED_PROFILE.apn_settings(), "use_keyevent_text_entry": True},
+    }
+)
+
+
+def test_configure_apn_uses_keyevents_for_all_fields_when_flagged():
+    """With use_keyevent_text_entry=True, 名前/APN go through
+    input_ascii_direct() (per-character keyevents) instead of
+    input_text_direct() — MCC/MNC already did via numeric_only regardless
+    of this flag, so this only changes the two text fields."""
+    client = FakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    configure_apn(client, KEYEVENT_TEXT_ENTRY_PROFILE, "rakuten.jp", "440", "11")
+    assert not any(c.startswith("input text ") for c in client.shell_calls)
+    # "rakuten.jp" typed via keyevents: r-a-k-u-t-e-n-.-j-p
+    for letter in "rakutenjp":
+        assert f"input keyevent KEYCODE_{letter.upper()}" in client.shell_calls
+    assert "input keyevent KEYCODE_PERIOD" in client.shell_calls
+
+
+def test_configure_apn_labeled_shape_still_uses_input_text_by_default():
+    """Confirms the flag is opt-in, not a global behavior change — SHG10's
+    profile (LABELED_PROFILE here has no use_keyevent_text_entry key) must
+    keep using input_text_direct() for 名前/APN exactly as before."""
+    client = FakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+    assert 'input text "rakuten.jp"' in client.shell_calls
+
+
 def test_configure_apn_missing_save_button_never_taps_anything_claiming_save():
     """With save_button_resource_id unresolved (None), configure_apn() must
     not silently guess a save action — this is the direct instruction from

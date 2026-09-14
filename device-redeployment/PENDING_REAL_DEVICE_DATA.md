@@ -46,14 +46,15 @@ sections rather than duplicated here):
   accepting the risk and testing anyway) is what's needed to confirm a
   *complete* fresh-device flow (wizard + Wi-Fi + APN), not just Wi-Fi +
   APN with `--skip-wizard`.
-- **A supervised first real test of SHG07** — its config now inherits
-  SHG10's confirmed values (client-directed, 2026-09-14) rather than
-  Stage A's from-scratch placeholders, but that's a reasoned starting
-  point, not independent confirmation for this specific model/Android
-  version. See "SHG07 (AQUOS sense6s)..." further below for the full
-  reasoning and the recommended supervised, one-at-a-time first pass
-  before trusting it in the new parallel multi-device mode (`--device`,
-  see README.md).
+- **A supervised re-test of SHG07 with the IME/keyevent fix applied** —
+  the first real contact with this unit already found one real divergence
+  from SHG10 (the active IME affects 名前/APN text entry there, not just
+  MCC/MNC as on SHG10) — see "First real SHG07 finding..." further below
+  for the fix (`use_keyevent_text_entry`) and its limitations. Not yet
+  re-verified against a live run. This is exactly the kind of divergence
+  the inheritance decision was flagged as risking, so treat every
+  subsequent SHG07 screen the same way — supervised, one device at a time
+  — until proven otherwise, not just this one.
 - **"SOG08 / SOG07 — entirely untouched"** (same section) — still 100%
   Stage A placeholders, no real data of any kind. Next priority once
   hardware for them is available.
@@ -525,6 +526,55 @@ assumption was moot there (text-matching replaced it entirely) and
 SHARP-specific screens needed SHARP-specific handling regardless of
 package name — there's no strong reason to expect SHG07's package names
 to differ from SHG10's, but it hasn't been checked.
+
+### First real SHG07 finding, confirming the caution above (2026-09-14): IME affects text entry, not just digits
+
+Client's first real dump against this unit
+(`tests/fixtures/AQUOS sense6s（SHG07）/apn_input_dialog_SHG07.xml`) and
+accompanying report: the active Japanese input method prevents entering
+the intended half-width alphanumeric characters into 名前/APN, not just
+MCC/MNC as was true on SHG10. This is exactly the category of divergence
+the inheritance warning above predicted — real, on a real SHG07 unit,
+found on first contact.
+
+- **Structure confirmed matching**: the dialog itself (title at
+  `com.android.settings:id/alertTitle`, EditText at `android:id/edit`, "OK"
+  at `android:id/button1`, "キャンセル" at `android:id/button2`) is
+  byte-for-byte the same shape as SHG10's own confirmed dialog — the
+  inherited ids were right for this part.
+- **Character entry was not** — `input_text_direct()` ("input text"),
+  proven working for SHG10's 名前/APN, is affected by SHG07's active IME.
+  Root cause not fully diagnosed (unlike SHG10's full-width-digit finding,
+  no dump exists showing the actual wrong committed characters — the
+  client's report describes entry being blocked/wrong, not a specific
+  garbled string), but the fix doesn't require knowing the exact
+  mechanism: `input_ascii_direct()` (`src/device/ui_automator.py`) sends
+  each character as its own `adb shell input keyevent KEYCODE_<X>`,
+  generalizing the same per-keyevent strategy that already fixed SHG10's
+  MCC/MNC. New `apn_settings.use_keyevent_text_entry: true` opts SHG07's
+  profile into it for 名前/APN too (MCC/MNC already used keyevents
+  regardless of this flag). **Not set on SHG10** — `input_text_direct()`
+  stays SHG10's proven-working path, unchanged.
+- **Limitation, by design**: `input_ascii_direct()` only supports
+  lowercase a-z, 0-9, `.`, and `-` — every real APN value seen in this
+  project so far (docs/record.md) fits that set. Uppercase specifically
+  isn't supported (a per-keyevent shift chord isn't reliably achievable
+  via `adb shell input keyevent`, which sends one bare press+release per
+  call) — raises `ValueError` rather than silently mishandling it if a
+  real value ever needs it.
+- **Deliberately not attempted**: detecting and switching the device's
+  active IME directly (e.g. `adb shell ime set <id>` /
+  `settings put secure default_input_method`). No real, confirmed IME
+  component id exists for this device — guessing one risks silently
+  switching to the wrong (or no) keyboard, a global device-state change
+  with no clear undo path, which is a materially worse failure mode than
+  routing around the problem entirely. A new read-only diagnostic,
+  `get_current_ime()`, logs the active IME's id (via `dumpsys
+  input_method`) on every `configure_apn()` call without acting on it —
+  purely so a future run's log carries real evidence if this class of
+  problem shows up on another device.
+
+Still not re-verified against a live SHG07 run with this fix applied.
 
 ## Schema additions beyond the original task prompt's illustrative example
 

@@ -50,8 +50,10 @@ from src.device.ui_automator import (
     dump_ui,
     find_by_content_desc,
     find_by_text,
+    get_current_ime,
     get_node_text,
     inject_text,
+    input_ascii_direct,
     input_digits_direct,
     input_text_direct,
     navigate_menu_path,
@@ -141,15 +143,22 @@ def _fill_labeled_field(
     the ids are confirmed correct: still the right behavior if a future
     build/OS update ever changes them.
 
-    Uses input_text_direct() (Android's built-in `input text`), not
-    inject_text() (ADB Keyboard broadcast) — confirmed necessary on real
-    hardware, and not just for MCC/MNC as first thought: MCC/MNC needed it
-    because the default IME (Japanese kana mode) can't reach digits without
-    a mode switch, but a *second* real run (2026-09-08, Wi-Fi password
-    entry — same device, same inject_text() call) showed the ADB Keyboard
-    broadcast does nothing at all here, consistent with that app not
-    actually being installed/active. So this now applies to every field on
-    this device, not just numeric ones.
+    Uses input_text_direct() (Android's built-in `input text`) by default,
+    not inject_text() (ADB Keyboard broadcast) — confirmed necessary on
+    real hardware, and not just for MCC/MNC as first thought: MCC/MNC
+    needed it because the default IME (Japanese kana mode) can't reach
+    digits without a mode switch, but a *second* real run (2026-09-08,
+    Wi-Fi password entry — same SHG10 device, same inject_text() call)
+    showed the ADB Keyboard broadcast does nothing at all there, consistent
+    with that app not actually being installed/active. So this applies to
+    every field on SHG10, not just numeric ones.
+
+    `apn_settings.use_keyevent_text_entry=True` (SHG07, 2026-09-14) skips
+    input_text_direct() for non-numeric fields too, using
+    input_ascii_direct() instead — see that function's docstring. SHG10
+    does NOT set this flag; input_text_direct() is already proven working
+    there for 名前/APN specifically (real end-to-end success, 2026-09-11),
+    so this stays opt-in per model rather than applying everywhere.
     """
     row_resource_id = apn["field_row_resource_id"]
     if not tap_resource_id(client, row_resource_id, text=label):
@@ -176,6 +185,16 @@ def _fill_labeled_field(
 
     if numeric_only:
         if not input_digits_direct(client, value):
+            return False
+    elif apn.get("use_keyevent_text_entry"):
+        # Real-device finding (client report, 2026-09-14, SHG07): unlike
+        # SHG10, where input_text_direct() works fine for 名前/APN, on this
+        # model the active Japanese IME affects plain alphanumeric `input
+        # text` entry too — not just digits. Per-character keyevents route
+        # around it the same way numeric_only already does. See
+        # input_ascii_direct()'s docstring for why this doesn't instead try
+        # to detect-and-switch the device's IME.
+        if not input_ascii_direct(client, value):
             return False
     elif not input_text_direct(client, value):
         return False
@@ -385,9 +404,10 @@ def configure_apn(
 ) -> bool:
     """Navigate profile.apn_settings()['menu_path'] via UI Automator, then
     type the APN name and value fields directly (input_text_direct() for
-    labeled-shape/SHG10, inject_text() for legacy-shape models) — never
-    simulate individual keystrokes for this. Tap save. Return True on
-    success.
+    labeled-shape models by default, input_ascii_direct() instead when
+    apn_settings.use_keyevent_text_entry is set — see
+    _fill_labeled_field() — inject_text() for legacy-shape models). Tap
+    save. Return True on success.
 
     mcc/mnc are required, not optional (confirmed on real SHG10 hardware,
     2026-09-08) — the device itself validates them (MCC exactly 3 digits,
@@ -403,6 +423,16 @@ def configure_apn(
         return False
 
     apn = profile.apn_settings()
+
+    # Diagnostic only — logged, never acted on. See input_ascii_direct()'s
+    # docstring and get_current_ime()'s docstring for why: this project has
+    # twice now (SHG10 MCC/MNC, SHG07 名前/APN) needed to actually see real
+    # evidence of an IME-related field-entry problem to fix it correctly,
+    # rather than guess. If a future model/device shows a similar symptom,
+    # this line in its log is the first thing to check.
+    current_ime = get_current_ime(client)
+    if current_ime is not None:
+        logger.info("apn: current input method is %r", current_ime)
 
     if not _navigate_apn_menu(client, apn):
         logger.error("apn menu navigation failed")

@@ -18,8 +18,10 @@ from src.device.ui_automator import (
     find_by_content_desc,
     find_by_text,
     find_resource_id,
+    get_current_ime,
     get_node_text,
     inject_text,
+    input_ascii_direct,
     input_digits_direct,
     input_text_direct,
     navigate_menu_path,
@@ -461,6 +463,95 @@ def test_input_digits_direct_rejects_non_digit_input():
     with pytest.raises(ValueError):
         input_digits_direct(client, "４４０")  # full-width digits themselves
     assert client.shell_calls == []
+
+
+# --- input_ascii_direct (real client report, 2026-09-14, SHG07): unlike
+# SHG10, plain `input text` alphanumeric entry is affected by the active
+# IME there too, not just digits — generalizes input_digits_direct()'s
+# per-keyevent strategy beyond pure digits ---------------------------------
+
+
+def test_input_ascii_direct_sends_one_keyevent_per_character():
+    client = FakeAdbClient()
+    result = input_ascii_direct(client, "a1.")
+    assert result is True
+    assert client.shell_calls == [
+        "input keyevent KEYCODE_A",
+        "input keyevent KEYCODE_1",
+        "input keyevent KEYCODE_PERIOD",
+    ]
+
+
+def test_input_ascii_direct_supports_hyphen():
+    client = FakeAdbClient()
+    input_ascii_direct(client, "billing-relay")
+    assert "input keyevent KEYCODE_MINUS" in client.shell_calls
+
+
+def test_input_ascii_direct_case_folds_uppercase_input_to_lowercase_keys():
+    """Uppercase INPUT is accepted and folded to lowercase — it's producing
+    an actual shifted/uppercase CHARACTER that isn't supported (see the
+    rejection test below), matching every real APN value seen so far
+    (docs/record.md), which have all been lowercase."""
+    client = FakeAdbClient()
+    input_ascii_direct(client, "Test")
+    assert client.shell_calls == [
+        "input keyevent KEYCODE_T",
+        "input keyevent KEYCODE_E",
+        "input keyevent KEYCODE_S",
+        "input keyevent KEYCODE_T",
+    ]
+
+
+def test_input_ascii_direct_never_uses_input_text():
+    client = FakeAdbClient()
+    input_ascii_direct(client, "rakuten.jp")
+    assert not any(c.startswith("input text") for c in client.shell_calls)
+
+
+@pytest.mark.parametrize("bad_value", ["hello world", "under_score", "café"])
+def test_input_ascii_direct_rejects_unsupported_characters(bad_value):
+    client = FakeAdbClient()
+    with pytest.raises(ValueError):
+        input_ascii_direct(client, bad_value)
+    assert client.shell_calls == []
+
+
+def test_input_ascii_direct_empty_string_is_a_harmless_no_op():
+    """Unlike input_digits_direct() (which raises on "" via
+    "".isdigit() is False), an empty string here has no unsupported
+    characters to reject — it's a degenerate no-op, not an error. Not
+    expected to matter in practice: 名前/APN are validated non-empty
+    before reaching here (see _REQUIRED_LABELED_FIELDS / the original task
+    spec's "must be non-empty")."""
+    client = FakeAdbClient()
+    assert input_ascii_direct(client, "") is True
+    assert client.shell_calls == []
+
+
+# --- get_current_ime (2026-09-14): read-only diagnostic, never acts on
+# what it finds — see its docstring for why not ----------------------------
+
+
+def test_get_current_ime_parses_real_dumpsys_output():
+    client = FakeAdbClient()
+    client.shell_responses["dumpsys input_method"] = (
+        "mCurMethodId=com.google.android.inputmethod.japanese/.MozcService\n"
+        "mCurClient=... other lines ...\n"
+    )
+    assert get_current_ime(client) == "com.google.android.inputmethod.japanese/.MozcService"
+
+
+def test_get_current_ime_returns_none_when_pattern_not_found():
+    client = FakeAdbClient()
+    client.shell_responses["dumpsys input_method"] = "unexpected output with no match\n"
+    assert get_current_ime(client) is None
+
+
+def test_get_current_ime_returns_none_on_command_failure():
+    client = FakeAdbClient()
+    client.shell_failures.add("dumpsys input_method")
+    assert get_current_ime(client) is None
 
 
 # --- tap_left_of_content_desc (real screenshot, 2026-09-11): the APN

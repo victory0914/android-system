@@ -657,17 +657,57 @@ structure survives being committed.
 **Confirmed identity string (from adb):** not yet confirmed — no `adb
 devices`/`adb shell getprop` output recorded for this unit yet.
 
-Config (`config/models/sharp_aquos_sense6s.yaml`) currently holds values
+Config (`config/models/sharp_aquos_sense6s.yaml`) mostly holds values
 *inherited from SHG10*, not independently confirmed for this unit — see
 the 2026-09-14 entry under SHG10's section above and the file's own header
-comment. No dumps, screenshots, or test runs recorded against this serial
-yet.
+comment. One field is now real SHG07 data (`use_keyevent_text_entry`, see
+below).
 
 ### Test Log — exactly what was run against this unit
 
 | Date | Test | Command | Result |
 |---|---|---|---|
 | | | | |
+
+### APN field text entry — relevant to `apn_setup.py`, `ui_automator.py`
+- *2026-09-14:* First real contact with this unit. Client reported: the
+  active Japanese input method activates when entering APN dialog fields
+  and prevents the intended alphanumeric/digit characters from being
+  entered — for 名前/APN specifically, not just MCC/MNC (MCC/MNC already
+  went through `input_digits_direct()`'s keyevent workaround regardless,
+  inherited from SHG10). Client also supplied a real dump of the field
+  dialog itself,
+  `tests/fixtures/AQUOS sense6s（SHG07）/apn_input_dialog_SHG07.xml`
+  (captured with the "APN" field's dialog open) — structurally identical
+  to SHG10's own confirmed dialog: title at
+  `com.android.settings:id/alertTitle` ("APN"), EditText at
+  `android:id/edit` (focused), "OK" at `android:id/button1`, "キャンセル"
+  at `android:id/button2`. So the *inherited ids* for this dialog are
+  right; the problem is specifically that `input_text_direct()` ("input
+  text"), which works fine for SHG10's 名前/APN, is affected by SHG07's
+  IME the same way `input text` affected SHG10's MCC/MNC (full-width
+  digits, 2026-09-11) — just for alphanumeric text too here, not only
+  digits.
+- Implication: `input_ascii_direct()` added to `ui_automator.py` —
+  generalizes `input_digits_direct()`'s per-character-keyevent strategy
+  (`adb shell input keyevent KEYCODE_<X>`) to lowercase a-z/0-9/`.`/`-`,
+  the character set every real APN value seen in this project fits.
+  `apn_settings.use_keyevent_text_entry: true` set on SHG07's profile only
+  (not SHG10's, where `input_text_direct()` is already proven working for
+  these two fields) routes 名前/APN through it. Uppercase deliberately
+  unsupported (raises `ValueError`) — a per-keyevent shift chord isn't
+  reliably achievable through `adb shell input keyevent`'s one-press-per-
+  call model.
+- Deliberately NOT implemented: detecting and switching the device's
+  active input method directly. No real IME component id is confirmed for
+  this device, and guessing one risks silently switching to the wrong (or
+  no) keyboard — a global, hard-to-undo device-state change, worse than
+  the problem it would fix. Added `get_current_ime()` instead — a
+  read-only diagnostic (`dumpsys input_method`, parses `mCurMethodId=`)
+  now logged on every `configure_apn()` call, so a future run's log
+  carries real evidence if this class of problem shows up on another
+  device, rather than needing to guess again.
+- Not yet re-verified against a live SHG07 run with this fix applied.
 
 ---
 
@@ -678,7 +718,7 @@ yet.
 | SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_restricted_SHG10.xml` (6,104 B), `apn_failure_setting_SHG10.xml` (6,104 B, identical), `apn_success_setting_SHG10.xml` (10,009 B, 2 entries) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B), `apn_accesshost_okbtn_SHG10.xml` (per-field dialog, open) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
 | Xperia Ace III (SOG08) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
 | Xperia 10 IV (SOG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
-| AQUOS sense6s (SHG07, 353681650397052) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
+| AQUOS sense6s (SHG07, 353681650397052) | ❌ not started | ❌ not started | ✅ `apn_input_dialog_SHG07.xml` (APN field dialog, open) | ❌ not started | ❌ same constraint applies |
 
 Original 4 SHG10 files captured 2026-09-04. 4 more (save flow + a filled
 entry form) captured 2026-09-08, same session as the Save flow findings

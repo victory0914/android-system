@@ -661,26 +661,120 @@ def input_digits_direct(client: AdbClientProtocol, digits: str) -> bool:
     """Type a string of ASCII digits one at a time via `adb shell input
     keyevent KEYCODE_<n>` — NOT input_text_direct()'s `input text`.
 
-    Real-device finding (client report, 2026-09-11): on this device,
-    `input text "440"` for APN's MCC/MNC fields commits as FULL-WIDTH
-    digits (e.g. "４４０") instead of half-width/ASCII ("440"), even
-    though input_text_direct() is meant to bypass the active IME entirely.
-    The device's default IME is Japanese kana mode (see
-    input_text_direct()'s docstring); it's not confirmed exactly why
-    `input text` picks up its zenkaku conversion when individual digit
-    keyevents evidently don't, but per-digit KEYCODE_0..KEYCODE_9 events
-    map directly to the physical/virtual number-row keys and have always
-    been the standard way to guarantee literal ASCII digit entry
-    regardless of IME state — safer to rely on here than to guess further
-    at why `input text` misbehaves.
+    Real-device finding (client report, 2026-09-11): on SHG10, `input text
+    "440"` for APN's MCC/MNC fields commits as FULL-WIDTH digits (e.g.
+    "４４０") instead of half-width/ASCII ("440"), even though
+    input_text_direct() is meant to bypass the active IME entirely. The
+    device's default IME is Japanese kana mode (see input_text_direct()'s
+    docstring); it's not confirmed exactly why `input text` picks up its
+    zenkaku conversion when individual digit keyevents evidently don't,
+    but per-digit KEYCODE_0..KEYCODE_9 events map directly to the
+    physical/virtual number-row keys and have always been the standard way
+    to guarantee literal ASCII digit entry regardless of IME state — safer
+    to rely on here than to guess further at why `input text` misbehaves.
 
     Raises ValueError if `digits` isn't purely ASCII 0-9 — this exists
     specifically for MCC/MNC, which are pre-validated against
     _MCC_PATTERN/_MNC_PATTERN before this is ever called; anything else
     reaching here is a caller bug, not a device quirk to route around.
+
+    See also input_ascii_direct() — the same keyevent-based strategy,
+    generalized beyond pure digits for devices where even alphanumeric
+    `input text` entry is affected (SHG07, 2026-09-14).
     """
     if not digits.isascii() or not digits.isdigit():
         raise ValueError(f"input_digits_direct() only accepts ASCII digits, got {digits!r}")
     for digit in digits:
         client.shell(f"input keyevent KEYCODE_{digit}")
     return True
+
+
+# a-z / 0-9 map straight to their KEYCODE_<X> name. '.' and '-' are the only
+# punctuation APN values realistically need (e.g. "rakuten.jp",
+# "billing-relay") and both have simple, unambiguous standard keycodes.
+# Deliberately NOT supported: uppercase (would need a shift chord — `adb
+# shell input keyevent` sends one bare DOWN+UP per call, so a separate
+# KEYCODE_SHIFT_LEFT call does not stay held across the next call, meaning
+# there is no reliable way to produce a shifted character this way),
+# spaces, underscores, and anything non-ASCII. input_ascii_direct() raises
+# rather than silently mangling or dropping an unsupported character.
+_ASCII_KEYEVENT_NAMES = {
+    **{c: f"KEYCODE_{c}" for c in "0123456789"},
+    **{c: f"KEYCODE_{c.upper()}" for c in "abcdefghijklmnopqrstuvwxyz"},
+    ".": "KEYCODE_PERIOD",
+    "-": "KEYCODE_MINUS",
+}
+
+
+def input_ascii_direct(client: AdbClientProtocol, text: str) -> bool:
+    """Type lowercase alphanumeric text (plus '.' and '-') one character at
+    a time via `adb shell input keyevent KEYCODE_<X>` — the same strategy
+    input_digits_direct() uses for MCC/MNC, generalized to the rest of an
+    APN entry's fields.
+
+    Real-device finding (client report, 2026-09-14, SHG07/AQUOS sense6s):
+    unlike SHG10, where input_text_direct() ("input text") worked fine for
+    名前/APN and only MCC/MNC needed the keyevent workaround, on SHG07 the
+    active Japanese input method affects plain alphanumeric `input text`
+    entry too — the client reported it prevents entering the intended
+    characters at all. Per-key KEYCODE_<X> events carry a fixed,
+    locale-independent key identity all the way through (the same reason
+    this already worked for digits), so this routes around it the same
+    way rather than attempting to detect and switch the device's IME.
+
+    Deliberately does NOT attempt to inspect or change the device's active
+    input method (e.g. `adb shell ime set <id>`/`settings put secure
+    default_input_method`): doing that safely would need a real, confirmed
+    IME component id for this device, which doesn't exist yet — guessing
+    one risks silently switching to the wrong (or no) keyboard, a global
+    device-state change with no clear undo path. This function sidesteps
+    the problem instead of trying to fix the IME state directly, matching
+    how input_digits_direct() already handles the same underlying issue
+    for digits. See get_current_ime() for read-only diagnostic visibility
+    into what IME is actually active, without acting on it.
+
+    Raises ValueError on any character outside a-z/0-9/./- (case-folded to
+    lowercase first) — including uppercase, which genuinely isn't
+    supported here (see _ASCII_KEYEVENT_NAMES's comment). This exists for
+    APN name/value fields specifically, which in every real example seen
+    so far (docs/record.md) are lowercase — an uppercase or otherwise
+    unsupported value reaching here is a caller/config issue to fix, not
+    silently mangled.
+    """
+    unsupported = sorted(set(text.lower()) - set(_ASCII_KEYEVENT_NAMES))
+    if unsupported:
+        raise ValueError(
+            f"input_ascii_direct() got {text!r}, which contains character(s) "
+            f"not supported by this keyevent-based method: {unsupported!r} "
+            "(only a-z, 0-9, '.', '-' are supported — see its docstring)"
+        )
+    for char in text.lower():
+        client.shell(f"input keyevent {_ASCII_KEYEVENT_NAMES[char]}")
+    return True
+
+
+_CURRENT_IME_PATTERN = re.compile(r"mCurMethodId=(\S+)")
+
+
+def get_current_ime(client: AdbClientProtocol) -> str | None:
+    """Read-only diagnostic: return the currently active input method's
+    component id (e.g. "com.google.android.inputmethod.japanese/.MozcService"),
+    parsed from `adb shell dumpsys input_method`'s `mCurMethodId=` line, or
+    None if it can't be determined (command failed, or the expected line
+    isn't present — dumpsys output isn't a stable public API and can vary
+    by build).
+
+    Deliberately does not attempt to change the IME — see
+    input_ascii_direct()'s docstring for why. This exists purely so a real
+    run's logs can record what IME was actually active when a field-entry
+    problem occurred, since that's exactly the kind of real, concrete
+    evidence (like the full-width-digit finding, 2026-09-11) this project
+    has repeatedly needed to actually resolve an input-method quirk,
+    rather than guessing at one.
+    """
+    try:
+        output = client.shell("dumpsys input_method")
+    except AdbCommandError:
+        return None
+    match = _CURRENT_IME_PATTERN.search(output)
+    return match.group(1) if match else None

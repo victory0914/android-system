@@ -39,6 +39,16 @@
 # silent wrong action. See PENDING_REAL_DEVICE_DATA.md for the tracking
 # entry and the recommended first-run procedure (supervised, `--skip-wizard`
 # only after wizard screens are actually seen, watch every screenshot).
+#
+# UPDATE 2026-09-14 (real data starting to come in for THIS unit, serial
+# 353681650397052): the first real dump of this device
+# (apn_input_dialog_SHG07.xml) confirmed the APN field dialog's structure
+# matches what was inherited from SHG10 (android:id/edit,
+# android:id/button1/2) — but also surfaced a real, SHG07-specific problem
+# inheriting SHG10's values did NOT predict: the active Japanese IME
+# interferes with plain alphanumeric field entry here, not just MCC/MNC as
+# on SHG10. See `use_keyevent_text_entry` below — this one value is now
+# real SHG07 data, not an SHG10 inheritance.
 model: "AQUOS sense6s"
 model_number: "SHG07"
 manufacturer: "SHARP"
@@ -158,3 +168,14 @@ apn_settings:
   overflow_menu_content_desc: "その他のオプション"
   save_menu_item_text: "保存"
   save_button_resource_id: null
+  # RESOLVED — real, SHG07-specific (not inherited from SHG10). Client
+  # report + a real dump of the per-field dialog itself
+  # (tests/fixtures/AQUOS sense6s（SHG07）/apn_input_dialog_SHG07.xml,
+  # 2026-09-14): the active Japanese input method interferes with plain
+  # alphanumeric `input text` entry on this device, not just MCC/MNC as on
+  # SHG10 — 名前/APN need the same per-character keyevent workaround MCC/MNC
+  # already use elsewhere. See apn_setup.py's _fill_labeled_field() and
+  # ui_automator.py's input_ascii_direct(). Deliberately NOT set on SHG10's
+  # profile — input_text_direct() is already proven working there for these
+  # two fields (real end-to-end success, 2026-09-11).
+  use_keyevent_text_entry: true
