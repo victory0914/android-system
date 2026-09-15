@@ -686,11 +686,15 @@ SHG10 is back to exactly its 2026-09-11 known-working configuration.
 **Confirmed identity string (from adb):** not yet confirmed — no `adb
 devices`/`adb shell getprop` output recorded for this unit yet.
 
-Config (`config/models/sharp_aquos_sense6s.yaml`) mostly holds values
-*inherited from SHG10*, not independently confirmed for this unit — see
-the 2026-09-14 entry under SHG10's section above and the file's own header
-comment. One field is now real SHG07 data (`use_keyevent_text_entry`, see
-below).
+**🎉 Phase 2's Wi-Fi + APN flow is CONFIRMED WORKING end-to-end on this
+unit as of 2026-09-15** — see the MILESTONE entry below. Config
+(`config/models/sharp_aquos_sense6s.yaml`) still mostly holds values
+*inherited from SHG10* for navigation/dialog structure (not independently
+confirmed for this unit — see the 2026-09-14 entry under SHG10's section
+above and the file's own header comment), but the fields that actually
+mattered for getting a real save working —
+`keyboard_mode_toggle_tap`/`navigate_up_content_desc` — are real SHG07
+data, found and confirmed on this exact unit.
 
 ### Test Log — exactly what was run against this unit
 
@@ -966,6 +970,51 @@ below).
   instead of 4). Not yet re-verified against a full live run with this
   latest fix; two of four fields are now proven working live, MCC/MNC's
   fix is implemented but untested.
+
+### 🎉 MILESTONE (2026-09-15, round 11): first successful end-to-end Phase 2 run on real SHG07 hardware
+
+Client ran the automation with the MCC/MNC fix from round 10 applied.
+Full log:
+
+```
+2026-09-15 15:32:24 INFO  main_phase2: starting Phase 2 run: serial=353681650397052 model=SHG07 (AQUOS sense6s) [skip_wizard]
+2026-09-15 15:32:25 WARNING src.orchestration.slot: skip_wizard=True - ...
+2026-09-15 15:32:25 INFO  src.phase2.wifi_setup: already connected to 'earth5_1'; nothing to do
+2026-09-15 15:32:26 INFO  src.phase2.apn_setup: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-09-15 15:32:29 INFO  src.phase2.apn_setup: reached APN list via android.settings.APN_SETTINGS intent
+2026-09-15 15:33:39 WARNING src.phase2.apn_setup: apn: save reported no validation error, but 'rakuten.jp' wasn't spotted back on the APN list (soft check only — not treated as a failure; could be scroll position or list truncation)
+2026-09-15 15:33:39 INFO  src.phase2.apn_setup: apn 'rakuten.jp' configured successfully
+2026-09-15 15:33:39 INFO  src.orchestration.slot: reached LOGIN_INSTALL (Phase 2 success condition)
+2026-09-15 15:33:39 INFO  main_phase2: SUCCESS: device 353681650397052 reached LOGIN_INSTALL
+```
+
+**No field-mismatch error at 名前, APN, MCC, or MNC** — the first time
+all four have ever committed correctly on this device in this entire
+investigation. Client independently confirmed: the saved APN list
+appeared empty immediately after the run, but re-checking Settings
+confirmed `rakuten.jp` was genuinely registered — matching exactly the
+`'rakuten.jp' wasn't spotted back on the APN list` soft-check warning
+above. Same class of finding as SHG10's own milestone (2026-09-11): a
+slow list refresh, not a data-correctness problem — except here the
+existing single delay+re-dump retry (added for SHG10's version of this
+same issue) still wasn't reliably enough on SHG07's list. Fixed:
+`_save_apn()`'s soft post-save check now tries a third time via a fresh
+`android.settings.APN_SETTINGS` re-navigation (forces a genuine screen
+reload) if the delay+re-dump retry still doesn't find the entry — real
+evidence, from this exact client report, that waiting on the same
+already-open screen isn't always sufficient but a full re-navigation is.
+Still soft either way, never a hard failure — new test,
+`test_configure_apn_falls_back_to_renavigation_when_waiting_alone_is_
+not_enough`.
+
+This closes out the SHG07 text-entry investigation that began 2026-09-14:
+round 1's per-keyevent theory (wrong), round 2's proof it was wrong,
+rounds 3-4's cascading-failure fixes, round 5's reconsideration of
+SHG10's own method (also wrong, same reason), rounds 6's confirmation,
+and rounds 7-11's actual fix (Pointer Location → keyboard-toggle
+coordinate → applying it to all four fields → this end-to-end success).
+SHG07's Wi-Fi + APN flow is now confirmed working end-to-end on real
+hardware, the same milestone SHG10 reached 2026-09-11.
 
 ---
 

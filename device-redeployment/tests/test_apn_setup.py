@@ -808,6 +808,61 @@ def test_configure_apn_retries_post_save_check_before_warning(monkeypatch, caplo
     assert any("confirmed visible" in m for m in messages)
 
 
+class ApnPostSaveRequiresRenavigationClient(ApnPostSaveClient):
+    """Real-hardware finding (2026-09-15, SHG07): sometimes even the delay
+    + re-dump of the SAME still-open list screen isn't enough — the client
+    confirmed manually that simply waiting doesn't refresh it, but leaving
+    and re-entering Settings does. Models that: every post-save dump on
+    the same screen keeps serving the stale `post_save_xml`; only a fresh
+    `android.settings.APN_SETTINGS` intent issued AFTER save switches to
+    the refreshed `delayed_post_save_xml`."""
+
+    def __init__(self, *, delayed_post_save_xml: str, **kwargs):
+        super().__init__(**kwargs)
+        self.delayed_post_save_xml = delayed_post_save_xml
+        self._renavigated_after_save = False
+
+    def shell(self, command, timeout=30):
+        result = super().shell(command, timeout=timeout)
+        if self._save_tapped and command == "am start -a android.settings.APN_SETTINGS":
+            self._renavigated_after_save = True
+        return result
+
+    def pull(self, remote_path, local_path):
+        if self._save_tapped:
+            xml = self.delayed_post_save_xml if self._renavigated_after_save else self.post_save_xml
+            with open(local_path, "w", encoding="utf-8") as fh:
+                fh.write(xml)
+            self.pulled_files[remote_path] = local_path
+            return self.pull_result
+        return super().pull(remote_path, local_path)
+
+
+def test_configure_apn_falls_back_to_renavigation_when_waiting_alone_is_not_enough(
+    monkeypatch, caplog
+):
+    """When even the delay+re-dump retry still doesn't find the entry, a
+    fresh APN_SETTINGS intent must be tried before giving up — real
+    hardware (2026-09-15, SHG07) showed waiting on the same already-open
+    screen sometimes isn't enough, but a full re-navigation is. Still a
+    soft check either way — must return True and log "confirmed visible",
+    not the "wasn't spotted" warning."""
+    monkeypatch.setattr("src.phase2.apn_setup.time.sleep", lambda _seconds: None)
+    client = ApnPostSaveRequiresRenavigationClient(
+        ui_dumps=[SAVE_FLOW_SCREEN_XML] * 30,
+        post_save_xml=POST_SAVE_NOT_YET_REFRESHED_XML,
+        delayed_post_save_xml=POST_SAVE_SUCCESS_XML,
+    )
+
+    with caplog.at_level(logging.INFO, logger="src.phase2.apn_setup"):
+        result = configure_apn(client, SAVE_FLOW_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is True
+    messages = [r.getMessage() for r in caplog.records]
+    assert not any("wasn't spotted" in m for m in messages)
+    assert any("confirmed visible" in m for m in messages)
+
+
 def test_configure_apn_taps_estimated_add_button_position_when_unresolved():
     """Real screenshot (2026-09-11): add_button_resource_id ("+") has never
     been captured (no dump of the list screen with an empty/known-count APN

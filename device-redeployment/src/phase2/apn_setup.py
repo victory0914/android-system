@@ -412,12 +412,15 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
       first line. Only logged (info if found, warning if not) — never
       turns a save the validation check already accepted into a failure,
       since e.g. list scroll position or display truncation could make
-      this check miss a genuinely successful save. If not found on the
-      first try, waits `_POST_SAVE_RECHECK_DELAY_SECONDS` and dumps once
-      more before giving up: a real run (2026-09-11) showed the list can
-      take a moment to actually refresh after 保存 — the client's own
-      manual re-check moments later found the entry present, even though
-      the automation's own immediate dump didn't. Still soft either way.
+      this check miss a genuinely successful save. Two retries before
+      giving up: first waits `_POST_SAVE_RECHECK_DELAY_SECONDS` and dumps
+      the same screen again (a real run, 2026-09-11, showed the list can
+      take a moment to actually refresh after 保存); if that still doesn't
+      find it, re-launches the `android.settings.APN_SETTINGS` intent to
+      force a genuine screen reload (a later real run, 2026-09-15,
+      SHG07, showed simply waiting on the already-open screen isn't
+      always enough, but leaving and re-entering Settings does show the
+      entry). Still soft either way — never a hard failure on its own.
 
     - Legacy (3 untouched models): a single literal save button.
     """
@@ -457,6 +460,26 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
             time.sleep(_POST_SAVE_RECHECK_DELAY_SECONDS)
             ui_xml = dump_ui(client)
             entry_visible = _apn_entry_visible(ui_xml, apn_name)
+
+        if not entry_visible:
+            # Real finding (2026-09-15, SHG07): even the delay+re-dump
+            # above can still show a stale list — the client confirmed
+            # manually that simply waiting on the SAME still-open screen
+            # isn't always enough, but leaving and re-entering Settings
+            # does show the entry. A fresh android.settings.APN_SETTINGS
+            # intent forces the screen to actually reload from the
+            # underlying data, unlike re-dumping an already-open one.
+            # Still soft — a failure here only skips this last recheck,
+            # never turns into a hard failure.
+            try:
+                client.shell("am start -a android.settings.APN_SETTINGS")
+            except AdbCommandError as exc:
+                logger.info(
+                    "apn: re-navigation for the post-save recheck failed: %s", exc
+                )
+            else:
+                ui_xml = dump_ui(client)
+                entry_visible = _apn_entry_visible(ui_xml, apn_name)
 
         if entry_visible:
             logger.info("apn: new entry %r confirmed visible on the APN list", apn_name)

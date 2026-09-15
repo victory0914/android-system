@@ -34,6 +34,20 @@ below) — SHG10's config is back to exactly what it was during the
 2026-09-11 success (`input_text_direct()` for 名前/APN, no regression
 risk remains).
 
+**🎉 Update, 2026-09-15: SHG07's Phase 2 APN flow is CONFIRMED WORKING
+end-to-end on real hardware too.** Client run:
+`SUCCESS: device 353681650397052 reached LOGIN_INSTALL` — 名前/APN/MCC/MNC
+all committed correctly (the keyboard-mode-toggle fix, this same day) and
+`rakuten.jp` was genuinely saved. The client-reported "list appears
+empty right after saving, but re-checking settings confirms it's really
+there" is the same list-refresh-timing quirk already known from SHG10
+(2026-09-11) — not a data-correctness problem, just a slower refresh than
+the existing retry accounted for; `_save_apn()`'s soft post-save check now
+also re-navigates (a fresh `APN_SETTINGS` intent) if waiting alone still
+doesn't find the entry. See "🎉 SHG07 text entry: real fix found..." below
+for the full account of how SHG07's text-entry problem was actually
+solved.
+
 SHG10's wizard is on a photograph-derived, text-matching config — real
 dumps for the wizard are **not obtainable on any model, ever** (structural
 ADB/factory-reset constraint, see docs/record.md); 2 of 9 screens' button
@@ -42,7 +56,7 @@ still 100% Stage A placeholders, not started.
 
 ## Highest priority
 
-### 🎉 SHG07 text entry: real fix found and directly confirmed (2026-09-15) — needs a full live re-test
+### 🎉 SHG07 text entry: real fix found, confirmed end-to-end (2026-09-15)
 
 After several dead ends (all preserved below, in "SHG07 text entry: root
 cause now confirmed, still NOT actually solved" — worth keeping since each
@@ -79,14 +93,18 @@ kana mode for MCC/MNC and this specific keyboard's kana mode also
 full-width-converts digit keyevents, not just letters. Fixed: the toggle
 tap now applies unconditionally, before every field including MCC/MNC.
 
-**Not yet confirmed**: a full `configure_apn()` run with this latest fix
-applied, end-to-end (navigation → all four fields → save). Two fields are
-now proven working live; MCC/MNC's fix is implemented but not yet
-re-tested. The next live run is what actually proves whether this gets a
-complete SHG07 APN entry saved for the first time — watch it closely,
-same as every other real-hardware test in this project, and manually
-reopen the saved entry afterward to confirm all four values, not just the
-log's own success message.
+**🎉 Confirmed end-to-end, same day (round 11):** with the MCC/MNC fix
+applied, a full live run reached `SUCCESS: reached LOGIN_INSTALL` with no
+field-mismatch errors at any of the four fields. Client reported the
+saved list appeared empty immediately after, but re-checking settings
+confirmed `rakuten.jp` genuinely registered — the same list-refresh-
+timing quirk already known from SHG10 (2026-09-11), not a data-
+correctness problem. Fixed: `_save_apn()`'s soft post-save check now
+tries a third time via a fresh `android.settings.APN_SETTINGS`
+re-navigation if the delay+re-dump retry still doesn't find the entry —
+real evidence (this client report) that waiting on the same already-open
+screen isn't always enough, but a full screen reload is. Still a soft
+check either way, never a hard failure.
 
 This coordinate is tied to SHG07's exact screen resolution/orientation —
 do not reuse it on another model without re-confirming via Pointer
