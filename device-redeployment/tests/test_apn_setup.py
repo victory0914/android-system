@@ -214,6 +214,49 @@ def test_fill_labeled_field_taps_cancel_to_back_out_of_mismatched_dialog():
     assert confirm_tap not in client.shell_calls
 
 
+# Real finding (2026-09-15, second cascading-failure round): cancelling the
+# *field* dialog alone wasn't enough either — it leaves the device on the
+# in-progress "new entry" edit *form*, not back on the APN *list*. The next
+# run's APN_SETTINGS intent then landed on that leftover form instead of
+# the list, still failing navigation. navigate_up_content_desc lets
+# apn_setup.py fully exit the abandoned entry as a second cleanup layer.
+NAVIGATE_UP_PROFILE = ModelProfile(
+    {
+        "model": "SHG-like Navigate-Up Test",
+        "model_number": "TST07",
+        "manufacturer": "Test",
+        "android_version": 13,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+        "apn_settings": {
+            **CANCEL_BUTTON_PROFILE.apn_settings(),
+            "navigate_up_content_desc": "上へ移動",
+        },
+    }
+)
+
+MISTRANSLATED_EDIT_FIELD_WITH_NAVIGATE_UP_XML = MISTRANSLATED_EDIT_FIELD_WITH_CANCEL_XML.replace(
+    "<hierarchy>",
+    '<hierarchy>\n  <node content-desc="上へ移動" bounds="[0,72][154,226]" />',
+)
+
+
+def test_fill_labeled_field_taps_navigate_up_after_cancel_on_mismatch():
+    """When navigate_up_content_desc is also configured, a mismatch must
+    tap it too, after Cancel — fully exiting the abandoned new-entry form
+    (not just closing the field's own dialog) so the device lands back on
+    the APN list, not a leftover edit form, for the next run."""
+    client = FakeAdbClient(ui_dumps=[MISTRANSLATED_EDIT_FIELD_WITH_NAVIGATE_UP_XML] * 30)
+    result = configure_apn(client, NAVIGATE_UP_PROFILE, "rakuten.jp", "440", "11")
+    assert result is False
+    cancel_tap = "input tap {} {}".format((0 + 100) // 2, (900 + 1000) // 2)
+    assert cancel_tap in client.shell_calls
+    navigate_up_tap = "input tap {} {}".format((0 + 154) // 2, (72 + 226) // 2)
+    assert navigate_up_tap in client.shell_calls
+    confirm_tap = "input tap {} {}".format((0 + 100) // 2, (800 + 900) // 2)
+    assert confirm_tap not in client.shell_calls
+
+
 def test_configure_apn_legacy_shape_succeeds():
     client = FakeAdbClient(ui_dumps=[LEGACY_SCREEN_XML] * 10)
     result = configure_apn(client, LEGACY_PROFILE, "internet", "310", "260")
@@ -291,6 +334,45 @@ def test_configure_apn_labeled_shape_still_uses_input_text_by_default():
     client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
     configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
     assert 'input text "rakuten.jp"' in client.shell_calls
+
+
+# SHG07 (2026-09-15): the on-screen keyboard's かな/英数 mode-toggle key,
+# found via Android's own Pointer Location developer tool and confirmed
+# working via `adb shell input tap` (not just manual touch) — see
+# tap_at_coordinates()'s docstring for why no resource-id is possible here.
+KEYBOARD_TOGGLE_PROFILE = ModelProfile(
+    {
+        "model": "SHG07-like Keyboard-Toggle Test",
+        "model_number": "TST08",
+        "manufacturer": "Test",
+        "android_version": 13,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+        "apn_settings": {**LABELED_PROFILE.apn_settings(), "keyboard_mode_toggle_tap": [106, 2239]},
+    }
+)
+
+
+def test_configure_apn_taps_keyboard_toggle_twice_before_each_text_field():
+    """Must tap the confirmed coordinate exactly twice (the confirmed
+    real-hardware recipe — see docs/record.md, 2026-09-15) before typing
+    into EACH non-numeric field (名前 and APN), and never for MCC/MNC
+    (numeric_only already works via keyevents regardless of keyboard
+    mode)."""
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    configure_apn(client, KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
+    toggle_tap = "input tap 106 2239"
+    # 2 fields (名前, APN) x 2 taps each = 4 total.
+    assert client.shell_calls.count(toggle_tap) == 4
+
+
+def test_configure_apn_keyboard_toggle_tap_is_opt_in():
+    """Confirms this is model-specific, not applied everywhere — SHG10's
+    profile (LABELED_PROFILE here has no keyboard_mode_toggle_tap key)
+    must never tap this SHG07-specific coordinate."""
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    configure_apn(client, LABELED_PROFILE, "rakuten.jp", "440", "11")
+    assert "input tap 106 2239" not in client.shell_calls
 
 
 def test_configure_apn_missing_save_button_never_taps_anything_claiming_save():

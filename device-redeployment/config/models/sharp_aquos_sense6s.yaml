@@ -171,6 +171,16 @@ apn_settings:
   # leaving it open — real finding the same day: a left-open dialog caused
   # every subsequent run/retry to fail navigation too.
   dialog_cancel_button_resource_id: "android:id/button2"
+  # INHERITED FROM SHG10, NOT independently confirmed for SHG07 — no
+  # SHG07 dump has ever captured the edit-form/list toolbar (both real
+  # SHG07 dumps so far only show a field dialog's own window, same
+  # "dump only captures the foreground window" limit noted elsewhere).
+  # This is the standard AOSP toolbar "navigate up" content-desc though,
+  # not a SHARP-specific string, and SHG07's dialog ids have otherwise
+  # matched SHG10's exactly — low risk, but unconfirmed. apn_setup.py
+  # only uses this as a best-effort cleanup tap (a miss here just logs a
+  # warning, never masks the real error it's cleaning up after).
+  navigate_up_content_desc: "上へ移動"
   add_button_resource_id: null
   add_button_content_desc: "新しい APN"
   overflow_menu_content_desc: "その他のオプション"
@@ -197,3 +207,22 @@ apn_settings:
   # method as SHG10 for a direct, apples-to-apples real-hardware test of
   # this hypothesis — not yet re-verified.
   # use_keyevent_text_entry: true
+
+  # RESOLVED — real, directly confirmed (2026-09-15), and this IS what
+  # actually fixes it (round 6/7 of the SHG07 text-entry investigation,
+  # docs/record.md): the on-screen keyboard's かな/英数 mode-toggle key
+  # (bottom-left, labelled "あ1"/"A⇔A" depending on state) doesn't appear
+  # in any uiautomator dump — confirmed twice, even at the exact moment a
+  # screenshot showed it (the IME hides its own UI from accessibility
+  # tooling). Its coordinate was found the only reliable way available:
+  # Android's Settings > Developer options > Input > "Pointer location",
+  # tapped via the real device screen, then re-confirmed via `adb shell
+  # input tap 106 2239` specifically (not just manual touch) followed by
+  # `adb shell input text "a"` — the field showed a correct half-width
+  # "a", not hiragana. Two taps were used in that confirmed test (the
+  # toggle key appears to cycle through more than 2 states); apn_setup.py
+  # taps it twice before every non-numeric field for the same reason.
+  # This coordinate is tied to THIS device's exact screen
+  # resolution/orientation — do not copy it to another model without
+  # re-confirming on that device.
+  keyboard_mode_toggle_tap: [106, 2239]

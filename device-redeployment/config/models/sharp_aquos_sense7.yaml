@@ -209,6 +209,18 @@ apn_settings:
   # fail navigation too, since android.settings.APN_SETTINGS doesn't land
   # on the expected list screen while a stuck dialog covers it.
   dialog_cancel_button_resource_id: "android:id/button2"
+  # RESOLVED (real — tests/fixtures/apn_restricted_SHG10.xml/
+  # apn_accesshost_SHG10.xml, both confirm this exact content-desc on the
+  # list/edit-form toolbar). Added same day as the cancel button above,
+  # for the same reason: cancelling the *field* dialog alone left the
+  # device on the "アクセスポイントの編集" edit *form* for the abandoned
+  # new entry (never saved, never discarded) — not back on the APN list —
+  # so the next run's APN_SETTINGS intent landed on that leftover form
+  # instead, still failing navigation. This is the standard AOSP toolbar
+  # "navigate up" back-arrow icon, not SHARP-specific — apn_setup.py taps
+  # it as a second, best-effort cleanup layer to fully exit the abandoned
+  # entry before returning failure.
+  navigate_up_content_desc: "上へ移動"
 
   # SET then REVERTED, both 2026-09-15. Briefly set to true (client
   # request: same input method across every device) on the theory that

@@ -42,70 +42,71 @@ still 100% Stage A placeholders, not started.
 
 ## Highest priority
 
-### 🚧 SHG07 cannot currently save a real APN entry at all — every automation-level fix attempted so far has been ruled out by real evidence
+### 🎉 SHG07 text entry: real fix found and directly confirmed (2026-09-15) — needs a full live re-test
 
-A client screenshot (2026-09-15) proved the round-1 SHG07 "fix"
-(`use_keyevent_text_entry` / `input_ascii_direct()`) was itself wrong:
-per-keyevent text entry does NOT bypass this device's IME for *letters*
-the way it does for digits — Gboard's Japanese romaji-to-kana conversion
-intercepts individual `KEYCODE_A`/`KEYCODE_K`/etc. events exactly like it
-would intercept typed romaji, turning "rakuten.jp" into 「らくてん。」.
-Technical reason: `adb shell input text` and `adb shell input keyevent`
-are BOTH implemented via synthesized KeyEvents under the hood (`input
-text` converts the string to KeyEvents via `KeyCharacterMap` before
-injecting them — the same underlying mechanism `input keyevent` uses
-directly) — so neither actually bypasses the keyboard's current mode,
-they're just two ways of sending the same kind of event. This also
-explains why SHG10's `input_text_direct()` succeeded on 2026-09-11: most
-likely that unit's keyboard simply happened to be in alphanumeric (英数)
-mode at the time, not because the command itself is immune to conversion.
-`apn_settings.use_keyevent_text_entry` was reverted to unset on **both**
-devices as a result (see docs/record.md, 2026-09-15) — SHG07 now uses the
-exact same method as SHG10 (`input_text_direct()`) for a direct
-real-hardware comparison; not yet re-tested.
+After several dead ends (all preserved below, in "SHG07 text entry: root
+cause now confirmed, still NOT actually solved" — worth keeping since each
+rules out a real avenue with real evidence), the client found the actual
+fix by using **Android's own Pointer Location developer tool**
+(Settings > Developer options > Input > "Pointer location") to get a real
+screen coordinate for the on-screen keyboard's かな/英数 mode-toggle key,
+rather than relying on `uiautomator dump` (which never captured the
+keyboard at all — confirmed twice). That coordinate, **(106, 2239)**, was
+then directly confirmed via a scripted `adb shell input tap` (not just
+manual touch): tapping it twice, then `adb shell input text "a"`,
+produced a correctly committed half-width `a` — the first correct ASCII
+character to ever land in an SHG07 APN field in this whole investigation.
 
-**Every other automation-level avenue investigated so far has also been
-ruled out, each with real evidence, not assumption:**
+Implemented: `apn_settings.keyboard_mode_toggle_tap: [106, 2239]`
+(SHG07's profile only), tapped twice via the new `tap_at_coordinates()`
+primitive before typing into each non-numeric field (名前/APN). This is a
+deliberate, documented exception to how every other tap in this codebase
+works — it doesn't resolve a resource-id/text/content-desc first, because
+there is nothing in the accessibility tree to resolve; the coordinate
+came from real on-device confirmation, not a guess.
+
+**What's confirmed vs. not yet**: the isolated tap+type sequence is
+confirmed working via direct `adb shell` commands. **Not yet confirmed**:
+a full `configure_apn()` run using this mechanism end-to-end (navigation
+→ all four fields → save). The next live run is what actually proves
+whether this gets a complete SHG07 APN entry saved for the first time —
+watch it closely, same as every other real-hardware test in this project.
+
+This coordinate is tied to SHG07's exact screen resolution/orientation —
+do not reuse it on another model without re-confirming via Pointer
+Location on that device first.
+
+<details>
+<summary>Dead ends ruled out along the way (real evidence each time, kept for reference)</summary>
+
+- **Per-keyevent typing instead of `input text`** — disproven: both are
+  implemented via synthesized KeyEvents under the hood (`input text`
+  converts through `KeyCharacterMap` before injecting — the same
+  underlying path `input keyevent` uses directly), so neither bypasses
+  the keyboard's current mode. `apn_settings.use_keyevent_text_entry` was
+  reverted to unset on both SHG07 and SHG10 as a result.
 - **Switch to a different installed keyboard** — `adb shell ime list -a`
-  showed only one real text-input IME exists on this device
-  (`com.google.android.inputmethod.latin`/Gboard); the other two entries
-  are an autofill proxy (disabled) and voice input (not usable for typed
-  text). No alternative to switch to.
-- **Switch Gboard's language via an IME subtype id** — `ime list -a`
-  showed no distinct per-locale subtype/hash data for Gboard on this
-  build (`mSubtypeId=0`, `mSubtypeName=null`); `dumpsys input_method`
-  showed `System locales = [ja-JP]` / `currentLocale = ja_JP`, suggesting
-  Gboard's language actually follows the device's system locale rather
-  than an independently switchable subtype — no safe id to target.
-- **Write the APN directly to Android's database**
-  (`content://telephony/carriers`), bypassing the keyboard/IME entirely —
-  `adb shell content query --uri content://telephony/carriers` returned
-  `SecurityException: No permission to access APN settings`. Confirmed
-  blocked for the plain `shell` user on this non-rooted device.
+  showed only one real text-input IME exists (`com.google.android.
+  inputmethod.latin`/Gboard); the other two entries are an autofill proxy
+  (disabled) and voice input (not usable for typed text).
+- **Switch Gboard's language via an IME subtype id** — no distinct
+  per-locale subtype/hash data exists for Gboard on this build
+  (`mSubtypeId=0`, `mSubtypeName=null`); `dumpsys input_method` showed
+  `System locales = [ja-JP]`, suggesting Gboard follows the device's
+  system locale rather than an independently switchable subtype.
+- **Write the APN directly to Android's database** — `content query --uri
+  content://telephony/carriers` returned `SecurityException: No
+  permission to access APN settings`. Confirmed blocked for the plain
+  `shell` user on this non-rooted device.
 - **Temporarily switch the device's system language to English** —
-  `adb shell settings put system system_locales en-US` succeeded (the
-  *setting* changed, confirmed via `get`), but a live screenshot showed
-  **no actual effect**: the Settings app and keyboard stayed in Japanese.
-  Writing the setting doesn't propagate to already-running apps/IME
-  without them reloading their configuration. **Not yet tried**:
-  force-stopping `com.android.settings` and
-  `com.google.android.inputmethod.latin` after the setting change, to
-  force them to pick it up fresh — proposed to the client, result not
-  back yet.
-- **Tap the visible on-screen keyboard's own かな/英数 mode-toggle key**
-  (the "あ1" key a client screenshot pointed at directly) — a real dump
-  captured at that exact moment
-  (`tests/fixtures/AQUOS sense6s（SHG07）/apn_kana_toggle_SHG07.xml`)
-  confirmed the on-screen keyboard isn't in the accessibility tree
-  `uiautomator dump` captures at all — only the app's own dialog window is
-  present. There is no resource-id or bounds data for this key to target;
-  estimating its position from a screenshot rather than real `bounds=`
-  data is the kind of guess this project has consistently avoided.
-
-**Not yet exhausted**: the force-stop-after-locale-change test above, and
-whichever of the client's next real-hardware observations narrows this
-further. Root cause is well understood now (keyboard mode, not injection
-method) even though a working fix isn't yet found.
+  `settings put system system_locales en-US` succeeded at the settings
+  layer (confirmed via `get`), but a live screenshot showed no actual
+  effect on the already-running Settings app/keyboard.
+- **Estimating the toggle key's position from a screenshot** — rejected
+  in favor of Pointer Location specifically because a pixel-proportion
+  estimate on this device's dense keyboard rows risked hitting an
+  unrelated adjacent key.
+</details>
 
 ### Other priorities (unchanged, kept in their original sections below)
 
@@ -706,8 +707,61 @@ plausible-sounding "bypass" theory can be wrong in a way only real
 hardware reveals; guessing an id here risks a worse, harder-to-diagnose
 failure than the one it would replace.
 
-Not yet re-verified against a live SHG07 run with the round-5 revert
-applied.
+**Round 6 (2026-09-15, live re-test of round 5's revert):** confirms
+round 5's hypothesis directly. `input_text_direct()` (SHG10's own,
+previously-untouched method) failed on SHG07 in the exact same way as the
+keyevent approach: typed `rakuten.jp`, field read back
+`らくてん。ｊｐ`. Proves the injection method was never the variable —
+the keyboard's current mode is. Real APN entries on SHG07 still cannot be
+saved; this is not yet solved.
+
+Also surfaced a second cascading-failure gap in the round-3 cleanup:
+cancelling the *field* dialog (`dialog_cancel_button_resource_id`) backs
+out of that dialog, but leaves the device sitting on the
+"アクセスポイントの編集" edit *form* for the abandoned new entry — not
+back on the APN *list*. The retry's `android.settings.APN_SETTINGS`
+intent landed on that leftover form again, failing navigation exactly
+like round 3's original bug. Fixed the same way: a second best-effort
+cleanup tap, `apn_settings.navigate_up_content_desc` (real, confirmed —
+the standard AOSP toolbar "上へ移動" back-arrow, seen in SHG10's real
+dumps; inherited/unconfirmed for SHG07, whose own dumps have only ever
+captured a dialog's foreground window, never the toolbar behind it) —
+tapped after Cancel to fully exit the abandoned entry.
+
+**Round 7-9 (2026-09-15, same day): 🎉 real fix found and directly
+confirmed.** Client pushed back on the dead-end conclusion above and
+pursued the on-screen keyboard's mode-toggle key further, using a
+different, more direct tool than `uiautomator dump`: Android's own
+**Settings > Developer options > Input > "Pointer location"**, which
+overlays real X/Y coordinates on screen for any touch. This produced a
+real, confirmed coordinate for the かな/英数 toggle key: **(106, 2239)**.
+Directly confirmed via a scripted `adb shell input tap`, not just manual
+touch — `adb shell input tap 106 2239` (run twice — the key appears to
+cycle through more than two states) followed by `adb shell input text
+"a"` produced a correctly committed half-width `a` in the field, not
+hiragana. This is the first time in this entire investigation that
+correct ASCII text has actually landed in an SHG07 APN field.
+
+Implemented: `tap_at_coordinates()` (`src/device/ui_automator.py`) — a
+deliberate, documented exception to every other tap in this codebase
+(which always resolves a real resource-id/text/content-desc from the
+current dump first): taps a raw screen coordinate with no lookup at all,
+because there is nothing in the accessibility tree to look up — the
+keyboard genuinely never appears in any dump, confirmed twice. New
+`apn_settings.keyboard_mode_toggle_tap: [106, 2239]` (SHG07 only — tied
+to this device's exact screen resolution, must be re-confirmed via
+Pointer Location on any other device before reuse) is tapped twice before
+typing into each non-numeric field (名前/APN); MCC/MNC are unaffected and
+untouched (`input_digits_direct()` already works regardless of keyboard
+mode).
+
+**This is the strongest evidence found so far in this whole
+investigation** — not a theory, not a dump, but a scripted `adb shell`
+command directly producing the correct character. Not yet re-verified
+against a full live `configure_apn()` run (only the isolated tap+type
+sequence has been confirmed) — the next real run is what confirms
+whether this actually gets a full APN entry saved end-to-end on SHG07 for
+the first time.
 
 ## Schema additions beyond the original task prompt's illustrative example
 

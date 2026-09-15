@@ -887,6 +887,65 @@ below).
   restoring SHG10's exact known-working 2026-09-11 configuration) so the
   next SHG07 run is a direct, apples-to-apples comparison against SHG10's
   method rather than resting on the theory alone. Not yet re-verified.
+- *2026-09-15 (round 6, live re-test of round 5's revert):* Client ran
+  the automation with `input_text_direct()` restored. Confirms round 5's
+  hypothesis directly: typed `rakuten.jp` into 名前, field read back
+  `らくてん。ｊｐ` — the exact same failure as the keyevent approach.
+  Proves the injection method was never the variable. Also surfaced a
+  second cascading-failure gap beyond round 3's fix: cancelling the
+  *field* dialog leaves the device on the "アクセスポイントの編集" edit
+  *form* for the abandoned new entry, not back on the APN *list* — the
+  retry's `APN_SETTINGS` intent landed on that leftover form again,
+  failing navigation the same way round 3's bug did. Fixed the same way:
+  a second best-effort cleanup tap, `apn_settings.navigate_up_content_desc`
+  (real, confirmed — the standard AOSP toolbar "上へ移動" back-arrow, seen
+  in SHG10's real dumps; inherited/unconfirmed for SHG07, whose own dumps
+  have only ever captured a dialog's foreground window) — tapped after
+  Cancel to fully exit the abandoned entry.
+- *2026-09-15 (rounds 7-9, same day — 🎉 the real fix, found by the
+  client):* Pushed back on the dead-end framing and pursued the
+  on-screen keyboard's mode-toggle key a different way: **Android's own
+  Settings > Developer options > Input > "Pointer location"**, which
+  overlays real X/Y touch coordinates on screen — rather than continuing
+  to rely on `uiautomator dump`, which had already been confirmed twice to
+  never capture the keyboard at all. This produced a real coordinate for
+  the かな/英数 toggle key: **(106, 2239)**. First manual touch there
+  showed a small popup (settings gear + another icon) rather than a clean
+  toggle — but the actually decisive test was scripted:
+  `adb shell input tap 106 2239` (run twice — the key appears to cycle
+  through more than two states) followed by `adb shell input text "a"`
+  produced a correctly committed half-width `a` in the field. First
+  correct ASCII character to ever land in an SHG07 APN field in this
+  entire investigation.
+
+  Implemented: `tap_at_coordinates()` (`src/device/ui_automator.py`) — a
+  new, deliberately different kind of primitive from every other tap in
+  this codebase: it does NOT resolve a resource-id/text/content-desc from
+  a dump first, because for this element there is nothing to resolve —
+  confirmed by two separate real dumps, the keyboard simply never appears
+  in the accessibility tree at all (most likely Gboard deliberately hides
+  its own UI from accessibility services, a real, known keyboard-privacy
+  behavior). The coordinate is real, direct, on-device confirmation
+  (Pointer Location + a scripted verification), never a screenshot
+  pixel-proportion estimate — that was explicitly considered and rejected
+  earlier for being too risky on this device's dense keyboard rows.
+  `apn_settings.keyboard_mode_toggle_tap: [106, 2239]` (SHG07 only) is
+  tapped twice before typing into each non-numeric field
+  (`_fill_labeled_field()`); MCC/MNC are untouched (`input_digits_direct()`
+  already works regardless of keyboard mode).
+
+  **Confirmed so far**: the isolated tap+type sequence, via direct `adb
+  shell` commands. **Not yet confirmed**: a full `configure_apn()` run
+  using this mechanism end-to-end — that's the next real test, and what
+  actually proves whether SHG07 can save a complete APN entry for the
+  first time. This coordinate is tied to SHG07's exact screen
+  resolution/orientation; re-confirm via Pointer Location before ever
+  reusing it on a different model.
+
+  New tests: `test_configure_apn_taps_keyboard_toggle_twice_before_each_
+  text_field`, `test_configure_apn_keyboard_toggle_tap_is_opt_in`,
+  `test_tap_at_coordinates_sends_a_raw_input_tap`,
+  `test_tap_at_coordinates_does_not_dump_or_look_up_anything_first`.
 
 ---
 

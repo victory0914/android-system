@@ -778,3 +778,30 @@ def get_current_ime(client: AdbClientProtocol) -> str | None:
         return None
     match = _CURRENT_IME_PATTERN.search(output)
     return match.group(1) if match else None
+
+
+def tap_at_coordinates(client: AdbClientProtocol, x: int, y: int) -> None:
+    """Tap a raw screen coordinate, with no element lookup at all — the one
+    deliberate exception to every other tap in this codebase, which always
+    resolves a real resource-id/text/content-desc from the current
+    `uiautomator dump` first.
+
+    Exists specifically for on-screen keyboard keys, which do not appear
+    in ANY `uiautomator dump` capture on SHG07 even at the exact moment a
+    screenshot shows them (confirmed twice, see docs/record.md,
+    2026-09-15) — most likely because the IME (Gboard) deliberately hides
+    its own UI from accessibility services, a real, known behavior for
+    keyboards (guards against other apps reading typed input). There is
+    nothing in the accessibility tree to target, so there is no id to
+    resolve here, ever — this function does not attempt to find one.
+
+    The coordinate passed in MUST come from real, direct confirmation on
+    the actual device (e.g. Android's Settings > Developer options >
+    Input > "Pointer location", which is how SHG07's かな/英数 mode-toggle
+    key's coordinate was found and confirmed working via `adb shell input
+    tap` specifically, not just manual touch) — never estimated from a
+    screenshot's pixel proportions, which was explicitly rejected earlier
+    in this same investigation as too risky (this device's keyboard rows
+    are dense, with unrelated keys immediately adjacent).
+    """
+    client.shell(f"input tap {x} {y}")

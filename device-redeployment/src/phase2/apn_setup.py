@@ -58,6 +58,7 @@ from src.device.ui_automator import (
     input_text_direct,
     navigate_menu_path,
     scroll_down,
+    tap_at_coordinates,
     tap_by_content_desc,
     tap_by_text,
     tap_left_of_content_desc,
@@ -183,6 +184,24 @@ def _fill_labeled_field(
         )
         return False
 
+    if not numeric_only:
+        # Real, directly-confirmed fix (client, 2026-09-15, SHG07): the
+        # on-screen keyboard's かな/英数 mode-toggle key — invisible to
+        # uiautomator dump (see tap_at_coordinates()'s docstring) — must be
+        # tapped TWICE (confirmed via `adb shell input tap`, not just
+        # manual touch, using the coordinate found via Android's Pointer
+        # location developer tool) before typing, or the active IME
+        # converts Latin input to kana regardless of which text-entry
+        # mechanism is used (input_text_direct() and input_ascii_direct()
+        # both affected equally — see docs/record.md, 2026-09-15, rounds
+        # 2 and 6). Only applied to non-numeric fields: MCC/MNC already
+        # work via input_digits_direct() regardless of keyboard mode.
+        toggle_coords = apn.get("keyboard_mode_toggle_tap")
+        if toggle_coords:
+            x, y = toggle_coords
+            tap_at_coordinates(client, x, y)
+            tap_at_coordinates(client, x, y)
+
     if numeric_only:
         if not input_digits_direct(client, value):
             return False
@@ -240,6 +259,30 @@ def _fill_labeled_field(
                     "%r to back out of the mismatched dialog — the device "
                     "may be left showing it; check before the next run.",
                     label, cancel_button,
+                )
+            # Second real finding, same day: cancelling the *field* dialog
+            # alone wasn't enough either — it leaves the device sitting on
+            # the "アクセスポイントの編集" edit *form* for the in-progress
+            # new entry (never saved, never discarded), not back on the APN
+            # *list*. The next run's android.settings.APN_SETTINGS intent
+            # then landed on that leftover edit form instead of the list,
+            # failing navigation again on every attempt. Also tap the
+            # toolbar's "上へ移動" (navigate up) icon — real, confirmed
+            # content-desc (tests/fixtures/apn_restricted_SHG10.xml), the
+            # standard AOSP back-arrow, present on both the list and edit
+            # form screens — to fully exit the abandoned new entry. Also
+            # best-effort: this is a second layer of the same cleanup
+            # principle, never allowed to mask the real error above.
+            navigate_up_content_desc = apn.get("navigate_up_content_desc")
+            if navigate_up_content_desc and not tap_by_content_desc(
+                client, navigate_up_content_desc
+            ):
+                logger.warning(
+                    "apn field %r: also could not tap the navigate-up icon "
+                    "(content-desc %r) to exit the abandoned new-entry "
+                    "form — the device may be left showing it; check "
+                    "before the next run.",
+                    label, navigate_up_content_desc,
                 )
             return False
 

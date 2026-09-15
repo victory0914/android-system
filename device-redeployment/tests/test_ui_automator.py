@@ -27,6 +27,7 @@ from src.device.ui_automator import (
     navigate_menu_path,
     node_is_checked,
     scroll_down,
+    tap_at_coordinates,
     tap_by_content_desc,
     tap_by_text,
     tap_left_of_content_desc,
@@ -552,6 +553,27 @@ def test_get_current_ime_returns_none_on_command_failure():
     client = FakeAdbClient()
     client.shell_failures.add("dumpsys input_method")
     assert get_current_ime(client) is None
+
+
+# --- tap_at_coordinates (2026-09-15, SHG07): the one deliberate exception
+# to every other tap in this codebase resolving a real element first — the
+# on-screen keyboard doesn't appear in any uiautomator dump at all, so
+# there's nothing to resolve. Coordinate must come from real confirmation
+# (Android's Pointer Location tool), never a screenshot estimate. -----------
+
+
+def test_tap_at_coordinates_sends_a_raw_input_tap():
+    client = FakeAdbClient()
+    tap_at_coordinates(client, 106, 2239)
+    assert client.shell_calls == ["input tap 106 2239"]
+
+
+def test_tap_at_coordinates_does_not_dump_or_look_up_anything_first():
+    """The defining difference from every other tap_* function: no
+    uiautomator dump happens at all — there's nothing in it to find."""
+    client = FakeAdbClient()
+    tap_at_coordinates(client, 106, 2239)
+    assert not any(c.startswith("uiautomator dump") for c in client.shell_calls)
 
 
 # --- tap_left_of_content_desc (real screenshot, 2026-09-11): the APN
