@@ -942,10 +942,30 @@ below).
   resolution/orientation; re-confirm via Pointer Location before ever
   reusing it on a different model.
 
-  New tests: `test_configure_apn_taps_keyboard_toggle_twice_before_each_
-  text_field`, `test_configure_apn_keyboard_toggle_tap_is_opt_in`,
-  `test_tap_at_coordinates_sends_a_raw_input_tap`,
-  `test_tap_at_coordinates_does_not_dump_or_look_up_anything_first`.
+  New tests: `test_configure_apn_taps_keyboard_toggle_twice_before_every_
+  field` (renamed same day, round 10 — see below), `test_configure_apn_
+  keyboard_toggle_tap_is_opt_in`, `test_tap_at_coordinates_sends_a_raw_
+  input_tap`, `test_tap_at_coordinates_does_not_dump_or_look_up_anything_
+  first`.
+- *2026-09-15 (round 10, same day — live re-test finds one more gap, MCC
+  full-width digits):* Client ran the full `configure_apn()` flow with
+  the round 7-9 fix in place. **Real progress**: 名前 and APN both went
+  through with no mismatch error — the toggle fix worked for the two
+  fields it was built for, the first time either has ever committed
+  correctly on SHG07. Failure moved to MCC: `typed '440' but the field
+  now reads '４４０'` — the same full-width-digit pattern SHG10 hit,
+  except here it happened *with* `input_digits_direct()`, which had been
+  assumed universally immune to conversion (that assumption held on
+  SHG10, where `keyboard_mode_toggle_tap` isn't set, but not here). Root
+  cause: the toggle tap was scoped to non-numeric fields only, on the
+  theory digit keyevents never needed it — wrong on SHG07, whose 12-key
+  keyboard apparently full-width-converts digit keyevents too when left
+  in kana mode, not just letters. Fixed: `keyboard_mode_toggle_tap` now
+  applies unconditionally, before every field including MCC/MNC (test
+  renamed to `..._before_every_field`, asserts 8 taps — 4 fields × 2 —
+  instead of 4). Not yet re-verified against a full live run with this
+  latest fix; two of four fields are now proven working live, MCC/MNC's
+  fix is implemented but untested.
 
 ---
 

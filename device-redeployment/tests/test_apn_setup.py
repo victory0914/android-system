@@ -353,17 +353,19 @@ KEYBOARD_TOGGLE_PROFILE = ModelProfile(
 )
 
 
-def test_configure_apn_taps_keyboard_toggle_twice_before_each_text_field():
+def test_configure_apn_taps_keyboard_toggle_twice_before_every_field():
     """Must tap the confirmed coordinate exactly twice (the confirmed
     real-hardware recipe — see docs/record.md, 2026-09-15) before typing
-    into EACH non-numeric field (名前 and APN), and never for MCC/MNC
-    (numeric_only already works via keyevents regardless of keyboard
-    mode)."""
+    into EVERY field, including MCC/MNC — a live run the same day showed
+    input_digits_direct() also gets digits converted to full-width
+    ("440" -> "４４０") when the keyboard is left in kana mode; the
+    earlier assumption that digit keyevents are universally immune only
+    held on SHG10, not SHG07."""
     client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
     configure_apn(client, KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
     toggle_tap = "input tap 106 2239"
-    # 2 fields (名前, APN) x 2 taps each = 4 total.
-    assert client.shell_calls.count(toggle_tap) == 4
+    # 4 fields (名前, APN, MCC, MNC) x 2 taps each = 8 total.
+    assert client.shell_calls.count(toggle_tap) == 8
 
 
 def test_configure_apn_keyboard_toggle_tap_is_opt_in():

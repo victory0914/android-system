@@ -221,7 +221,11 @@ apn_settings:
   # `adb shell input text "a"` — the field showed a correct half-width
   # "a", not hiragana. Two taps were used in that confirmed test (the
   # toggle key appears to cycle through more than 2 states); apn_setup.py
-  # taps it twice before every non-numeric field for the same reason.
+  # taps it twice before EVERY field, including MCC/MNC — a live run
+  # (same day) showed input_digits_direct() also gets digits converted to
+  # full-width ("440" -> "４４０") when the keyboard is left in kana mode,
+  # disproving the earlier assumption (true on SHG10, where this flag
+  # isn't set) that digit keyevents are universally immune to conversion.
   # This coordinate is tied to THIS device's exact screen
   # resolution/orientation — do not copy it to another model without
   # re-confirming on that device.

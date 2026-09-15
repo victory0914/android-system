@@ -184,23 +184,26 @@ def _fill_labeled_field(
         )
         return False
 
-    if not numeric_only:
-        # Real, directly-confirmed fix (client, 2026-09-15, SHG07): the
-        # on-screen keyboard's かな/英数 mode-toggle key — invisible to
-        # uiautomator dump (see tap_at_coordinates()'s docstring) — must be
-        # tapped TWICE (confirmed via `adb shell input tap`, not just
-        # manual touch, using the coordinate found via Android's Pointer
-        # location developer tool) before typing, or the active IME
-        # converts Latin input to kana regardless of which text-entry
-        # mechanism is used (input_text_direct() and input_ascii_direct()
-        # both affected equally — see docs/record.md, 2026-09-15, rounds
-        # 2 and 6). Only applied to non-numeric fields: MCC/MNC already
-        # work via input_digits_direct() regardless of keyboard mode.
-        toggle_coords = apn.get("keyboard_mode_toggle_tap")
-        if toggle_coords:
-            x, y = toggle_coords
-            tap_at_coordinates(client, x, y)
-            tap_at_coordinates(client, x, y)
+    # Real, directly-confirmed fix (client, 2026-09-15, SHG07): the
+    # on-screen keyboard's かな/英数 mode-toggle key — invisible to
+    # uiautomator dump (see tap_at_coordinates()'s docstring) — must be
+    # tapped TWICE (confirmed via `adb shell input tap`, not just manual
+    # touch, using the coordinate found via Android's Pointer location
+    # developer tool) before typing, or the active IME transforms the
+    # input regardless of mechanism: input_text_direct()/
+    # input_ascii_direct() both get letters converted to kana (see
+    # docs/record.md, 2026-09-15, rounds 2 and 6), and — confirmed by a
+    # live run the same day — input_digits_direct() gets digits converted
+    # to full-width ("440" → "４４０") too when the keyboard is left in
+    # kana mode. Earlier versions of this code assumed digit keyevents
+    # were universally immune to conversion (true on SHG10, where this
+    # flag isn't set) — that assumption doesn't hold on SHG07's keyboard,
+    # so this now applies unconditionally, not just to non-numeric fields.
+    toggle_coords = apn.get("keyboard_mode_toggle_tap")
+    if toggle_coords:
+        x, y = toggle_coords
+        tap_at_coordinates(client, x, y)
+        tap_at_coordinates(client, x, y)
 
     if numeric_only:
         if not input_digits_direct(client, value):

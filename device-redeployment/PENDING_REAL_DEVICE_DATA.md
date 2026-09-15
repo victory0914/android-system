@@ -59,18 +59,34 @@ character to ever land in an SHG07 APN field in this whole investigation.
 
 Implemented: `apn_settings.keyboard_mode_toggle_tap: [106, 2239]`
 (SHG07's profile only), tapped twice via the new `tap_at_coordinates()`
-primitive before typing into each non-numeric field (名前/APN). This is a
-deliberate, documented exception to how every other tap in this codebase
-works — it doesn't resolve a resource-id/text/content-desc first, because
-there is nothing in the accessibility tree to resolve; the coordinate
-came from real on-device confirmation, not a guess.
+primitive before typing into each field. This is a deliberate, documented
+exception to how every other tap in this codebase works — it doesn't
+resolve a resource-id/text/content-desc first, because there is nothing
+in the accessibility tree to resolve; the coordinate came from real
+on-device confirmation, not a guess.
 
-**What's confirmed vs. not yet**: the isolated tap+type sequence is
-confirmed working via direct `adb shell` commands. **Not yet confirmed**:
-a full `configure_apn()` run using this mechanism end-to-end (navigation
-→ all four fields → save). The next live run is what actually proves
-whether this gets a complete SHG07 APN entry saved for the first time —
-watch it closely, same as every other real-hardware test in this project.
+**Live re-test, same day — real progress, one more gap found and
+fixed.** First attempt: 名前 and APN both went through with **no
+mismatch error** — the toggle fix worked for the two fields it was built
+for. Failure moved to MCC: `typed '440' but the field now reads '４４０'`
+— the exact full-width-digit pattern from SHG10, except here it happened
+*with* `input_digits_direct()`, which had been assumed universally immune
+to conversion (true on SHG10, where `keyboard_mode_toggle_tap` isn't
+set). That assumption doesn't hold on SHG07: the toggle tap was
+originally scoped to non-numeric fields only, on the theory digit
+keyevents never needed it — wrong here, since the keyboard was left in
+kana mode for MCC/MNC and this specific keyboard's kana mode also
+full-width-converts digit keyevents, not just letters. Fixed: the toggle
+tap now applies unconditionally, before every field including MCC/MNC.
+
+**Not yet confirmed**: a full `configure_apn()` run with this latest fix
+applied, end-to-end (navigation → all four fields → save). Two fields are
+now proven working live; MCC/MNC's fix is implemented but not yet
+re-tested. The next live run is what actually proves whether this gets a
+complete SHG07 APN entry saved for the first time — watch it closely,
+same as every other real-hardware test in this project, and manually
+reopen the saved entry afterward to confirm all four values, not just the
+log's own success message.
 
 This coordinate is tied to SHG07's exact screen resolution/orientation —
 do not reuse it on another model without re-confirming via Pointer
