@@ -98,12 +98,14 @@ def test_load_shg10_model_file_screen_driven_wizard_and_labeled_apn_fields():
     assert apn["save_button_resource_id"] is None
     assert apn["overflow_menu_content_desc"] == "その他のオプション"
     assert apn["save_menu_item_text"] == "保存"
-    # Client request (2026-09-15): same input method across every device —
-    # SHG10 now opts into the same keyevent-based text entry SHG07 needed,
-    # even though SHG10's own real end-to-end success (2026-09-11) used
-    # input_text_direct() for 名前/APN. Not itself re-verified on real
-    # SHG10 hardware yet — see docs/record.md, PENDING_REAL_DEVICE_DATA.md.
-    assert apn["use_keyevent_text_entry"] is True
+    # Briefly set to true (2026-09-15, "same input method across every
+    # device"), then reverted the same day once round 2 of the SHG07
+    # investigation proved per-keyevent typing isn't actually
+    # IME-bypassing for letters either (see docs/record.md) — keeping it
+    # here bought no real safety and only risked reproducing SHG07's
+    # failure on a path already proven working. Unset — SHG10 uses
+    # input_text_direct() for 名前/APN exactly as it did on 2026-09-11.
+    assert apn.get("use_keyevent_text_entry") is None
 
 
 @pytest.mark.parametrize("filename", SCREEN_DRIVEN_MODEL_FILES)
@@ -171,11 +173,14 @@ def test_load_shg07_model_file_inherited_from_shg10():
     assert apn["add_button_content_desc"] == "新しい APN"
     assert apn["overflow_menu_content_desc"] == "その他のオプション"
     assert apn["save_menu_item_text"] == "保存"
-    # This one is real SHG07 data, not inherited — see docs/record.md,
-    # 2026-09-14: the client's first real SHG07 dump/report found the
-    # active IME interferes with plain `input text` entry for 名前/APN
-    # there, unlike SHG10.
-    assert apn["use_keyevent_text_entry"] is True
+    # Briefly real SHG07 data (2026-09-14: found the active IME interferes
+    # with plain `input text` for 名前/APN), then reverted 2026-09-15 once
+    # round 2 proved per-keyevent typing (the fix this enabled) fails the
+    # exact same way — 「らくてん。」 from "rakuten.jp" — since both `input
+    # text` and `input keyevent` are equally exposed to the keyboard's
+    # current mode. SHG07 now uses the same method as SHG10 (unset here
+    # too) for a direct, apples-to-apples real-hardware comparison.
+    assert apn.get("use_keyevent_text_entry") is None
 
 
 def test_load_all_keys_by_model_number():

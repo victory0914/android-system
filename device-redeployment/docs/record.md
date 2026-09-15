@@ -608,10 +608,9 @@ into 「らくてん。」 there. Since SHG10's own MCC/MNC issue was also
 IME-driven, this flag may cause the same failure on SHG10's next run, not
 a no-op as assessed here. The 2026-09-15 read-back-verification fix means
 this would now fail loud rather than silently regress, but it would still
-be a real functional break on a path proven working 2026-09-11. See
-PENDING_REAL_DEVICE_DATA.md's "🚨 SHG07 cannot currently save a real APN
-entry..." entry — recommending confirming with the client whether to
-revert this flag on SHG10 until SHG07's actual fix is found.
+be a real functional break on a path proven working 2026-09-11. **Resolved
+same day** (see the SHG07 section's "round 5" entry below): reverted —
+SHG10 is back to exactly its 2026-09-11 known-working configuration.
 
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
@@ -793,7 +792,8 @@ below).
   on a device whose 名前/APN entry was previously proven working
   (2026-09-11). Flagged in PENDING_REAL_DEVICE_DATA.md as the top
   priority — recommending confirming with the client whether to revert
-  SHG10's flag until SHG07's actual fix is found.
+  SHG10's flag until SHG07's actual fix is found. **Resolved same day,
+  round 5 below: reverted.**
 
   Real options for an actual SHG07 fix, none yet attempted: (1) `adb
   shell ime list -a` (read-only, safe) to find a genuinely available
@@ -831,6 +831,62 @@ below).
   up whatever the SHG07 unit's screen currently shows from before this fix
   existed. Client needs to check the actual device (or a fresh dump) and
   manually dismiss anything unexpected before the next attempt.
+- *2026-09-15 (round 4, same day — three more real options investigated
+  and ruled out):* Followed up on round 2's "real options" list with
+  actual commands against the device, one at a time, each with concrete
+  evidence:
+  - `adb -s 353681650397052 shell ime list -a` — only one real text-input
+    IME exists: `com.google.android.inputmethod.latin` (Gboard). The other
+    two entries are an autofill proxy (`enabled=false`) and voice input
+    (not usable for typed text). No alternative keyboard to switch to.
+  - Same output showed `mSubtypeId=0 mSubtypeName=null` for Gboard — no
+    distinct per-locale subtype data to target. `adb shell dumpsys
+    input_method | findstr /I "curmethodid subtype locale"` (needed
+    because the full dump was too long to paste) additionally showed
+    `System locales = [ja-JP]` / `currentLocale = ja_JP` twice — suggests
+    Gboard's language follows the device's system locale rather than an
+    independently switchable subtype/hash, so `settings put secure
+    selected_input_method_subtype` isn't applicable here.
+  - `adb -s 353681650397052 shell content query --uri
+    content://telephony/carriers` → `SecurityException: No permission to
+    access APN settings`. Confirms the Telephony ContentProvider
+    direct-write idea is blocked for the plain `shell` user on this
+    non-rooted device — ruled out with a real error, not an assumption.
+  - `adb -s 353681650397052 shell settings put system system_locales
+    en-US` succeeded (confirmed via `settings get`, value round-tripped
+    ja-JP → en-US → ja-JP correctly) — but a follow-up screenshot showed
+    **no actual effect**: Settings app labels and the keyboard both stayed
+    in Japanese. Writing the setting doesn't propagate to already-running
+    apps/IME without them reloading. Proposed next: force-stop
+    `com.android.settings` and `com.google.android.inputmethod.latin`
+    after the setting change, to force a fresh read — not yet tried.
+  - A client screenshot also pointed directly at the visible keyboard's
+    own かな/英数 mode-toggle key ("あ1") as the likely real fix. A real
+    dump captured at that exact moment
+    (`apn_kana_toggle_SHG07.xml`) confirmed the on-screen keyboard isn't
+    in the accessibility tree `uiautomator dump` captures at all — only
+    the app's own dialog window is present (confirmed by listing every
+    widget class in the dump: all `android.widget.*`/Settings-app
+    classes, nothing keyboard-related). No resource-id or bounds exist
+    for this key to target safely.
+- *2026-09-15 (round 5, same day — reconsidered SHG10's own method):*
+  Client asked directly whether SHG10's method (`input_text_direct()`)
+  would fare any better than the keyevent approach. Real technical
+  answer: `input text` and `input keyevent` are both implemented via
+  synthesized KeyEvents under the hood — `input text` converts the string
+  through `KeyCharacterMap` before injecting, the same underlying
+  event-injection path `input keyevent` uses directly — so neither
+  actually bypasses whatever mode the keyboard is in when the events
+  arrive; they're just two ways of sending the same kind of event. This
+  also gives the likely explanation for SHG10's 2026-09-11 success: that
+  unit's keyboard was probably just already in alphanumeric mode at the
+  time, not because `input_text_direct()` itself resists conversion.
+  `use_keyevent_text_entry` reverted to unset on **both** SHG07 and SHG10
+  (the SHG10 flag had been set earlier the same day, "same input method
+  across every device" — see above; this closes that regression risk by
+  restoring SHG10's exact known-working 2026-09-11 configuration) so the
+  next SHG07 run is a direct, apples-to-apples comparison against SHG10's
+  method rather than resting on the theory alone. Not yet re-verified.
 
 ---
 

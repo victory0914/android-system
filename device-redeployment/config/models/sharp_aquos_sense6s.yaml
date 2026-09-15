@@ -176,14 +176,24 @@ apn_settings:
   overflow_menu_content_desc: "その他のオプション"
   save_menu_item_text: "保存"
   save_button_resource_id: null
-  # RESOLVED — real, SHG07-specific (not inherited from SHG10). Client
-  # report + a real dump of the per-field dialog itself
-  # (tests/fixtures/AQUOS sense6s（SHG07）/apn_input_dialog_SHG07.xml,
-  # 2026-09-14): the active Japanese input method interferes with plain
-  # alphanumeric `input text` entry on this device, not just MCC/MNC as on
-  # SHG10 — 名前/APN need the same per-character keyevent workaround MCC/MNC
-  # already use elsewhere. See apn_setup.py's _fill_labeled_field() and
-  # ui_automator.py's input_ascii_direct(). Deliberately NOT set on SHG10's
-  # profile — input_text_direct() is already proven working there for these
-  # two fields (real end-to-end success, 2026-09-11).
-  use_keyevent_text_entry: true
+  # REVERTED to unset, 2026-09-15 — round 2 of this investigation
+  # (docs/record.md) proved `input_ascii_direct()` (per-keyevent typing)
+  # does NOT actually bypass this device's IME for letters either: it
+  # produced 「らくてん。」 from "rakuten.jp", the same romaji-to-kana
+  # conversion `input_text_direct()` was originally blamed for. Real
+  # technical reason both fail identically: `adb shell input text` is
+  # itself implemented via synthesized KeyEvents (through
+  # KeyCharacterMap), the same underlying mechanism `input keyevent` uses
+  # directly — so both are equally subject to whatever mode (kana vs.
+  # 英数/alphanumeric) the keyboard is currently in when they're sent, not
+  # bypassing it. This strongly suggests SHG10's real 2026-09-11 success
+  # with input_text_direct() worked because that unit's keyboard happened
+  # to already be in alphanumeric mode at the time — not because that
+  # command is immune to conversion — meaning switching *methods* alone
+  # doesn't fix this; the keyboard's *current mode* is the real blocker
+  # (the visible "あ1"/英数 toggle key, not yet solvable via
+  # uiautomator — no resource-id exists for it, see
+  # PENDING_REAL_DEVICE_DATA.md). Reverted so SHG07 uses the exact same
+  # method as SHG10 for a direct, apples-to-apples real-hardware test of
+  # this hypothesis — not yet re-verified.
+  # use_keyevent_text_entry: true
