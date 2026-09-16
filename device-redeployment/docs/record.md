@@ -1020,9 +1020,10 @@ hardware, the same milestone SHG10 reached 2026-09-11.
 
 ## SOG07 (Sony Xperia 10 IV, Android 14)
 
-**Serial:** not yet recorded — client supplied dumps directly, no `adb
-devices`/`adb shell getprop` session logged for this unit yet.
-**Confirmed identity string (from adb):** not yet confirmed.
+**Serial:** HQ632M1012
+**Confirmed identity string (from adb):** not yet confirmed — client
+identified the serial via `adb devices` + `getprop ro.product.model`, no
+full session logged for this unit yet.
 
 Config (`config/models/sony_xperia_10iv.yaml`) got real `wifi_settings`/
 `apn_settings` data 2026-09-16 from client-supplied dumps. `wizard_steps`
@@ -1067,9 +1068,10 @@ this unit.
 
 ## SOG08 (Sony Xperia Ace III, Android 13)
 
-**Serial:** not yet recorded — same as SOG07, client supplied dumps
-directly.
-**Confirmed identity string (from adb):** not yet confirmed.
+**Serial:** HQ63460161
+**Confirmed identity string (from adb):** not yet confirmed — same as
+SOG07, serial identified via `adb devices` + `getprop ro.product.model`,
+no full session logged for this unit yet.
 
 Config (`config/models/sony_xperia_ace3.yaml`) got the same treatment as
 SOG07, same day, from its own real dumps. `wizard_steps` remains 100%

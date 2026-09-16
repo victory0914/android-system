@@ -164,10 +164,11 @@ Location on that device first.
   (wizard + Wi-Fi + APN), not just Wi-Fi + APN with `--skip-wizard`.
 - **A supervised first real test of SOG07 and SOG08** — their configs now
   hold real Wi-Fi + APN data from client dumps (2026-09-16), but neither
-  has been run against real hardware yet. See "🎉 SOG07/SOG08: real Wi-Fi
-  + APN data from client dumps" below — same recommendation as every
-  other model's first live test: `--skip-wizard`, one device at a time,
-  watch every screen.
+  has been run against real hardware yet. Serials are now known: SOG07
+  (Xperia 10 IV) `HQ632M1012`, SOG08 (Xperia Ace III) `HQ63460161`. See
+  "🎉 SOG07/SOG08: real Wi-Fi + APN data from client dumps" below — same
+  recommendation as every other model's first live test: `--skip-wizard`,
+  one device at a time, watch every screen.
 
 ### Re-verify the destructive-tap safety fix's retry path specifically
 
@@ -631,6 +632,12 @@ tap/find call across wizard, Wi-Fi, and APN — not specific to where it
 happened to first surface (APN menu navigation).
 
 ## SOG08 (Xperia Ace III), SOG07 (Xperia 10 IV) — Wi-Fi + APN now real (2026-09-16)
+
+**Serials (client-supplied, 2026-09-16):** SOG07 (Xperia 10 IV)
+`HQ632M1012`, SOG08 (Xperia Ace III) `HQ63460161` — see docs/record.md's
+SOG07/SOG08 sections. Confirmed identity strings not yet recorded — client
+identified both via `adb devices` + `getprop ro.product.model`, no full
+`adb`/log session logged for either unit yet.
 
 Updated from the original "entirely untouched" status: client supplied
 the same capture set used for SHG10 (Wi-Fi list, APN list, APN entry form
