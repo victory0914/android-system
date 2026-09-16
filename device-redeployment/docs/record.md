@@ -1064,7 +1064,29 @@ this unit.
   (android:id/edit/button1/button2), better-justified than SHG07's
   original inheritance given the cross-device pattern above, but still
   not independently confirmed.
-- Not yet run against real hardware — config+test work from dumps only.
+- *2026-09-17:* First live run hit the exact same kana-conversion IME
+  symptom SHG07 had (full-width/kana characters typed into the APN
+  fields instead of plain ASCII). Client confirmed this device's Gboard
+  also needs the mode-toggle-key workaround. Coordinate found the same
+  way as SHG07's: enabled Pointer Location, captured the toggle key's
+  touch position (`[850, 0]` from an initial capture was rejected as
+  unreliable — Y=0 didn't match the key's visible bottom-of-screen
+  position, most likely a post-release reset reading, not a real touch;
+  a redo holding the touch down for the screenshot gave `X:145.0
+  Y:2308.0`), then confirmed via a scripted `adb shell input tap 145
+  2308` (twice) + `input text "rakuten.jp"` test — client confirmed the
+  field read back plain `rakuten.jp`, not a converted string.
+- Implication: `keyboard_mode_toggle_tap: [145, 2308]` added to
+  `config/models/sony_xperia_10iv.yaml`, tapped twice before every field
+  (same pattern as SHG07 — applies to numeric fields too, since SHG07's
+  MCC/MNC bug proved digits aren't universally immune). This is SOG07's
+  own confirmed coordinate, tied to this exact unit's screen — never to
+  be copied to another device.
+- Not yet run to full end-to-end completion against real hardware with
+  this fix in place — the keyboard-toggle coordinate itself was
+  confirmed via the scripted single-field test above, but a full
+  `configure_apn()` run (all four fields, save, list-visibility check)
+  has not yet been observed.
 
 ## SOG08 (Sony Xperia Ace III, Android 13)
 
@@ -1099,7 +1121,20 @@ Stage A placeholder.
 - *2026-09-16:* Per-field dialog ids remain unresolved for this device
   specifically too, inherited from SHG10 with the same cross-device
   justification as SOG07's identical note.
-- Not yet run against real hardware — config+test work from dumps only.
+- *2026-09-17:* Same symptom as SOG07 hit on the first live run (kana
+  conversion in the APN fields). Coordinate found the same way: a
+  Pointer Location capture gave `X:78.0 Y:1356.0`, a redo (holding the
+  touch during the screenshot) gave a consistent `X:73.0 Y:1352.0` —
+  close agreement between the two independent captures, a good sign the
+  reading is real. Confirmed via a scripted `adb shell input tap 73
+  1352` (twice) + `input text "rakuten.jp"` test — client confirmed the
+  field read back plain `rakuten.jp`.
+- Implication: `keyboard_mode_toggle_tap: [73, 1352]` added to
+  `config/models/sony_xperia_ace3.yaml`, same unconditional
+  tap-twice-before-every-field pattern as SOG07/SHG07. This device's own
+  confirmed coordinate — never to be copied elsewhere.
+- Not yet run to full end-to-end completion with this fix in place —
+  same caveat as SOG07 above.
 
 ---
 

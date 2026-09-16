@@ -128,10 +128,12 @@ apn_settings:
   save_menu_item_text: "保存"
   save_button_resource_id: null
 
-  # NOT set — no real evidence (yet) that this device's IME interferes
-  # with plain text/digit entry the way SHG07's does. See SOG07's
-  # identical note for why this must never be set speculatively.
-  # keyboard_mode_toggle_tap: [x, y]
+  # RESOLVED (real) — a live run on 2026-09-17 showed the same
+  # kana-conversion symptom SHG07 had. Coordinate found and confirmed via
+  # Pointer Location + a scripted `adb shell input tap` + text-entry test
+  # on this exact unit (client-confirmed, see docs/record.md's SOG08
+  # section) — must never be copied to another device/resolution.
+  keyboard_mode_toggle_tap: [73, 1352]
   # RESOLVED (real) — apn_list_SOG08.xml shows the identical content-desc
   # "上へ移動" for the toolbar back-arrow.
   navigate_up_content_desc: "上へ移動"

@@ -225,10 +225,10 @@ def test_load_sog07_model_file_real_apn_and_wifi_data():
     assert apn["overflow_menu_content_desc"] == "その他のオプション"
     assert apn["save_menu_item_text"] == "保存"
     assert apn["navigate_up_content_desc"] == "上へ移動"
-    # No real evidence of SHG07's kana-conversion IME symptom on this
-    # device — must stay unset, never inherited from SHG07's own
-    # device-specific coordinate.
-    assert apn.get("keyboard_mode_toggle_tap") is None
+    # RESOLVED (real, 2026-09-17): a live run showed the same
+    # kana-conversion IME symptom SHG07 had. This is this device's own
+    # Pointer-Location-confirmed coordinate, not inherited from SHG07's.
+    assert apn["keyboard_mode_toggle_tap"] == [145, 2308]
 
 
 def test_load_sog08_model_file_real_apn_and_wifi_data():
@@ -260,7 +260,9 @@ def test_load_sog08_model_file_real_apn_and_wifi_data():
     assert apn["overflow_menu_content_desc"] == "その他のオプション"
     assert apn["save_menu_item_text"] == "保存"
     assert apn["navigate_up_content_desc"] == "上へ移動"
-    assert apn.get("keyboard_mode_toggle_tap") is None
+    # RESOLVED (real, 2026-09-17): same symptom, same fix, this device's
+    # own confirmed coordinate.
+    assert apn["keyboard_mode_toggle_tap"] == [73, 1352]
 
 
 def test_load_all_keys_by_model_number():

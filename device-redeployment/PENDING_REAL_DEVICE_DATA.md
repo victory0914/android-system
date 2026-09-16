@@ -68,6 +68,21 @@ below. **Wizard data for both remains 100% Stage A placeholders** — no
 OOBE photos or dumps exist for either, same structural constraint as
 every other model.
 
+**🎉 Update, 2026-09-17: both SOG07 and SOG08 hit SHG07's exact
+kana-conversion text-entry symptom on their first live runs, and both are
+now fixed the same way.** Real, Pointer-Location-confirmed
+`keyboard_mode_toggle_tap` coordinates found and verified via scripted
+`adb shell input tap` + a plain-ASCII text-entry test on each unit:
+SOG07 `[145, 2308]`, SOG08 `[73, 1352]` — each device's own coordinate,
+never copied from another device. Applied unconditionally before every
+field, same as SHG07. Neither device has yet completed a full
+end-to-end `configure_apn()` run with the fix in place (only the
+single-field scripted test has been confirmed so far) — that's the next
+real-hardware milestone to watch for. See docs/record.md's SOG07/SOG08
+sections for the full account, including a rejected first SOG07 reading
+(`[850, 0]`) whose Y value didn't match the key's visible position and
+was correctly not trusted.
+
 ## Highest priority
 
 ### 🎉 SHG07 text entry: real fix found, confirmed end-to-end (2026-09-15)
@@ -162,13 +177,13 @@ Location on that device first.
   "SHG10 (AQUOS sense7...)" below) — everything else about SHG10 is
   implemented; this is what's needed for a *complete* fresh-device flow
   (wizard + Wi-Fi + APN), not just Wi-Fi + APN with `--skip-wizard`.
-- **A supervised first real test of SOG07 and SOG08** — their configs now
-  hold real Wi-Fi + APN data from client dumps (2026-09-16), but neither
-  has been run against real hardware yet. Serials are now known: SOG07
-  (Xperia 10 IV) `HQ632M1012`, SOG08 (Xperia Ace III) `HQ63460161`. See
-  "🎉 SOG07/SOG08: real Wi-Fi + APN data from client dumps" below — same
-  recommendation as every other model's first live test: `--skip-wizard`,
-  one device at a time, watch every screen.
+- **A full end-to-end `configure_apn()` run on SOG07 and SOG08** — both
+  hit and fixed the kana-conversion text-entry symptom (2026-09-17, see
+  update above), but only via a single-field scripted test so far, not a
+  full automated run through all four fields + save + list-visibility
+  check. Serials: SOG07 (Xperia 10 IV) `HQ632M1012`, SOG08 (Xperia Ace
+  III) `HQ63460161`. Same recommendation as every other model's first
+  live test: `--skip-wizard`, one device at a time, watch every screen.
 
 ### Re-verify the destructive-tap safety fix's retry path specifically
 
@@ -256,16 +271,19 @@ final step uses this real value for both Sony models.
   photos or dumps exist for either device, same structural constraint
   (factory reset wipes ADB authorization before the wizard is reachable)
   that applies to every model.
-- **Whether either device's IME has SHG07's kana-conversion problem is
-  completely unknown** — `keyboard_mode_toggle_tap` is deliberately left
-  unset on both; SHG07's coordinate is tied to that exact device's screen
-  and must never be copied to another model without its own Pointer
-  Location confirmation.
+- ~~Whether either device's IME has SHG07's kana-conversion problem is
+  completely unknown~~ — **RESOLVED (real, 2026-09-17): both do.** First
+  live runs on both hit the identical symptom, and both now have their
+  own Pointer-Location-confirmed `keyboard_mode_toggle_tap` coordinates
+  (SOG07 `[145, 2308]`, SOG08 `[73, 1352]`), each verified via a scripted
+  `adb shell input tap` + plain-ASCII text-entry test. See docs/record.md
+  and the update note near the top of this file for the full account.
 
-**Neither device has been run against real hardware yet** — this is
-config+test work from real dumps, not a live-tested flow. Recommended:
-the same supervised, one-device-at-a-time, `--skip-wizard` first pass
-used for every other model's first real test. New test files,
+**Both devices' keyboard-toggle fix is confirmed at the single-field
+level, but neither has completed a full end-to-end `configure_apn()` run
+yet** — that's the next real-hardware milestone. Recommended: the same
+supervised, one-device-at-a-time, `--skip-wizard` first pass used for
+every other model's first real test. New test files,
 `tests/test_real_sog07_fixtures.py`/`test_real_sog08_fixtures.py`, mirror
 `test_real_shg10_fixtures.py`'s pattern against these real dumps.
 
@@ -656,10 +674,16 @@ SHG10, there are also no client photos of either unit's OOBE flow to
 derive a screen-driven config from — that would need its own capture
 effort if/when pursued.
 
-Neither device has been run against real hardware yet with this new
-config — see "🎉 SOG07/SOG08..." above for what's still genuinely
-unresolved (the per-field dialog ids specifically) and the recommended
-first-test procedure.
+**Update, 2026-09-17:** first live runs on both devices hit SHG07's
+kana-conversion text-entry symptom; both now have their own
+Pointer-Location-confirmed `keyboard_mode_toggle_tap` (SOG07
+`[145, 2308]`, SOG08 `[73, 1352]`), verified via scripted tap + text
+test. See docs/record.md's SOG07/SOG08 sections and the update note near
+the top of this file. A full end-to-end `configure_apn()` run with the
+fix in place hasn't happened yet for either device — see "🎉
+SOG07/SOG08..." above for what's still genuinely unresolved (the
+per-field dialog ids specifically) and the recommended next-test
+procedure.
 
 ## SHG07 (AQUOS sense6s) — switched from Stage A placeholders to values inherited from SHG10 (2026-09-14)
 
