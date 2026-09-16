@@ -10,28 +10,33 @@ from src.device.model_profile import ModelProfile, ModelProfileError
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = REPO_ROOT / "config" / "models"
 
-# The 2 Sony models remain fully untouched — Stage A's legacy,
-# resource-id-based schema throughout, no real device data at all. SHG10
-# was updated with real device data (see docs/record.md) and uses the
-# newer screen-driven wizard schema plus label-based APN fields — validated
-# separately below. SHG07 was switched to the same schema on 2026-09-14,
-# populated with values *inherited* from SHG10 (same SHARP AQUOS lineup) at
-# the client's request, rather than the 3 untouched models' from-scratch
-# guesses — real, but for a different device, not independently confirmed
-# for SHG07 itself. See config/models/sharp_aquos_sense6s.yaml's file-level
-# comment and PENDING_REAL_DEVICE_DATA.md.
-LEGACY_MODEL_FILES = [
+# Wizard shape and APN shape are independent axes in this schema (see
+# model_profile.py: has_screen_driven_wizard() only looks at "wizard" vs.
+# "wizard_steps"; apn_setup.py separately branches on
+# "field_row_resource_id" in apn_settings) — as of 2026-09-16 every model
+# uses the labeled APN shape (real dumps for all 4 confirm the same
+# generic-row-id/label pattern, see docs/record.md), but only SHG10/SHG07
+# have a screen-driven wizard (photograph-derived, from real client OOBE
+# photos of that specific lineup) — SOG07/SOG08 still carry Stage A's
+# from-scratch wizard_steps placeholders, since no wizard data of any kind
+# (photos or otherwise) exists for either.
+LEGACY_WIZARD_MODEL_FILES = [
     "sony_xperia_ace3.yaml",
     "sony_xperia_10iv.yaml",
 ]
-SCREEN_DRIVEN_MODEL_FILES = ["sharp_aquos_sense7.yaml", "sharp_aquos_sense6s.yaml"]
-MODEL_FILES = LEGACY_MODEL_FILES + SCREEN_DRIVEN_MODEL_FILES
+SCREEN_DRIVEN_WIZARD_MODEL_FILES = ["sharp_aquos_sense7.yaml", "sharp_aquos_sense6s.yaml"]
+MODEL_FILES = LEGACY_WIZARD_MODEL_FILES + SCREEN_DRIVEN_WIZARD_MODEL_FILES
 
 EXPECTED_MODEL_NUMBERS = {"SOG08", "SOG07", "SHG07", "SHG10"}
 
 
-@pytest.mark.parametrize("filename", LEGACY_MODEL_FILES)
-def test_load_each_legacy_model_file(filename):
+@pytest.mark.parametrize("filename", LEGACY_WIZARD_MODEL_FILES)
+def test_load_each_legacy_wizard_model_file(filename):
+    """SOG07/SOG08's wizard_steps remain 100% Stage A placeholders — no
+    wizard/OOBE data exists for either (see docs/record.md's "Wizard
+    capture — RESOLVED AS NOT REMOTELY POSSIBLE"; unlike SHG10, there are
+    also no client photos of either unit's OOBE flow to derive a
+    screen-driven config from)."""
     profile = ModelProfile.load(str(MODELS_DIR / filename))
 
     assert isinstance(profile.model, str) and profile.model
@@ -49,22 +54,33 @@ def test_load_each_legacy_model_file(filename):
         if "optional" in step:
             assert isinstance(step["optional"], bool)
 
+
+@pytest.mark.parametrize("filename", MODEL_FILES)
+def test_load_each_model_file_uses_labeled_apn_shape(filename):
+    """As of 2026-09-16, all four models use the same labeled APN shape —
+    real dumps for every one confirm field rows share one generic
+    resource-id, disambiguated only by label text (see docs/record.md).
+    This just confirms every file parses into that shape; the
+    model-specific tests below check the actual real values."""
+    profile = ModelProfile.load(str(MODELS_DIR / filename))
+
     wifi = profile.wifi_settings()
     assert isinstance(wifi["toggle_resource_id"], str)
     assert isinstance(wifi["network_list_resource_id"], str)
+    assert isinstance(wifi["menu_path"], list) and len(wifi["menu_path"]) > 0
 
     apn = profile.apn_settings()
-    assert isinstance(apn["menu_path"], list) and len(apn["menu_path"]) > 0
-    assert isinstance(apn["name_field_resource_id"], str)
-    assert isinstance(apn["apn_field_resource_id"], str)
-    assert isinstance(apn["save_button_resource_id"], str)
+    assert isinstance(apn["field_row_resource_id"], str)
+    assert isinstance(apn["name_field_label"], str)
+    assert isinstance(apn["apn_field_label"], str)
+    assert isinstance(apn["mcc_field_label"], str)
+    assert isinstance(apn["mnc_field_label"], str)
 
 
 def test_load_shg10_model_file_screen_driven_wizard_and_labeled_apn_fields():
     """SHG10 (Stage B — real device data, docs/record.md) uses a different
-    shape than the 3 legacy models: screen-driven wizard, label-based APN
-    fields (real dumps showed no per-field resource-id exists), and two
-    genuinely-unresolved fields (add/save) left as None rather than guessed."""
+    wizard shape than the 2 legacy-wizard models: screen-driven, from real
+    client OOBE photos of this specific unit."""
     profile = ModelProfile.load(str(MODELS_DIR / "sharp_aquos_sense7.yaml"))
 
     assert profile.model_number == "SHG10"
@@ -108,12 +124,10 @@ def test_load_shg10_model_file_screen_driven_wizard_and_labeled_apn_fields():
     assert apn.get("use_keyevent_text_entry") is None
 
 
-@pytest.mark.parametrize("filename", SCREEN_DRIVEN_MODEL_FILES)
-def test_load_each_screen_driven_model_file(filename):
+@pytest.mark.parametrize("filename", SCREEN_DRIVEN_WIZARD_MODEL_FILES)
+def test_load_each_screen_driven_wizard_model_file(filename):
     """Both SHG10 (real device data) and SHG07 (inherited from SHG10,
-    2026-09-14) use the same schema shape — this just confirms the file
-    parses into that shape at all; the two model-specific tests below check
-    the actual values."""
+    2026-09-14) use the same wizard schema shape."""
     profile = ModelProfile.load(str(MODELS_DIR / filename))
 
     assert isinstance(profile.model, str) and profile.model
@@ -128,18 +142,6 @@ def test_load_each_screen_driven_model_file(filename):
         assert isinstance(screen["name"], str)
         assert isinstance(screen["identify_by_text"], str)
         assert isinstance(screen["action"], str)
-
-    wifi = profile.wifi_settings()
-    assert isinstance(wifi["toggle_resource_id"], str)
-    assert isinstance(wifi["network_list_resource_id"], str)
-    assert isinstance(wifi["menu_path"], list) and len(wifi["menu_path"]) > 0
-
-    apn = profile.apn_settings()
-    assert isinstance(apn["field_row_resource_id"], str)
-    assert isinstance(apn["name_field_label"], str)
-    assert isinstance(apn["apn_field_label"], str)
-    assert isinstance(apn["mcc_field_label"], str)
-    assert isinstance(apn["mnc_field_label"], str)
 
 
 def test_load_shg07_model_file_inherited_from_shg10():
@@ -181,6 +183,84 @@ def test_load_shg07_model_file_inherited_from_shg10():
     # current mode. SHG07 now uses the same method as SHG10 (unset here
     # too) for a direct, apples-to-apples real-hardware comparison.
     assert apn.get("use_keyevent_text_entry") is None
+    # RESOLVED — real, directly confirmed 2026-09-15 (Pointer Location +
+    # a scripted `adb shell input tap` verification, not a screenshot
+    # estimate). Tied to this exact unit's screen resolution — see
+    # ui_automator.py's tap_at_coordinates() and docs/record.md.
+    assert apn["keyboard_mode_toggle_tap"] == [106, 2239]
+
+
+def test_load_sog07_model_file_real_apn_and_wifi_data():
+    """SOG07 (Xperia 10 IV, Android 14) got real wifi_settings/apn_settings
+    data on 2026-09-16 from client-supplied dumps — see docs/record.md.
+    Notably byte-identical to SHG10's real values for every id/content-desc
+    checked (a different manufacturer), confirming this is the plain,
+    unskinned AOSP Settings APN editor, not something OEM-specific."""
+    profile = ModelProfile.load(str(MODELS_DIR / "sony_xperia_10iv.yaml"))
+
+    assert profile.model_number == "SOG07"
+    assert profile.model == "Xperia 10 IV"
+    assert profile.android_version == 14
+    # Wizard is untouched Stage A — no real/inherited wizard data exists.
+    assert profile.has_screen_driven_wizard() is False
+
+    wifi = profile.wifi_settings()
+    assert wifi["toggle_resource_id"] == "android:id/switch_widget"
+    assert wifi["network_list_resource_id"] == "android:id/title"
+    # Real, confirmed difference from SHG10: this screen's title is
+    # "インターネット" via content-desc, not SHARP's "Wi-Fi とモバイルネットワーク".
+    assert {"type": "text", "value": "インターネット"} in wifi["menu_path"]
+
+    apn = profile.apn_settings()
+    assert apn["field_row_resource_id"] == "android:id/title"
+    assert apn["name_field_label"] == "名前"
+    assert apn["apn_field_label"] == "APN"
+    assert apn["mcc_field_label"] == "MCC"
+    assert apn["mnc_field_label"] == "MNC"
+    assert apn["dialog_edit_field_resource_id"] == "android:id/edit"
+    assert apn["dialog_confirm_button_resource_id"] == "android:id/button1"
+    assert apn["dialog_cancel_button_resource_id"] == "android:id/button2"
+    assert apn["add_button_resource_id"] is None
+    assert apn["add_button_content_desc"] == "新しい APN"
+    assert apn["overflow_menu_content_desc"] == "その他のオプション"
+    assert apn["save_menu_item_text"] == "保存"
+    assert apn["navigate_up_content_desc"] == "上へ移動"
+    # No real evidence of SHG07's kana-conversion IME symptom on this
+    # device — must stay unset, never inherited from SHG07's own
+    # device-specific coordinate.
+    assert apn.get("keyboard_mode_toggle_tap") is None
+
+
+def test_load_sog08_model_file_real_apn_and_wifi_data():
+    """SOG08 (Xperia Ace III, Android 13) got the same treatment as SOG07,
+    same day, from its own real dumps."""
+    profile = ModelProfile.load(str(MODELS_DIR / "sony_xperia_ace3.yaml"))
+
+    assert profile.model_number == "SOG08"
+    assert profile.model == "Xperia Ace III"
+    assert profile.android_version == 13
+    assert profile.has_screen_driven_wizard() is False
+
+    wifi = profile.wifi_settings()
+    assert wifi["toggle_resource_id"] == "android:id/switch_widget"
+    assert wifi["network_list_resource_id"] == "android:id/title"
+    assert {"type": "text", "value": "インターネット"} in wifi["menu_path"]
+
+    apn = profile.apn_settings()
+    assert apn["field_row_resource_id"] == "android:id/title"
+    assert apn["name_field_label"] == "名前"
+    assert apn["apn_field_label"] == "APN"
+    assert apn["mcc_field_label"] == "MCC"
+    assert apn["mnc_field_label"] == "MNC"
+    assert apn["dialog_edit_field_resource_id"] == "android:id/edit"
+    assert apn["dialog_confirm_button_resource_id"] == "android:id/button1"
+    assert apn["dialog_cancel_button_resource_id"] == "android:id/button2"
+    assert apn["add_button_resource_id"] is None
+    assert apn["add_button_content_desc"] == "新しい APN"
+    assert apn["overflow_menu_content_desc"] == "その他のオプション"
+    assert apn["save_menu_item_text"] == "保存"
+    assert apn["navigate_up_content_desc"] == "上へ移動"
+    assert apn.get("keyboard_mode_toggle_tap") is None
 
 
 def test_load_all_keys_by_model_number():

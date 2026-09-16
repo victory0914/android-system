@@ -1018,13 +1018,96 @@ hardware, the same milestone SHG10 reached 2026-09-11.
 
 ---
 
+## SOG07 (Sony Xperia 10 IV, Android 14)
+
+**Serial:** not yet recorded — client supplied dumps directly, no `adb
+devices`/`adb shell getprop` session logged for this unit yet.
+**Confirmed identity string (from adb):** not yet confirmed.
+
+Config (`config/models/sony_xperia_10iv.yaml`) got real `wifi_settings`/
+`apn_settings` data 2026-09-16 from client-supplied dumps. `wizard_steps`
+remains 100% Stage A placeholder — no wizard data of any kind exists for
+this unit.
+
+### Test Log — exactly what was run against this unit
+
+| Date | Test | Command | Result |
+|---|---|---|---|
+| | | | |
+
+### Wi-Fi + APN screens — relevant to `wifi_setup.py`, `apn_setup.py`
+- *2026-09-16:* Client supplied the same capture set SHG10 has:
+  `wifi_list_SOG07.xml`, `apn_list_SOG07.xml`, `apn_entry_{top,middle,
+  bottom}_SOG07.xml`, `apn_overflow_menu_SOG07.xml`. Every id/content-desc
+  checked (Wi-Fi toggle, generic row title id, settings gear icon, APN
+  list title, add button, overflow menu, navigate-up, save/cancel) is
+  byte-identical to SHG10's real values — real, direct confirmation these
+  are the plain, unskinned AOSP `com.android.settings` screens, not
+  OEM-specific, now seen on a third real device and a second
+  manufacturer.
+- Implication: `config/models/sony_xperia_10iv.yaml`'s `wifi_settings`/
+  `apn_settings` rewritten from Stage A's from-scratch invented
+  placeholders to these real values, using the same labeled APN shape
+  SHG10/SHG07 use (real dumps directly disprove the original per-field
+  `name_field_resource_id`-style Stage A assumption for this device too).
+- *2026-09-16:* One real, confirmed difference from SHG10: this device's
+  combined Wi-Fi/mobile-network screen title renders via content-desc
+  「インターネット」 ("Internet"), not SHARP's 「Wi-Fi とモバイルネットワーク」
+  — evidently a SHARP-skin rename, not stock/Sony wording.
+- Implication: `wifi_settings.menu_path`'s final fallback step uses this
+  real value instead of copying SHG10's SHARP-specific title text.
+- *2026-09-16:* Per-field dialog ids (`dialog_edit_field_resource_id`/
+  `dialog_confirm_button_resource_id`/`dialog_cancel_button_resource_id`)
+  remain genuinely unresolved for this device specifically — no dump of
+  that dialog open exists. Inherited from SHG10's confirmed values
+  (android:id/edit/button1/button2), better-justified than SHG07's
+  original inheritance given the cross-device pattern above, but still
+  not independently confirmed.
+- Not yet run against real hardware — config+test work from dumps only.
+
+## SOG08 (Sony Xperia Ace III, Android 13)
+
+**Serial:** not yet recorded — same as SOG07, client supplied dumps
+directly.
+**Confirmed identity string (from adb):** not yet confirmed.
+
+Config (`config/models/sony_xperia_ace3.yaml`) got the same treatment as
+SOG07, same day, from its own real dumps. `wizard_steps` remains 100%
+Stage A placeholder.
+
+### Test Log — exactly what was run against this unit
+
+| Date | Test | Command | Result |
+|---|---|---|---|
+| | | | |
+
+### Wi-Fi + APN screens — relevant to `wifi_setup.py`, `apn_setup.py`
+- *2026-09-16:* Same capture set and same finding as SOG07: every
+  id/content-desc checked in `wifi_list_SOG08.xml`, `apn_list_SOG08.xml`,
+  `apn_entry_{top,middle,bottom}_SOG08.xml`, `apn_overflow_menu_SOG08.xml`
+  is byte-identical to SHG10's and SOG07's real values — the same plain
+  AOSP screens confirmed on a fourth real device now.
+- Implication: `config/models/sony_xperia_ace3.yaml` rewritten the same
+  way as SOG07's, same labeled APN shape, same real values.
+- *2026-09-16:* Same confirmed Wi-Fi screen title difference from SHG10:
+  「インターネット」, not 「Wi-Fi とモバイルネットワーク」.
+- *2026-09-16:* This capture's MCC/MNC fields show 「未設定」 (not set) —
+  a blank entry, not evidence the fields are absent; confirms they exist
+  and are readable either way, same as every other model checked.
+- *2026-09-16:* Per-field dialog ids remain unresolved for this device
+  specifically too, inherited from SHG10 with the same cross-device
+  justification as SOG07's identical note.
+- Not yet run against real hardware — config+test work from dumps only.
+
+---
+
 ## Dump capture status (all models)
 
 | Model | Wi-Fi list | APN list | APN entry | APN save flow | Wizard (OOBE) |
 |---|---|---|---|---|---|
 | SHG10 (352063910272451) | ✅ `wifi_list_SHG10.xml` (31,516 B) | ✅ `apn_restricted_SHG10.xml` (6,104 B), `apn_failure_setting_SHG10.xml` (6,104 B, identical), `apn_success_setting_SHG10.xml` (10,009 B, 2 entries) | ✅ `apn_entry_top_SHG10.xml` (17,785 B), `apn_entry_middle_SHG10.xml` (21,981 B), `apn_entry_bottom_SHG10.xml` (20,608 B), `apn_entry_filled_SHG10.xml` (21,988 B), `apn_accesshost_okbtn_SHG10.xml` (per-field dialog, open) | ✅ `apn_overflow_menu_SHG10.xml` (3,839 B), `apn_mcc_validation_SHG10.xml` (5,085 B), `apn_mnc_validation_SHG10.xml` (5,092 B) | ❌ **not obtainable remotely** — see constraint analysis below. Photos only. |
-| Xperia Ace III (SOG08) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
-| Xperia 10 IV (SOG07) | ❌ not started | ❌ not started | ❌ not started | ❌ not started | ❌ same constraint applies |
+| Xperia Ace III (SOG08) | ✅ `wifi_list_SOG08.xml` (31,228 B) | ✅ `apn_list_SOG08.xml` (6,443 B) | ✅ `apn_entry_top_SOG08.xml` (16,057 B), `apn_entry_middle_SOG08.xml` (18,786 B), `apn_entry_bottom_SOG08.xml` (19,544 B) | ✅ `apn_overflow_menu_SOG08.xml` (3,826 B) | ❌ same constraint applies |
+| Xperia 10 IV (SOG07) | ✅ `wifi_list_SOG07.xml` (40,051 B) | ✅ `apn_list_SOG07.xml` (6,458 B) | ✅ `apn_entry_top_SOG07.xml` (19,518 B), `apn_entry_middle_SOG07.xml` (22,347 B), `apn_entry_bottom_SOG07.xml` (22,351 B) | ✅ `apn_overflow_menu_SOG07.xml` (3,839 B) | ❌ same constraint applies |
 | AQUOS sense6s (SHG07, 353681650397052) | ❌ not started | ❌ not started | ✅ `apn_input_dialog_SHG07.xml` (APN field dialog, open) | ❌ not started | ❌ same constraint applies |
 
 Original 4 SHG10 files captured 2026-09-04. 4 more (save flow + a filled

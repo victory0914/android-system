@@ -1,9 +1,18 @@
 # Model profile: Xperia 10 IV (SOG07), Sony, Android 14
 #
-# All resource-id values below are PLACEHOLDERS invented to match a plausible
-# AOSP/Sony setup-wizard and Settings-app shape. None of them have been
-# captured from a real device yet. See PENDING_REAL_DEVICE_DATA.md at the
-# repo root for the full list of what needs confirming against real hardware.
+# STAGE B (2026-09-16): wifi_settings/apn_settings now hold REAL data,
+# captured from actual uiautomator dumps
+# (tests/fixtures/Xperia 10 IV（SOG07）/*.xml — wifi_list, apn_list,
+# apn_entry_{top,middle,bottom}, apn_overflow_menu). See docs/record.md
+# and PENDING_REAL_DEVICE_DATA.md for the full account, including what
+# this confirms and what's still genuinely unresolved.
+#
+# wizard_steps below is UNCHANGED Stage A — still 100% invented
+# placeholders. No wizard/OOBE data exists or ever will for any model
+# (factory reset wipes ADB authorization before the wizard is reachable —
+# see docs/record.md's "Wizard capture — RESOLVED AS NOT REMOTELY
+# POSSIBLE"), and unlike SHG10 there are no client photos of this
+# specific unit's OOBE flow to derive a screen-driven config from either.
 model: "Xperia 10 IV"
 model_number: "SOG07"
 manufacturer: "Sony"
@@ -36,40 +45,133 @@ wizard_steps:
     resource_id: "com.android.setupwizard:id/finish_button"
     action: "tap"
 
+# RESOLVED (real: tests/fixtures/Xperia 10 IV（SOG07）/wifi_list_SOG07.xml).
+# A notable finding in its own right: this screen's ids
+# (android:id/switch_widget, android:id/title, the
+# com.android.settings:id/settings_button gear icon) are BYTE-IDENTICAL
+# to SHG10's (a different manufacturer, SHARP vs. Sony) — this is the
+# plain, unskinned AOSP com.android.settings Wi-Fi screen, not an
+# OEM-specific one. One real, confirmed difference from SHG10: this
+# screen's own title renders via content-desc "インターネット" ("Internet"),
+# not "Wi-Fi とモバイルネットワーク" — SHARP's skin apparently renamed it,
+# stock Android/Sony didn't.
 wifi_settings:
-  # TODO(real-device): replace with captured resource-id (Wi-Fi on/off toggle)
-  toggle_resource_id: "com.android.settings:id/wifi_toggle"
-  # TODO(real-device): replace with captured resource-id (scanned network list container)
-  network_list_resource_id: "com.android.settings:id/wifi_network_list"
-  # Fields below are additions beyond the contract's illustrative schema —
-  # needed for the UI-fallback path in phase2/wifi_setup.py when the
-  # `cmd wifi connect-network` shell command is unavailable/fails. See
-  # PENDING_REAL_DEVICE_DATA.md.
+  menu_path:
+    - type: text
+      value: "設定"
+    - type: text
+      value: "インターネット"
+  # RESOLVED (real) — same id as SHG10, checked="true" in the captured
+  # dump. Same safety note applies: check `checked` (wifi_setup.py does,
+  # via node_is_checked()) before tapping, never blindly.
+  toggle_resource_id: "android:id/switch_widget"
+  # RESOLVED (real) — generic AOSP list-item title id, shared by every row
+  # on this screen (carrier summary, the Wi-Fi toggle's own label, every
+  # scanned SSID — real capture shows earth5_1 among them). Must always be
+  # used with `text=<SSID>` to disambiguate.
+  network_list_resource_id: "android:id/title"
+  # NOT resolved — no dump of the "Connect to network" dialog exists for
+  # this unit (same gap SHG10 has for the resource-id fallback; SHG10's
+  # actual working path was the *text* "接続" for connect_button_text
+  # below, not this field). Kept as the generic AOSP-style placeholder.
   # TODO(real-device): replace with captured resource-id (password entry field
   # in the "Connect to network" dialog)
   password_field_resource_id: "com.android.settings:id/wifi_password"
   # TODO(real-device): replace with captured resource-id (dialog "Connect" button)
   connect_button_resource_id: "com.android.settings:id/wifi_connect_button"
+  # INHERITED FROM SHG10, NOT independently confirmed for this unit — no
+  # dump of the join-network dialog exists here either. Real evidence
+  # elsewhere in this file (identical ids across SHARP/Sony for every
+  # OTHER screen checked) makes this a reasoned guess, not a blind one,
+  # but it's still unconfirmed for SOG07 specifically.
+  connect_button_text: "接続"
 
+# RESOLVED (real: tests/fixtures/Xperia 10 IV（SOG07）/apn_list_SOG07.xml,
+# apn_entry_{top,middle,bottom}_SOG07.xml, apn_overflow_menu_SOG07.xml).
+# Every id/content-desc/label below is BYTE-IDENTICAL to SHG10's (and to
+# SOG08's — see sony_xperia_ace3.yaml) — this is the plain, unskinned AOSP
+# com.android.settings APN editor (ApnEditor/ApnSettings), not an
+# OEM-specific screen, confirmed now across 3 real devices and 2
+# manufacturers. This is materially stronger evidence than SHG07's
+# SHG10-inheritance was: that was "same manufacturer, informed guess";
+# this is "three independently-dumped real devices, byte-identical
+# structure, direct confirmation."
 apn_settings:
+  # PRIMARY navigation: android.settings.APN_SETTINGS intent (hardcoded in
+  # apn_setup.py, not driven by this file) — standard Android behavior,
+  # not OEM-specific, already proven on SHG10/SHG07.
+  #
+  # FALLBACK menu_path (only used if the intent fails or doesn't land
+  # correctly). Real, confirmed final step: the gear icon
+  # (com.android.settings:id/settings_button, same resource-id as SHG10).
+  # Intermediate steps NOT independently confirmed for this unit (these
+  # dumps only show the already-landed screens, not the navigation
+  # through Settings' own menus to reach them) — informed by SHG10's real
+  # path, adjusted for this device's own confirmed "インターネット" screen
+  # title from wifi_settings above.
   menu_path:
-    - "Settings"
-    - "Network & internet"
-    - "Mobile network"
-    - "Access Point Names"
-  # TODO(real-device): replace with captured resource-id (APN "Name" field)
-  name_field_resource_id: "com.android.phone:id/apn_name_edit"
-  # TODO(real-device): replace with captured resource-id (APN "APN" value field)
-  apn_field_resource_id: "com.android.phone:id/apn_apn_edit"
-  # TODO(real-device): replace with captured resource-id (save/checkmark button)
-  save_button_resource_id: "com.android.phone:id/save"
-  # Fields below are additions beyond the contract's illustrative schema —
-  # configure_apn() takes mcc/mnc parameters and must create a new blank APN
-  # entry before name/apn/mcc/mnc fields exist, none of which the illustrative
-  # schema had fields for. See PENDING_REAL_DEVICE_DATA.md.
-  # TODO(real-device): replace with captured resource-id (list-screen "+ Add" button)
-  add_button_resource_id: "com.android.phone:id/menu_new"
-  # TODO(real-device): replace with captured resource-id (APN "MCC" field)
-  mcc_field_resource_id: "com.android.phone:id/apn_mcc_edit"
-  # TODO(real-device): replace with captured resource-id (APN "MNC" field)
-  mnc_field_resource_id: "com.android.phone:id/apn_mnc_edit"
+    - type: text
+      value: "設定"
+    - type: text
+      value: "インターネット"
+    - type: resource_id
+      value: "com.android.settings:id/settings_button"
+
+  # RESOLVED (real). Every field row shares this one generic id,
+  # disambiguated only by visible Japanese label — same pattern as SHG10.
+  field_row_resource_id: "android:id/title"
+  name_field_label: "名前"
+  apn_field_label: "APN"
+  # RESOLVED (real) — MCC/MNC rows exist on this build too (captured
+  # showing "未設定"/not-yet-set in this particular dump — a blank entry,
+  # not evidence they're absent; the fields themselves are real and
+  # present). MCC must be exactly 3 digits, MNC 2 or 3 — enforced by
+  # apn_setup.py before ever touching the device regardless of model.
+  mcc_field_label: "MCC"
+  mnc_field_label: "MNC"
+
+  # INHERITED FROM SHG10/SHG07, NOT independently captured for this
+  # unit's own per-field dialog — no dump of it open exists for SOG07
+  # (same gap that existed for SHG10 until a dedicated capture closed it,
+  # and for SHG07, never independently closed at all). Real evidence
+  # elsewhere in this file (byte-identical structure across 3 devices for
+  # every OTHER screen) makes this a well-reasoned inheritance, not a
+  # blind guess — but it remains genuinely unconfirmed for THIS specific
+  # dialog. A dedicated dump (open the 名前 field, dump before
+  # confirming) would resolve this properly.
+  dialog_edit_field_resource_id: "android:id/edit"
+  dialog_confirm_button_resource_id: "android:id/button1"
+  dialog_cancel_button_resource_id: "android:id/button2"
+
+  # Has no resource-id on this build either (icon-only, standard AOSP
+  # Button with no android:id) — confirmed by the real dump, not absence
+  # of evidence: apn_list_SOG07.xml shows it exactly like SHG10's did.
+  add_button_resource_id: null
+  # RESOLVED (real) — "新しい APN" ("New APN"), same content-desc as
+  # SHG10/SHG07, sitting immediately left of the "⋮" overflow menu.
+  add_button_content_desc: "新しい APN"
+
+  # RESOLVED (real) — same two-tap overflow-menu save flow as SHG10:
+  # "その他のオプション" (⋮, no resource-id, content-desc only) then "保存"
+  # inside it (shares android:id/title with "キャンセル", disambiguated by
+  # text).
+  overflow_menu_content_desc: "その他のオプション"
+  save_menu_item_text: "保存"
+  # Legacy single-button save field — unused now that the real two-tap
+  # flow above is resolved. Left null (not deleted) so the field's
+  # meaning stays documented, matching SHG10's convention.
+  save_button_resource_id: null
+
+  # NOT set — no real evidence (yet) that this device's IME interferes
+  # with plain input_text_direct()/input_digits_direct() entry the way
+  # SHG07's does. Do not set this speculatively; if a real run shows the
+  # same kana-conversion symptom on this device, it needs its own
+  # Pointer-Location-confirmed coordinate (see docs/record.md,
+  # 2026-09-15) — SHG07's coordinate is tied to that exact device's
+  # screen and must never be copied here.
+  # keyboard_mode_toggle_tap: [x, y]
+  # navigate_up_content_desc left unset here on purpose too — SHG10's
+  # real dumps confirm "上へ移動" for that device, and this device's own
+  # apn_list_SOG07.xml dump ALSO shows the identical content-desc, so this
+  # one IS real, not inherited:
+  navigate_up_content_desc: "上へ移動"

@@ -51,8 +51,22 @@ solved.
 SHG10's wizard is on a photograph-derived, text-matching config — real
 dumps for the wizard are **not obtainable on any model, ever** (structural
 ADB/factory-reset constraint, see docs/record.md); 2 of 9 screens' button
-labels are still unverified. **SOG08 and SOG07 are entirely untouched** —
-still 100% Stage A placeholders, not started.
+labels are still unverified.
+
+**🎉 Update, 2026-09-16: SOG07 and SOG08's Wi-Fi + APN data is now real,
+not Stage A placeholders.** Client supplied real dumps for both (wifi_list,
+apn_list, apn_entry at 2-3 scroll positions, apn_overflow_menu — the same
+capture set SHG10 has). Every id/content-desc checked turned out
+byte-identical to SHG10's real values across a THIRD real device now
+(Sony, not SHARP) — direct confirmation this is the plain, unskinned AOSP
+`com.android.settings` APN editor and Wi-Fi screen, not something
+OEM-specific, strengthening the basis for every "inherited" value used
+throughout this file. Neither has been run against real hardware yet —
+this is config+test work from real dumps, not a live-tested flow like
+SHG10/SHG07. See "🎉 SOG07/SOG08: real Wi-Fi + APN data from client dumps"
+below. **Wizard data for both remains 100% Stage A placeholders** — no
+OOBE photos or dumps exist for either, same structural constraint as
+every other model.
 
 ## Highest priority
 
@@ -148,9 +162,12 @@ Location on that device first.
   "SHG10 (AQUOS sense7...)" below) — everything else about SHG10 is
   implemented; this is what's needed for a *complete* fresh-device flow
   (wizard + Wi-Fi + APN), not just Wi-Fi + APN with `--skip-wizard`.
-- **"SOG08 / SOG07 — entirely untouched"** (same section) — still 100%
-  Stage A placeholders, no real data of any kind. Next priority once
-  hardware for them is available.
+- **A supervised first real test of SOG07 and SOG08** — their configs now
+  hold real Wi-Fi + APN data from client dumps (2026-09-16), but neither
+  has been run against real hardware yet. See "🎉 SOG07/SOG08: real Wi-Fi
+  + APN data from client dumps" below — same recommendation as every
+  other model's first live test: `--skip-wizard`, one device at a time,
+  watch every screen.
 
 ### Re-verify the destructive-tap safety fix's retry path specifically
 
@@ -193,12 +210,63 @@ may be icon-only (no text at all), which would mean the fix isn't just
 `tap_by_content_desc`. Needs a live look or a fresh photo during the next
 factory reset.
 
-### SOG08 / SOG07 — entirely untouched, no real data of any kind
+### 🎉 SOG07/SOG08: real Wi-Fi + APN data from client dumps (2026-09-16)
 
-Same Wi-Fi list + APN dump process used for SHG10 hasn't been run for
-either. Highest-value next step once hardware is available. (SHG07 is no
-longer in this category as of 2026-09-14 — see "SHG07 (AQUOS sense6s)..."
-further below.)
+Client supplied the same capture set used for SHG10 — `wifi_list`,
+`apn_list`, `apn_entry` at 2-3 scroll positions, `apn_overflow_menu` — for
+both SOG07 (Xperia 10 IV, Android 14) and SOG08 (Xperia Ace III, Android
+13). `config/models/sony_xperia_10iv.yaml`/`sony_xperia_ace3.yaml`
+rewritten from Stage A's from-scratch invented placeholders to real
+values throughout `wifi_settings`/`apn_settings`.
+
+**The headline finding: every id/content-desc checked is byte-identical
+to SHG10's real values.** `android:id/switch_widget` (Wi-Fi toggle),
+`android:id/title` (generic row id, Wi-Fi SSIDs and APN fields alike),
+`com.android.settings:id/settings_button` (gear icon), content-desc "APN"
+(list title), "新しい APN" (add button), "その他のオプション" (overflow),
+"上へ移動" (navigate up), "保存"/"キャンセル" (save/cancel) — all exactly
+the same across THREE real devices now (SHG10, SOG07, SOG08) and TWO
+manufacturers (SHARP, Sony). This is real, direct confirmation of
+something this file could previously only guess at: the plain,
+unskinned AOSP `com.android.settings` Wi-Fi screen and APN editor are
+genuinely shared, unmodified components — not something each OEM
+reskins — at least for these specific screens. This also retroactively
+strengthens confidence in SHG07's SHG10-inherited values (never
+independently confirmed for SHG07 itself, but now backed by a pattern
+seen identically on a third, unrelated device too).
+
+**One real, confirmed difference from SHG10**: both Sony devices' Wi-Fi
+screen title renders via content-desc **"インターネット"** ("Internet"),
+not SHARP's "Wi-Fi とモバイルネットワーク" — evidently SHARP's skin
+renames this screen, stock/Sony doesn't. `wifi_settings.menu_path`'s
+final step uses this real value for both Sony models.
+
+**Still genuinely unresolved for both**:
+- `dialog_edit_field_resource_id`/`dialog_confirm_button_resource_id`/
+  `dialog_cancel_button_resource_id` — inherited from SHG10 (android:id/
+  edit, button1, button2), not independently captured for either Sony
+  device's own per-field dialog (no dump of one open exists for either).
+  Better-justified than SHG07's inheritance was, given the cross-device
+  confirmation above, but still not itself confirmed.
+- `wifi_settings.password_field_resource_id`/`connect_button_resource_id`/
+  `connect_button_text` — same gap SHG10 has; no dump of the "Connect to
+  network" dialog exists for either device.
+- **The wizard remains 100% Stage A placeholders for both** — no OOBE
+  photos or dumps exist for either device, same structural constraint
+  (factory reset wipes ADB authorization before the wizard is reachable)
+  that applies to every model.
+- **Whether either device's IME has SHG07's kana-conversion problem is
+  completely unknown** — `keyboard_mode_toggle_tap` is deliberately left
+  unset on both; SHG07's coordinate is tied to that exact device's screen
+  and must never be copied to another model without its own Pointer
+  Location confirmation.
+
+**Neither device has been run against real hardware yet** — this is
+config+test work from real dumps, not a live-tested flow. Recommended:
+the same supervised, one-device-at-a-time, `--skip-wizard` first pass
+used for every other model's first real test. New test files,
+`tests/test_real_sog07_fixtures.py`/`test_real_sog08_fixtures.py`, mirror
+`test_real_shg10_fixtures.py`'s pattern against these real dumps.
 
 ## Resolved — full Phase 2 run confirmed end-to-end (2026-09-11)
 
@@ -562,17 +630,29 @@ giving up. Fixed in the shared `dump_ui()`, so it protects every
 tap/find call across wizard, Wi-Fi, and APN — not specific to where it
 happened to first surface (APN menu navigation).
 
-## SOG08 (Xperia Ace III), SOG07 (Xperia 10 IV) — entirely untouched
+## SOG08 (Xperia Ace III), SOG07 (Xperia 10 IV) — Wi-Fi + APN now real (2026-09-16)
 
-Per the Stage B task's original scope, these two still carry 100% of their
-original Stage A placeholders — every `wizard_steps[*].resource_id`,
-`wifi_settings.*`, and `apn_settings.*` value remains an invented
-placeholder with a `TODO(real-device)` marker. No captures exist for
-either (Wi-Fi, APN, or wizard). Same wizard constraint applies (no dump
-will ever be possible) — they'll need the same photograph-derived,
-screen-driven approach as SHG10, plus real Wi-Fi/APN dumps captured the
-same way as SHG10's were (Wi-Fi list, APN entry form at multiple scroll
-positions, APN overflow menu, APN validation dialogs).
+Updated from the original "entirely untouched" status: client supplied
+the same capture set used for SHG10 (Wi-Fi list, APN list, APN entry form
+at multiple scroll positions, APN overflow menu) for both. `wifi_settings`
+and `apn_settings` in both YAML files now hold real values throughout —
+see "🎉 SOG07/SOG08: real Wi-Fi + APN data from client dumps" above for
+the full account, including the notable finding that every id checked is
+byte-identical to SHG10's.
+
+**`wizard_steps` remains 100% Stage A placeholder for both** — every
+value there is still an invented `TODO(real-device)` marker, no wizard
+data of any kind exists for either device, and (same structural
+constraint as every other model, see docs/record.md's "Wizard capture —
+RESOLVED AS NOT REMOTELY POSSIBLE") never will via a real dump. Unlike
+SHG10, there are also no client photos of either unit's OOBE flow to
+derive a screen-driven config from — that would need its own capture
+effort if/when pursued.
+
+Neither device has been run against real hardware yet with this new
+config — see "🎉 SOG07/SOG08..." above for what's still genuinely
+unresolved (the per-field dialog ids specifically) and the recommended
+first-test procedure.
 
 ## SHG07 (AQUOS sense6s) — switched from Stage A placeholders to values inherited from SHG10 (2026-09-14)
 
