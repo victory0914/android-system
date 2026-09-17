@@ -219,12 +219,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skip-wizard",
         action="store_true",
-        help="Skip the setup-wizard step and go straight to Wi-Fi/APN. For "
-        "manual testing against a device that's already past OOBE (e.g. "
-        "re-testing the same already-provisioned unit repeatedly without a "
-        "fresh factory reset each time). Never use this for a real "
-        "redeployment run — it removes the check that the device actually "
-        "finished setup.",
+        help="Skip the setup-wizard step and go straight to Wi-Fi/APN. "
+        "This is the STANDARD way to invoke a real redeployment run "
+        "(client decision, 2026-09-17): the wizard/OOBE screens cannot be "
+        "automated via ADB at all (factory reset wipes ADB authorization "
+        "until a human completes the wizard and re-enables USB "
+        "debugging), so the client performs factory reset + the wizard "
+        "manually for every device, and this automation takes over from "
+        "there. Removes the check that the device actually finished "
+        "setup — a device still mid-wizard when this runs will fail "
+        "downstream instead.",
     )
     parser.add_argument(
         "--max-retries",

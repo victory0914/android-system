@@ -1034,7 +1034,7 @@ this unit.
 
 | Date | Test | Command | Result |
 |---|---|---|---|
-| | | | |
+| 2026-09-17 | First full live run (several attempts while diagnosing the MCC/MNC keyboard-toggle issue, see dated entries below) | `python src\main_phase2.py --serial HQ632M1012 --model SOG07 --skip-wizard [--max-retries 0]` | ✅ `SUCCESS: device HQ632M1012 reached LOGIN_INSTALL` — all four fields + save completed with no field-mismatch errors, once the self-correcting toggle + single-character probe fixes were in place. Only the known, harmless soft post-save list-visibility warning appeared. |
 
 ### Wi-Fi + APN screens — relevant to `wifi_setup.py`, `apn_setup.py`
 - *2026-09-16:* Client supplied the same capture set SHG10 has:
@@ -1334,7 +1334,7 @@ Stage A placeholder.
 
 | Date | Test | Command | Result |
 |---|---|---|---|
-| | | | |
+| 2026-09-17 | First full live run | `python src\main_phase2.py --serial HQ63460161 --model SOG08 --skip-wizard --max-retries 0` | ✅ `SUCCESS: device HQ63460161 reached LOGIN_INSTALL` — all four fields + save completed with no field-mismatch errors on the very first attempt (unlike SOG07, this device didn't need the MCC/MNC-specific `keyboard_mode_toggle_tap_numeric`/`use_text_entry_for_numeric` fixes — see the dated entry below). Only the known, harmless soft post-save list-visibility warning appeared. |
 
 ### Wi-Fi + APN screens — relevant to `wifi_setup.py`, `apn_setup.py`
 - *2026-09-16:* Same capture set and same finding as SOG07: every
@@ -1364,8 +1364,55 @@ Stage A placeholder.
   `config/models/sony_xperia_ace3.yaml`, same unconditional
   tap-twice-before-every-field pattern as SOG07/SHG07. This device's own
   confirmed coordinate — never to be copied elsewhere.
-- Not yet run to full end-to-end completion with this fix in place —
-  same caveat as SOG07 above.
+
+### 🎉 First successful end-to-end Phase 2 run on real SOG08 hardware (2026-09-17)
+
+Client run: `SUCCESS: device HQ63460161 reached LOGIN_INSTALL` — Wi-Fi
+(already connected), APN navigation, all four fields, and the save all
+completed successfully on the very first attempt (`--max-retries 0`), no
+field-mismatch errors of any kind. Only the known, harmless soft
+post-save list-visibility warning appeared.
+
+**Notable: unlike SOG07, this run needed no MCC/MNC-specific handling at
+all** — `config/models/sony_xperia_ace3.yaml` has only the one shared
+`keyboard_mode_toggle_tap: [73, 1352]`, no
+`keyboard_mode_toggle_tap_numeric` and no `use_text_entry_for_numeric`,
+and MCC/MNC still committed correctly. Possible explanations (not
+independently confirmed either way): this device's MCC/MNC keypad may
+share the same layout/toggle position as 名前/APN's (unlike SOG07's,
+where they're genuinely different keypads), or this run's starting
+toggle state simply happened to land correctly by chance — same
+underlying risk SOG07 hit initially, just not triggered this time. If a
+future SOG08 run does show the same full-width-digit symptom SOG07 had,
+that would confirm the latter, and SOG08 would need its own numeric
+toggle coordinate/mechanism the same way SOG07 did.
+
+**SOG08 is now considered CONFIRMED WORKING end-to-end.** All four
+models (SHG10, SHG07, SOG07, SOG08) are now confirmed working
+end-to-end on real hardware.
+
+**Client decision, same day: the setup wizard is permanently out of
+scope for this automation.** The wizard/OOBE screens cannot be
+automated via ADB at all (factory reset wipes ADB authorization; nothing
+restores it until a human completes the wizard and re-enables USB
+debugging — see "Wizard capture — RESOLVED AS NOT REMOTELY POSSIBLE"
+below). The client will perform factory reset + the wizard manually for
+every device; this automation covers everything after that.
+`--skip-wizard` is now the standard, expected way to invoke a real run,
+not a testing-only shortcut — updated its warning text/help text and
+README.md accordingly. `wizard_walkthrough.py` and the
+`wizard_steps`/`wizard` config blocks are kept (still tested, still
+functionally correct) but are inert in practice now.
+
+Also confirmed, same day: `main_phase2.py --device SERIAL:MODEL`
+(repeatable, already built 2026-09-14) is the way to run all connected
+devices in parallel with one command — no new code needed. Real example
+with all four devices:
+```
+python src\main_phase2.py --skip-wizard \
+  --device 352063910272451:SHG10 --device 353681650397052:SHG07 \
+  --device HQ632M1012:SOG07 --device HQ63460161:SOG08
+```
 
 ---
 

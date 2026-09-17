@@ -72,13 +72,22 @@ class Slot:
         self.last_error with a human-readable reason).
 
         `skip_wizard`: bypass the setup-wizard step entirely and go straight
-        to Wi-Fi/APN. For manual testing against a device that's already
-        past OOBE (e.g. re-testing the same unit repeatedly without a fresh
-        factory reset each time) — never intended for a production batch
-        run, since it removes the "did the device actually finish setup"
-        check. `main_phase2.py --skip-wizard` is the only place this is
-        wired up to an explicit, deliberate opt-in; `run_phase2_batch()`
-        has no equivalent knob on purpose.
+        to Wi-Fi/APN.
+
+        Client decision (2026-09-17): the wizard/OOBE screens genuinely
+        cannot be automated via ADB at all — a factory reset wipes ADB
+        authorization, and it isn't restored until a human completes the
+        wizard and re-enables USB debugging (see docs/record.md's "Wizard
+        capture — RESOLVED AS NOT REMOTELY POSSIBLE" for the full
+        constraint). Given that, the client performs factory reset + the
+        wizard manually for every device, and this automation is meant to
+        take over from there — so `--skip-wizard` is the STANDARD,
+        expected way `main_phase2.py` gets invoked for real redeployment
+        runs now, not a testing-only shortcut. `run_phase2_batch()` (the
+        unattended, dashboard-style batch entry point, still out of scope
+        for Phase 2) deliberately has no equivalent knob — this flag stays
+        specific to `main_phase2.py`'s own CLI dispatch, where a human is
+        choosing to run it.
         """
         self.state = SlotState.INIT_APN
         self.last_error = None
@@ -94,10 +103,13 @@ class Slot:
 
             if skip_wizard:
                 logger.warning(
-                    "slot %s: skip_wizard=True - assuming the device is "
-                    "already past setup (e.g. re-testing an already-"
-                    "provisioned unit). This bypasses a real safety check; "
-                    "never use this for a production batch run.",
+                    "slot %s: skip_wizard=True - assuming factory reset + "
+                    "the setup wizard were already completed manually "
+                    "(client-decided workflow, 2026-09-17 - the wizard "
+                    "cannot be automated via ADB at all). This skips the "
+                    "check that the device actually finished setup, so a "
+                    "device still mid-wizard when this runs will fail in "
+                    "confusing ways downstream rather than here.",
                     self.slot_id,
                 )
             else:

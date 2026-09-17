@@ -6,6 +6,34 @@ outstanding. See `docs/record.md` for the full session notes (test logs,
 navigation paths, capture methodology, judgment calls) behind every entry
 here — this file is the checklist; that one is the evidence.
 
+**🎉🎉🎉 Status as of 2026-09-17: ALL FOUR MODELS (SHG10, SHG07, SOG07,
+SOG08) are CONFIRMED WORKING end-to-end on real hardware.** SOG08's first
+live run succeeded on the very first attempt, no field-mismatch errors —
+notably without needing SOG07's MCC/MNC-specific
+`keyboard_mode_toggle_tap_numeric`/`use_text_entry_for_numeric` fixes
+(unconfirmed whether that's a real device difference or this run just
+got lucky — see docs/record.md's SOG08 section).
+
+**Client decision, same day: the setup wizard is permanently out of
+scope.** It cannot be automated via ADB at all (factory reset wipes ADB
+authorization until a human completes the wizard). The client performs
+factory reset + the wizard manually for every device; this automation
+covers everything after that via `--skip-wizard`, now the standard way
+to invoke a real run — see README.md and `docs/record.md`'s SOG08
+section for the full account. Every wizard-related "still outstanding"
+item below (SHG10's 2 unverified button labels, wizard data for
+SOG07/SOG08/SHG07) is now moot — kept in this file for history, not
+because it's still being pursued.
+
+**Multi-device parallel processing already exists** (`--device
+SERIAL:MODEL`, repeatable, built 2026-09-14) — confirmed working for all
+4 devices at once with one command:
+```
+python src\main_phase2.py --skip-wizard \
+  --device 352063910272451:SHG10 --device 353681650397052:SHG07 \
+  --device HQ632M1012:SOG07 --device HQ63460161:SOG08
+```
+
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:
 `SUCCESS: device 352063910272451 reached LOGIN_INSTALL` — Wi-Fi (already
@@ -289,18 +317,14 @@ Location on that device first.
 
 ### Other priorities (unchanged, kept in their original sections below)
 
-- **"Two wizard button labels — still the only wizard gap"** (under
-  "SHG10 (AQUOS sense7...)" below) — everything else about SHG10 is
-  implemented; this is what's needed for a *complete* fresh-device flow
-  (wizard + Wi-Fi + APN), not just Wi-Fi + APN with `--skip-wizard`.
-- **A full end-to-end `configure_apn()` run on SOG08** — ~~SOG07~~ is now
-  CONFIRMED WORKING end-to-end (2026-09-17, see update above). SOG08 has
-  not been tested at all yet: it needs its own MCC/MNC toggle coordinate
-  and typing-mechanism confirmation (same process SOG07 went through —
-  see docs/record.md's SOG07 section for the full recipe) before a first
-  live run. Serial: SOG08 (Xperia Ace III) `HQ63460161`. Same
-  recommendation as every other model's first live test: `--skip-wizard`,
-  watch every screen.
+- ~~"Two wizard button labels — still the only wizard gap"~~ (under
+  "SHG10 (AQUOS sense7...)" below) — **MOOT (2026-09-17): the wizard is
+  now permanently out of scope**, client decision — see the status update
+  at the top of this file. Kept here for history only.
+- ~~A full end-to-end `configure_apn()` run on SOG08~~ — **DONE
+  (2026-09-17): SOG08 is now CONFIRMED WORKING end-to-end**, first
+  attempt, no field-mismatch errors — see docs/record.md's SOG08
+  section. All four models are now confirmed.
 
 ### Re-verify the destructive-tap safety fix's retry path specifically
 
@@ -333,6 +357,10 @@ needs root) — noted here in case a *different* network needs credentials
 later; real ones are already in hand for `earth5_1`.
 
 ### Two wizard button labels — still the only wizard gap
+
+**MOOT (2026-09-17): the wizard is now permanently out of scope** —
+client decision, see the status update at the top of this file. Kept
+below for history only; no longer being pursued.
 
 `welcome` and `software_update` screens' button text remain illegible in
 the client's photos (glare on one, cropped at the frame edge on the other)
