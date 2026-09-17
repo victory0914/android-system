@@ -1253,8 +1253,41 @@ this unit.
   `test_fill_labeled_field_numeric_probe_only_retypes_first_digit_on_wrong_attempt`,
   confirms MCC only retypes/clears its first digit on a wrong attempt,
   never the whole value.
-- Still not yet run to full end-to-end completion against real hardware
-  with this fix in place — next real-hardware milestone for SOG07.
+
+### 🎉 First successful end-to-end Phase 2 run on real SOG07 hardware (2026-09-17)
+
+Client run: `SUCCESS: device HQ632M1012 reached LOGIN_INSTALL` — Wi-Fi
+(already connected, correctly detected and skipped), APN navigation, all
+four fields (including MCC/MNC with the self-correcting toggle + single-digit
+probe), and the save itself all completed successfully, with no
+field-mismatch errors of any kind. Only the existing soft post-save
+list-visibility warning appeared (`'rakuten.jp' wasn't spotted back on
+the APN list` — same known, harmless list-refresh-timing quirk as
+SHG10/SHG07, not a real failure). This is the first full success on
+SOG07 in the whole project, confirming every fix from this session
+(numeric-keypad toggle coordinate, `use_text_entry_for_numeric`,
+self-correcting retry loop, single-digit probe) together on real
+hardware.
+
+**Follow-up client feedback, same day:** asked whether the brief visible
+"wrong value, then corrected" flicker during a toggle-correction could
+be avoided by validating the keyboard's mode internally instead of on
+the visible field. Confirmed this isn't achievable: there is no signal
+available to check the mode without actually typing into the real field
+and reading back what landed — the keyboard (including its own toggle
+key's label) is invisible to `uiautomator dump`, and no other system API
+exposes this Gboard-internal state. The only way to eliminate the
+flicker entirely would be clipboard-based paste entry (bypasses
+composing altogether, so there's never a "wrong" value to type in the
+first place), which needs a helper app or substantial custom code —
+presented as an option; **client chose to keep the current behavior**
+(the flicker is a single character, visible for about one ADB
+round-trip, and is never saved/confirmed either way).
+
+**SOG07 is now considered CONFIRMED WORKING end-to-end**, on par with
+SHG10 and SHG07. Not yet done: the same full treatment for SOG08 (its
+own MCC/MNC toggle coordinate and typing-mechanism confirmation — see
+PENDING_REAL_DEVICE_DATA.md).
 
 ## SOG08 (Sony Xperia Ace III, Android 13)
 

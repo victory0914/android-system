@@ -168,6 +168,22 @@ the TEST DOUBLES (not production code): both fake clients modeled
 `input text` as replacing the field instead of appending, which broke
 once a field could legitimately be typed into twice (probe, then rest).
 
+**🎉 Update, 2026-09-17: SOG07's Phase 2 APN flow is CONFIRMED WORKING
+end-to-end on real hardware.** Client run:
+`SUCCESS: device HQ632M1012 reached LOGIN_INSTALL` — all four fields
+(including MCC/MNC via the self-correcting toggle + single-digit probe)
+and the save completed with no field-mismatch errors; only the known,
+harmless soft post-save list-visibility warning appeared (same as
+SHG10/SHG07). SOG07 is now on par with SHG10/SHG07's confirmed status.
+Client also asked whether the brief visible flicker during a
+toggle-correction (a wrong digit shown, then corrected) could be
+eliminated by validating the keyboard's mode internally — confirmed not
+achievable without a different mechanism (paste-based entry, needing a
+helper app); **client chose to keep the current behavior** given the
+flicker is minimal (one character, ~one ADB round-trip) and never
+actually saved. See docs/record.md's SOG07 section for the full account.
+Not yet done: the same treatment for SOG08.
+
 ## Highest priority
 
 ### 🎉 SHG07 text entry: real fix found, confirmed end-to-end (2026-09-15)
@@ -262,13 +278,14 @@ Location on that device first.
   "SHG10 (AQUOS sense7...)" below) — everything else about SHG10 is
   implemented; this is what's needed for a *complete* fresh-device flow
   (wizard + Wi-Fi + APN), not just Wi-Fi + APN with `--skip-wizard`.
-- **A full end-to-end `configure_apn()` run on SOG07 and SOG08** — both
-  hit and fixed the kana-conversion text-entry symptom (2026-09-17, see
-  update above), but only via a single-field scripted test so far, not a
-  full automated run through all four fields + save + list-visibility
-  check. Serials: SOG07 (Xperia 10 IV) `HQ632M1012`, SOG08 (Xperia Ace
-  III) `HQ63460161`. Same recommendation as every other model's first
-  live test: `--skip-wizard`, one device at a time, watch every screen.
+- **A full end-to-end `configure_apn()` run on SOG08** — ~~SOG07~~ is now
+  CONFIRMED WORKING end-to-end (2026-09-17, see update above). SOG08 has
+  not been tested at all yet: it needs its own MCC/MNC toggle coordinate
+  and typing-mechanism confirmation (same process SOG07 went through —
+  see docs/record.md's SOG07 section for the full recipe) before a first
+  live run. Serial: SOG08 (Xperia Ace III) `HQ63460161`. Same
+  recommendation as every other model's first live test: `--skip-wizard`,
+  watch every screen.
 
 ### Re-verify the destructive-tap safety fix's retry path specifically
 
