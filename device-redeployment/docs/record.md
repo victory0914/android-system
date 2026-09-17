@@ -612,6 +612,48 @@ be a real functional break on a path proven working 2026-09-11. **Resolved
 same day** (see the SHG07 section's "round 5" entry below): reverted —
 SHG10 is back to exactly its 2026-09-11 known-working configuration.
 
+### 🎉 2026-09-17: SHG10 turned out not to be immune after all — confirms the 2026-09-15 prediction above
+
+A parallel 4-device run (`--device` x4, all four models at once) showed
+SHG10 hit the exact same かな-conversion symptom SHG07/SOG07/SOG08
+already needed a fix for: `apn field '名前': typed 'rakuten.jp' but the
+field now reads 'らくてん。ｊｐ'`, on all 3/3 retries, while the other
+three devices in the same parallel run succeeded cleanly. This directly
+confirms what the comment above already predicted: "SHG10's real
+2026-09-11 success with input_text_direct() most likely worked because
+that unit's keyboard happened to be in alphanumeric mode at the time,
+not because the command itself is safe." Gboard's かな/英数 mode is
+evidently persistent, app-level state that can drift over time/across
+sessions on any device — not a fixed per-model property some devices
+have and others don't. SHG10's keyboard had simply stayed in the right
+mode by chance for six weeks of testing, until it didn't.
+
+Ruled out first: a concurrency bug from running 4 devices in parallel
+(shared temp files, shared ADB state) — checked `dump_ui()`'s remote/local
+path handling (UUID-unique remote path, a fresh `tempfile.TemporaryDirectory()`
+per call) and `AdbClient`'s per-instance, per-serial subprocess calls;
+nothing shared across threads. This was a genuine device-state finding,
+not a parallel-execution artifact.
+
+Coordinate found and confirmed the same way as every other device:
+Pointer Location (holding the touch on the toggle key during the
+screenshot, X:119.0 Y:2223.0), then a scripted `adb shell input tap 119
+2223` (twice) + `input text "rakuten.jp"` test — client confirmed the
+field read back plain `rakuten.jp`. `keyboard_mode_toggle_tap: [119,
+2223]` added to `config/models/sharp_aquos_sense7.yaml` — this device's
+own confirmed coordinate, NOT copied from SHG07 despite the shared AQUOS
+lineage (that coordinate was independently confirmed on its own unit).
+The self-correcting retry/probe mechanism already built (2026-09-17,
+originally for SOG07) picks this up automatically — no other code
+changes needed.
+
+**Implication for every other "confirmed working" device**: none of them
+should be considered permanently immune either. A device that passed
+once with no toggle configured proves its keyboard was in the right mode
+*that day* — it doesn't prove the mode can't drift later. Worth keeping
+in mind if SHG07/SOG07/SOG08 (which do have toggles) or even SHG10 again
+ever show this symptom on a future run.
+
 ### Real-device bugs found running the automation — relevant to `adb_client.py`, `main_phase2.py`
 - *2026-09-08:* `config/settings.yaml`'s `adb.platform_tools_path` is a
   *directory* (`C:\platform-tools`), but was being passed straight through

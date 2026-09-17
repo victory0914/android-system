@@ -242,6 +242,24 @@ apn_settings:
   # input_text_direct() for 名前/APN exactly as it did on 2026-09-11.
   # use_keyevent_text_entry: true
 
+  # RESOLVED (real, 2026-09-17): confirmed the comment above's own
+  # prediction. A parallel 4-device run showed SHG10 hit the exact
+  # SHG07/SOG07/SOG08 かな-conversion symptom on 名前
+  # ("rakuten.jp" -> "らくてん。ｊｐ"), 3/3 retries, despite the
+  # 2026-09-11 success — this device was never actually immune, its
+  # keyboard just happened to be in alphanumeric mode that day. Gboard's
+  # mode is evidently persistent, app-level state that can drift over
+  # time/across sessions on ANY device, not a fixed per-model property —
+  # every device needs this safety net, not just the ones that have
+  # already been caught without one. Coordinate found and confirmed via
+  # Pointer Location + a scripted `adb shell input tap` + `input text
+  # "rakuten.jp"` test on this exact unit (client-confirmed, see
+  # docs/record.md) — tied to this exact device's screen, never to be
+  # copied elsewhere (not even to SHG07, despite the shared AQUOS
+  # lineage — that coordinate was independently confirmed on its own
+  # unit already).
+  keyboard_mode_toggle_tap: [119, 2223]
+
   # Has no resource-id at all on this build (icon-only button, standard
   # AOSP-style Button/ImageButton with no android:id set) — confirmed by a
   # real dump, not just absence of evidence: tests/fixtures/

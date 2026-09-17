@@ -34,6 +34,26 @@ python src\main_phase2.py --skip-wizard \
   --device HQ632M1012:SOG07 --device HQ63460161:SOG08
 ```
 
+**🎉 Update, same day (2026-09-17): running that exact 4-device parallel
+command surfaced a real finding — SHG10 was never actually immune to
+the かな-conversion symptom.** It hit the identical `名前` full-width
+failure SHG07/SOG07/SOG08 needed fixes for, on all 3/3 retries, while
+the other three devices in the same run succeeded. Confirmed this
+wasn't a parallel-execution bug first (checked `dump_ui()`'s
+UUID-unique temp paths and `AdbClient`'s per-serial subprocess calls —
+nothing shared across threads). Real conclusion: SHG10's keyboard mode
+is persistent, drift-able state, and its 2026-09-11 success only proved
+it was in the right mode *that day* — not that this device is
+structurally different from the others. Found and confirmed its own
+`keyboard_mode_toggle_tap: [119, 2223]` the same way as every other
+device (Pointer Location + scripted `adb shell input tap` +
+`input text` test); the existing self-correcting retry/probe mechanism
+picked it up automatically, no other code changes needed. **Every other
+"confirmed working" device should be read as "confirmed working that
+day," not permanently immune** — worth remembering if any of them show
+this symptom on a future run. See docs/record.md's SHG10 section for
+the full account.
+
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:
 `SUCCESS: device 352063910272451 reached LOGIN_INSTALL` — Wi-Fi (already

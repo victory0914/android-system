@@ -122,6 +122,11 @@ def test_load_shg10_model_file_screen_driven_wizard_and_labeled_apn_fields():
     # failure on a path already proven working. Unset — SHG10 uses
     # input_text_direct() for 名前/APN exactly as it did on 2026-09-11.
     assert apn.get("use_keyevent_text_entry") is None
+    # RESOLVED (real, 2026-09-17): a parallel 4-device run showed SHG10
+    # was never actually immune to the かな-conversion symptom — its
+    # keyboard just happened to be in alphanumeric mode during the
+    # 2026-09-11 test. This device's own confirmed coordinate.
+    assert apn["keyboard_mode_toggle_tap"] == [119, 2223]
 
 
 @pytest.mark.parametrize("filename", SCREEN_DRIVEN_WIZARD_MODEL_FILES)
