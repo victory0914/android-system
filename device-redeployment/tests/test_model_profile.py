@@ -229,6 +229,10 @@ def test_load_sog07_model_file_real_apn_and_wifi_data():
     # kana-conversion IME symptom SHG07 had. This is this device's own
     # Pointer-Location-confirmed coordinate, not inherited from SHG07's.
     assert apn["keyboard_mode_toggle_tap"] == [145, 2308]
+    # RESOLVED (real, 2026-09-17): MCC/MNC open a genuinely different
+    # numeric keypad on this device — its own toggle key sits at a
+    # different X than the text keyboard's, confirmed independently.
+    assert apn["keyboard_mode_toggle_tap_numeric"] == [93, 2300]
 
 
 def test_load_sog08_model_file_real_apn_and_wifi_data():

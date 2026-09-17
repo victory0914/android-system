@@ -377,6 +377,51 @@ def test_configure_apn_keyboard_toggle_tap_is_opt_in():
     assert "input tap 106 2239" not in client.shell_calls
 
 
+# SOG07 (2026-09-17): a real run showed the SAME toggle coordinate used for
+# 名前/APN does NOT work for MCC/MNC on Sony hardware — a screenshot
+# confirmed those fields open a genuinely different numeric-only keypad
+# whose own toggle key sits at a different X. keyboard_mode_toggle_tap_numeric
+# is this keypad's own, independently-confirmed coordinate.
+NUMERIC_KEYBOARD_TOGGLE_PROFILE = ModelProfile(
+    {
+        "model": "SOG07-like Numeric-Keyboard-Toggle Test",
+        "model_number": "TST09",
+        "manufacturer": "Test",
+        "android_version": 14,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+        "apn_settings": {
+            **LABELED_PROFILE.apn_settings(),
+            "keyboard_mode_toggle_tap": [145, 2308],
+            "keyboard_mode_toggle_tap_numeric": [93, 2300],
+        },
+    }
+)
+
+
+def test_configure_apn_uses_numeric_toggle_coordinate_for_mcc_mnc_only():
+    """名前/APN must tap the text-keyboard coordinate; MCC/MNC must tap the
+    separate numeric-keypad coordinate instead — not the text one."""
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    configure_apn(client, NUMERIC_KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
+    text_tap = "input tap 145 2308"
+    numeric_tap = "input tap 93 2300"
+    # 名前, APN = 2 fields x 2 taps = 4 on the text coordinate.
+    assert client.shell_calls.count(text_tap) == 4
+    # MCC, MNC = 2 fields x 2 taps = 4 on the numeric coordinate.
+    assert client.shell_calls.count(numeric_tap) == 4
+
+
+def test_configure_apn_numeric_toggle_falls_back_to_shared_coordinate_when_unset():
+    """SHG07's profile only sets keyboard_mode_toggle_tap (no separate
+    numeric variant) — MCC/MNC must keep using that same coordinate,
+    unchanged from before this feature existed."""
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    configure_apn(client, KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
+    toggle_tap = "input tap 106 2239"
+    assert client.shell_calls.count(toggle_tap) == 8
+
+
 def test_configure_apn_missing_save_button_never_taps_anything_claiming_save():
     """With save_button_resource_id unresolved (None), configure_apn() must
     not silently guess a save action — this is the direct instruction from

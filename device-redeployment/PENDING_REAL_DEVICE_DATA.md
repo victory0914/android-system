@@ -70,18 +70,27 @@ every other model.
 
 **🎉 Update, 2026-09-17: both SOG07 and SOG08 hit SHG07's exact
 kana-conversion text-entry symptom on their first live runs, and both are
-now fixed the same way.** Real, Pointer-Location-confirmed
+now fixed the same way for 名前/APN.** Real, Pointer-Location-confirmed
 `keyboard_mode_toggle_tap` coordinates found and verified via scripted
 `adb shell input tap` + a plain-ASCII text-entry test on each unit:
 SOG07 `[145, 2308]`, SOG08 `[73, 1352]` — each device's own coordinate,
-never copied from another device. Applied unconditionally before every
-field, same as SHG07. Neither device has yet completed a full
-end-to-end `configure_apn()` run with the fix in place (only the
-single-field scripted test has been confirmed so far) — that's the next
-real-hardware milestone to watch for. See docs/record.md's SOG07/SOG08
+never copied from another device. See docs/record.md's SOG07/SOG08
 sections for the full account, including a rejected first SOG07 reading
 (`[850, 0]`) whose Y value didn't match the key's visible position and
 was correctly not trusted.
+
+**Second finding, same day: MCC/MNC need their OWN toggle coordinate,
+not the same one as 名前/APN.** A full SOG07 run still failed at MCC —
+turned out MCC/MNC open a genuinely different numeric-only keypad on
+Sony hardware (unlike SHG07, where one coordinate covered every field).
+`_fill_labeled_field()` now reads a separate
+`keyboard_mode_toggle_tap_numeric` (falling back to
+`keyboard_mode_toggle_tap` when unset, so SHG07 is unaffected). SOG07's
+numeric coordinate is confirmed: `[93, 2300]`. **SOG08's numeric
+coordinate is still outstanding** — its MCC/MNC keypad hasn't been
+captured yet. Neither device has completed a full end-to-end
+`configure_apn()` run with all fields' fixes in place — that's the next
+real-hardware milestone to watch for.
 
 ## Highest priority
 
@@ -275,9 +284,18 @@ final step uses this real value for both Sony models.
   completely unknown~~ — **RESOLVED (real, 2026-09-17): both do.** First
   live runs on both hit the identical symptom, and both now have their
   own Pointer-Location-confirmed `keyboard_mode_toggle_tap` coordinates
-  (SOG07 `[145, 2308]`, SOG08 `[73, 1352]`), each verified via a scripted
-  `adb shell input tap` + plain-ASCII text-entry test. See docs/record.md
-  and the update note near the top of this file for the full account.
+  for 名前/APN (SOG07 `[145, 2308]`, SOG08 `[73, 1352]`), each verified
+  via a scripted `adb shell input tap` + plain-ASCII text-entry test. See
+  docs/record.md and the update note near the top of this file for the
+  full account.
+- **NEW, still outstanding: SOG08's MCC/MNC keyboard-toggle coordinate.**
+  A full SOG07 run revealed MCC/MNC use a different numeric-only keypad
+  than 名前/APN, with its own toggle key at a different position —
+  SOG07's is confirmed (`keyboard_mode_toggle_tap_numeric: [93, 2300]`).
+  SOG08's equivalent hasn't been captured yet; until it is, SOG08's
+  MCC/MNC will fall back to its 名前/APN coordinate (`[73, 1352]`), which
+  is not confirmed correct for that keypad and may well repeat the same
+  bug SOG07 just hit.
 
 **Both devices' keyboard-toggle fix is confirmed at the single-field
 level, but neither has completed a full end-to-end `configure_apn()` run

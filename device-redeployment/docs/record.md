@@ -1082,11 +1082,37 @@ this unit.
   MCC/MNC bug proved digits aren't universally immune). This is SOG07's
   own confirmed coordinate, tied to this exact unit's screen — never to
   be copied to another device.
-- Not yet run to full end-to-end completion against real hardware with
-  this fix in place — the keyboard-toggle coordinate itself was
-  confirmed via the scripted single-field test above, but a full
-  `configure_apn()` run (all four fields, save, list-visibility check)
-  has not yet been observed.
+- *2026-09-17 (same day, second finding):* A full run with the fix above
+  in place still failed — every retry (3/3) hit the identical error at
+  MCC: `typed '440' but the field now reads '４４０'`, 名前/APN
+  unaffected. Root cause: MCC/MNC open a genuinely **different keyboard**
+  than 名前/APN on this device — a client screenshot of the MCC field's
+  keyboard showed a numeric-only keypad (1-9/0 grid), not the かな/英数
+  text keyboard 名前/APN uses. It still has an "あ1"-style toggle key in
+  the same bottom-left corner, but at a different X — Pointer Location
+  read `X:93.0 Y:2300.0` while touching it, versus `X:145.0 Y:2308.0` for
+  the text keyboard's toggle. The client's first instinct (reuse SHG07's
+  approach of one shared coordinate) doesn't hold here: on SHG07 one
+  coordinate happened to work for both keyboards; on this device it does
+  not, and the existing log already showed what happens without a
+  working numeric-keypad toggle (full-width digits) — proof that simply
+  omitting the toggle (SHG10's approach) isn't a fix either, since
+  SHG10's numeric keypad defaults to half-width and this device's
+  evidently doesn't.
+- Confirmed via the same scripted-test standard as every other
+  coordinate: `adb shell input tap 93 2300` (twice) + `input text "440"`
+  — client screenshot showed the field read back plain `440` and the
+  keyboard had switched to an ABC/alphanumeric layout.
+- Implication: `_fill_labeled_field()` (`src/phase2/apn_setup.py`) now
+  reads a SEPARATE `keyboard_mode_toggle_tap_numeric` key for
+  `numeric_only` fields, falling back to the shared
+  `keyboard_mode_toggle_tap` when unset (keeps SHG07's profile, which
+  only sets the one shared key, working unchanged).
+  `config/models/sony_xperia_10iv.yaml` now has
+  `keyboard_mode_toggle_tap_numeric: [93, 2300]`.
+- Still not yet run to full end-to-end completion against real hardware
+  with both coordinates in place — only the single-field scripted tests
+  (name/APN and now MCC) have been confirmed so far.
 
 ## SOG08 (Sony Xperia Ace III, Android 13)
 

@@ -166,8 +166,18 @@ apn_settings:
   # kana-conversion symptom SHG07 had. Coordinate found and confirmed via
   # Pointer Location + a scripted `adb shell input tap` + text-entry test
   # on this exact unit (client-confirmed, see docs/record.md's SOG07
-  # section) — must never be copied to another device/resolution.
+  # section) — must never be copied to another device/resolution. Used
+  # for 名前/APN (non-numeric fields).
   keyboard_mode_toggle_tap: [145, 2308]
+  # RESOLVED (real, 2026-09-17) — MCC/MNC open a genuinely different
+  # numeric-only keypad on this device (confirmed via screenshot: same
+  # "あ1"-style toggle key, but at a different X than the text
+  # keyboard's). Reusing keyboard_mode_toggle_tap above still produced
+  # full-width digits on a real run (client log, 2026-09-17) because it
+  # was landing on the wrong key for this keypad — this coordinate is
+  # this keypad's own, independently confirmed via the same scripted
+  # `adb shell input tap` + text-entry test.
+  keyboard_mode_toggle_tap_numeric: [93, 2300]
   # navigate_up_content_desc left unset here on purpose too — SHG10's
   # real dumps confirm "上へ移動" for that device, and this device's own
   # apn_list_SOG07.xml dump ALSO shows the identical content-desc, so this

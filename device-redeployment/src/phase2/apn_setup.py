@@ -160,6 +160,16 @@ def _fill_labeled_field(
     does NOT set this flag; input_text_direct() is already proven working
     there for 名前/APN specifically (real end-to-end success, 2026-09-11),
     so this stays opt-in per model rather than applying everywhere.
+
+    `apn_settings.keyboard_mode_toggle_tap_numeric` (SOG07/SOG08,
+    2026-09-17) is a SEPARATE, independently-confirmed coordinate used
+    only for numeric_only fields (MCC/MNC), falling back to
+    `keyboard_mode_toggle_tap` when unset. Real finding: unlike SHG07,
+    where one coordinate happened to work for every field, MCC/MNC on
+    Sony hardware open a genuinely different numeric-only keypad layout
+    whose toggle key sits at a different position — reusing the
+    text-keyboard coordinate there is a near-miss at best (silently
+    lands on the wrong key) and a mistap at worst.
     """
     row_resource_id = apn["field_row_resource_id"]
     if not tap_resource_id(client, row_resource_id, text=label):
@@ -199,7 +209,24 @@ def _fill_labeled_field(
     # were universally immune to conversion (true on SHG10, where this
     # flag isn't set) — that assumption doesn't hold on SHG07's keyboard,
     # so this now applies unconditionally, not just to non-numeric fields.
-    toggle_coords = apn.get("keyboard_mode_toggle_tap")
+    #
+    # Real finding, SOG07/SOG08 (2026-09-17): on SHG07 the SAME toggle-key
+    # coordinate happened to work for both the text keyboard (名前/APN)
+    # and whatever keyboard MCC/MNC show. On Sony hardware it does NOT —
+    # a real dump/screenshot showed MCC's field opens a genuinely
+    # different, numeric-only keypad layout, whose equivalent toggle key
+    # sits at a different X (e.g. SOG07: x=145 for 名前/APN's keyboard vs.
+    # x=93 for MCC/MNC's numeric keypad; Y stayed roughly the same, but
+    # that's incidental, not assumed). So numeric fields get their own,
+    # independently-confirmed `keyboard_mode_toggle_tap_numeric`, falling
+    # back to `keyboard_mode_toggle_tap` when unset (SHG07's profile only
+    # sets the one shared key, and that must keep working unchanged).
+    if numeric_only:
+        toggle_coords = apn.get("keyboard_mode_toggle_tap_numeric") or apn.get(
+            "keyboard_mode_toggle_tap"
+        )
+    else:
+        toggle_coords = apn.get("keyboard_mode_toggle_tap")
     if toggle_coords:
         x, y = toggle_coords
         tap_at_coordinates(client, x, y)
