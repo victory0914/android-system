@@ -106,10 +106,23 @@ center risks being consumed by the system nav bar instead of the app.
 Fixed: `_navigate_apn_menu()` now scrolls down once before tapping this
 final step, for every model using `reach_via_wifi_settings_intent`.
 
-**Not yet re-confirmed on real hardware for ANY of the four models with
-this fix in place** — the next real test needs to confirm navigation
-reaches the real screen, the final tap actually lands, AND a saved entry
-actually shows up there, on all four devices.
+**🎉 Update, same day: navigation + scroll fix both confirmed working on
+all 4 devices in a real parallel run** — every device logged
+`reached APN list via the SIM-scoped menu_path` and reached
+`LOGIN_INSTALL`. **But** the client then found all 4 devices sitting on
+the OLD, wrong, restricted screen afterward — root cause: `_save_apn()`'s
+post-save recheck still hardcoded the old `android.settings.APN_SETTINGS`
+intent in its own fallback, completely independent of
+`_navigate_apn_menu()`'s fix, silently undoing it right at the end of
+every run. Fixed: that fallback now calls `_navigate_apn_menu()` itself
+instead of a second, hardcoded copy of the old intent — can't drift out
+of sync again. See docs/record.md's new dated entry for the full
+account.
+
+**Still not yet re-confirmed on real hardware with THIS specific fix in
+place** — the next real test needs to confirm the device is actually
+left sitting on the correct, real APN list at the very end of a run, on
+all four devices.
 
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:

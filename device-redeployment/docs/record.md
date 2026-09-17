@@ -1182,6 +1182,47 @@ navigation reaching the real SIM-scoped screen, the final tap actually
 landing, AND a saved entry actually appearing there afterward, on all
 four devices. See PENDING_REAL_DEVICE_DATA.md.
 
+### 🎉 2026-09-18 (same day, next real test): navigation itself confirmed working on all 4 — then one more real bug found and fixed
+
+Client ran the full 4-device parallel command with every fix above in
+place. Real progress: every device logged
+`reached APN list via the SIM-scoped menu_path` and completed with
+`SUCCESS: ... reached LOGIN_INSTALL` — the navigation fix and the
+scroll-before-tap fix both worked, on all 4 devices, in one run.
+
+But the client then checked all 4 devices manually and found them
+sitting on the OLD, wrong, restricted "APN" screen (the
+`このユーザーはアクセスポイント名設定を利用できません` one) — not the
+real "アクセスポイント名" list. Root cause: `_save_apn()`'s post-save
+soft check still hardcoded `am start -a android.settings.APN_SETTINGS`
+directly in its 3rd-tier re-navigation fallback (the force-stop fix from
+earlier the same day), completely independent of
+`_navigate_apn_menu()`'s own fix — so every device's post-save
+"couldn't confirm visibility, let me force a reload" step was silently
+undoing the navigation fix and landing back on the wrong screen, right
+at the very end of the run. This explains the earlier warning
+(`'rakuten.jp' wasn't spotted back on the APN list`) firing for all 4
+devices in the SAME run that otherwise succeeded — the fallback's own
+re-navigation was reaching a screen where the entry genuinely isn't
+listed (because it's the wrong, restricted context), not a refresh-delay
+issue at all.
+
+**Fixed**: `_save_apn()`'s fallback now calls `_navigate_apn_menu(client,
+apn)` itself instead of hardcoding the intent — the exact same function
+`_navigate_apn_menu()`'s own primary path uses, so this recheck can never
+drift out of sync with it again, for any model, forever. New test:
+`test_configure_apn_post_save_recheck_uses_sim_scoped_renavigation_not_
+old_intent`, with a new fake client
+(`ApnPostSaveRequiresWifiSettingsRenavigationClient`) confirming
+`android.settings.APN_SETTINGS` is never called and
+`android.settings.WIFI_SETTINGS` is sent exactly twice (initial
+navigation + post-save recheck).
+
+**Still not yet re-confirmed on real hardware with this specific fix in
+place** — the next real test needs to confirm the device is actually
+left sitting on the correct APN list at the very end of a run, on all
+four devices.
+
 ---
 
 ## SOG07 (Sony Xperia 10 IV, Android 14)

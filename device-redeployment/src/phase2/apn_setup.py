@@ -680,8 +680,8 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
       giving up: first waits `_POST_SAVE_RECHECK_DELAY_SECONDS` and dumps
       the same screen again (a real run, 2026-09-11, showed the list can
       take a moment to actually refresh after 保存); if that still doesn't
-      find it, force-stops `com.android.settings` and re-launches the
-      `android.settings.APN_SETTINGS` intent to force a genuine screen
+      find it, force-stops `com.android.settings` and calls
+      `_navigate_apn_menu()` again to force a genuine, fresh screen
       reload (a later real run, 2026-09-15, SHG07, showed simply waiting
       on the already-open screen isn't always enough, but leaving and
       re-entering Settings does show the entry — and a further real run,
@@ -689,8 +689,14 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
       the SAME intent alone still wasn't reliable, most likely because
       `am start` just re-foregrounds an already-running, possibly
       stale/cached Activity rather than actually reloading it; the
-      force-stop guarantees a genuinely fresh process first). Still soft
-      either way — never a hard failure on its own.
+      force-stop guarantees a genuinely fresh process first). Reuses
+      `_navigate_apn_menu()` itself, not a second, independently
+      hardcoded `android.settings.APN_SETTINGS` call — a real bug this
+      session, same day: hardcoding it here silently undid
+      `_navigate_apn_menu()`'s own fix for reaching the correct,
+      SIM-scoped APN screen instead of a non-authoritative one, landing
+      every device back on the wrong screen at the very end of a run.
+      Still soft either way — never a hard failure on its own.
 
     - Legacy (3 untouched models): a single literal save button.
     """
@@ -742,28 +748,43 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
             # confirmed by a run where this warning hit all 4 devices in
             # a parallel batch, then the client independently verified
             # the entry was still missing on the device itself, not just
-            # in our own soft check): re-sending the SAME
-            # `android.settings.APN_SETTINGS` intent while the Settings
-            # app/Activity is already running most likely just brings
-            # that existing (and possibly stale/cached) instance back to
-            # the foreground — Android's normal task-reuse behavior for
-            # `am start` — rather than forcing it to actually reload from
-            # the underlying database. That would explain why this
-            # "re-navigate to force a reload" step wasn't reliably fixing
-            # the exact problem it was built for. Force-stopping the
-            # Settings app first guarantees a genuinely fresh process
-            # with no cached UI state to fall back on, before the intent
-            # re-launches it.
+            # in our own soft check): re-sending the SAME intent while
+            # the Settings app/Activity is already running most likely
+            # just brings that existing (and possibly stale/cached)
+            # instance back to the foreground — Android's normal
+            # task-reuse behavior for `am start` — rather than forcing it
+            # to actually reload from the underlying database. That
+            # would explain why this "re-navigate to force a reload"
+            # step wasn't reliably fixing the exact problem it was built
+            # for. Force-stopping the Settings app first guarantees a
+            # genuinely fresh process with no cached UI state to fall
+            # back on, before re-navigating.
+            #
+            # Real finding, round 3 (2026-09-18, same day): this used to
+            # hardcode `am start -a android.settings.APN_SETTINGS` here —
+            # exactly the non-authoritative screen _navigate_apn_menu()
+            # was fixed to stop using (see its own docstring). A real run
+            # showed every device landing back on that wrong, restricted
+            # screen at the very end of a run, for exactly this reason:
+            # this fallback was undoing the navigation fix by reaching
+            # for the old intent directly instead of going through
+            # _navigate_apn_menu() (which correctly uses the SIM-scoped
+            # path when `reach_via_wifi_settings_intent` is set). Reusing
+            # it here keeps this recheck's navigation logic in sync with
+            # the real primary navigation path, for every model, forever
+            # — never a second, independently-maintained copy of it.
             try:
                 client.shell("am force-stop com.android.settings")
-                client.shell("am start -a android.settings.APN_SETTINGS")
             except AdbCommandError as exc:
                 logger.info(
-                    "apn: re-navigation for the post-save recheck failed: %s", exc
+                    "apn: force-stopping Settings for the post-save recheck "
+                    "failed: %s", exc,
                 )
-            else:
+            if _navigate_apn_menu(client, apn):
                 ui_xml = dump_ui(client)
                 entry_visible = _apn_entry_visible(ui_xml, apn_name)
+            else:
+                logger.info("apn: re-navigation for the post-save recheck failed")
 
         if entry_visible:
             logger.info("apn: new entry %r confirmed visible on the APN list", apn_name)

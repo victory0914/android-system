@@ -1340,6 +1340,103 @@ def test_configure_apn_force_stops_settings_before_renavigating(monkeypatch):
     )
 
 
+# Real bug, 2026-09-18: the post-save recheck's re-navigation fallback used
+# to hardcode `am start -a android.settings.APN_SETTINGS` directly — exactly
+# the non-authoritative screen _navigate_apn_menu() was fixed to stop using.
+# A real 4-device parallel run showed every device ending up back on that
+# wrong, restricted screen at the very end, because this fallback was
+# silently undoing the navigation fix. It must go through _navigate_apn_menu()
+# itself instead, so a model with reach_via_wifi_settings_intent set uses the
+# SAME SIM-scoped path here too.
+WIFI_SETTINGS_SAVE_FLOW_PROFILE = ModelProfile(
+    {
+        "model": "SHG07-like WIFI_SETTINGS Save Test",
+        "model_number": "TST14",
+        "manufacturer": "Test",
+        "android_version": 13,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+        "apn_settings": {
+            **SAVE_FLOW_PROFILE.apn_settings(),
+            "reach_via_wifi_settings_intent": True,
+            "menu_path": [
+                {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
+                {"type": "text", "value": "アクセス ポイント名"},
+            ],
+        },
+    }
+)
+
+WIFI_SETTINGS_SAVE_FLOW_SCREEN_XML = SAVE_FLOW_SCREEN_XML.replace(
+    '<node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />',
+    '<node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />\n'
+    '  <node resource-id="com.android.settings:id/settings_button" bounds="[0,1200][100,1300]" />\n'
+    '  <node resource-id="android:id/title" text="アクセス ポイント名" bounds="[0,1300][100,1400]" />',
+)
+
+WIFI_SETTINGS_POST_SAVE_STALE_XML = """<hierarchy>
+  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
+  <node resource-id="com.android.settings:id/settings_button" bounds="[0,1200][100,1300]" />
+  <node resource-id="android:id/title" text="アクセス ポイント名" bounds="[0,1300][100,1400]" />
+</hierarchy>"""
+
+WIFI_SETTINGS_POST_SAVE_REFRESHED_XML = """<hierarchy>
+  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
+  <node resource-id="com.android.settings:id/settings_button" bounds="[0,1200][100,1300]" />
+  <node resource-id="android:id/title" text="アクセス ポイント名" bounds="[0,1300][100,1400]" />
+  <node resource-id="android:id/title" text="rakuten.jp" bounds="[0,300][100,400]" />
+</hierarchy>"""
+
+
+class ApnPostSaveRequiresWifiSettingsRenavigationClient(ApnPostSaveClient):
+    """Same real finding as ApnPostSaveRequiresRenavigationClient, but for
+    the reach_via_wifi_settings_intent path: the post-save recheck must
+    re-navigate via android.settings.WIFI_SETTINGS (never the old
+    android.settings.APN_SETTINGS), issued AFTER save."""
+
+    def __init__(self, *, delayed_post_save_xml: str, **kwargs):
+        super().__init__(**kwargs)
+        self.delayed_post_save_xml = delayed_post_save_xml
+        self._renavigated_after_save = False
+
+    def shell(self, command, timeout=30):
+        result = super().shell(command, timeout=timeout)
+        if self._save_tapped and command == "am start -a android.settings.WIFI_SETTINGS":
+            self._renavigated_after_save = True
+        return result
+
+    def pull(self, remote_path, local_path):
+        if self._save_tapped:
+            xml = self.delayed_post_save_xml if self._renavigated_after_save else self.post_save_xml
+            with open(local_path, "w", encoding="utf-8") as fh:
+                fh.write(xml)
+            self.pulled_files[remote_path] = local_path
+            return self.pull_result
+        return super().pull(remote_path, local_path)
+
+
+def test_configure_apn_post_save_recheck_uses_sim_scoped_renavigation_not_old_intent(
+    monkeypatch,
+):
+    """The post-save recheck's fallback must go through
+    _navigate_apn_menu() — never android.settings.APN_SETTINGS directly —
+    so a model using reach_via_wifi_settings_intent gets the same
+    SIM-scoped re-navigation here as everywhere else."""
+    monkeypatch.setattr("src.phase2.apn_setup.time.sleep", lambda _seconds: None)
+    client = ApnPostSaveRequiresWifiSettingsRenavigationClient(
+        ui_dumps=[WIFI_SETTINGS_SAVE_FLOW_SCREEN_XML] * 30,
+        post_save_xml=WIFI_SETTINGS_POST_SAVE_STALE_XML,
+        delayed_post_save_xml=WIFI_SETTINGS_POST_SAVE_REFRESHED_XML,
+    )
+
+    result = configure_apn(client, WIFI_SETTINGS_SAVE_FLOW_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is True
+    assert "am start -a android.settings.APN_SETTINGS" not in client.shell_calls
+    # Once for the initial navigation, once more for the post-save recheck.
+    assert client.shell_calls.count("am start -a android.settings.WIFI_SETTINGS") == 2
+
+
 def test_configure_apn_taps_estimated_add_button_position_when_unresolved():
     """Real screenshot (2026-09-11): add_button_resource_id ("+") has never
     been captured (no dump of the list screen with an empty/known-count APN
