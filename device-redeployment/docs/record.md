@@ -1140,14 +1140,47 @@ is_the_carrier_name`, `test_mobile_network_row_titles_share_generic_id`,
 `test_access_point_names_row_text_has_a_space_not_the_title_variant`
 (`tests/test_real_shg07_fixtures.py`, against the real fixture directly).
 
-**Not yet re-confirmed end-to-end on real hardware** — the next real test
-needs to show both that navigation reaches the real SIM-scoped screen
-AND that a saved entry actually appears there afterward. **SOG07/SOG08
-have NOT been touched** — their equivalent carrier-settings screen and
-tappable label have not been captured; they still use the original
-`android.settings.APN_SETTINGS` path and may have the exact same
-underlying problem, unconfirmed either way. See
-PENDING_REAL_DEVICE_DATA.md.
+**Same-day follow-up (still 2026-09-18): two more real findings from the
+client.**
+
+1. **SOG07/SOG08 confirmed to have the identical problem.** Client
+   supplied a real dump of SOG08's own carrier mobile-network-settings
+   screen, `tests/fixtures/Xperia Ace III（SOG08）/mobile_network_SOG08.xml`
+   — same structure as SHG07's, byte-identical pattern: "アクセス
+   ポイント名" (with a space) is a real, tappable `android:id/title` row.
+   `reach_via_wifi_settings_intent` and the trimmed `menu_path` (gear icon
+   + real final tap) now set on `sony_xperia_10iv.yaml` (SOG07, inherited
+   from SOG08's confirmation, same lineage/manufacturer basis SHG07↔SHG10
+   already uses) and `sony_xperia_ace3.yaml` (SOG08, directly confirmed
+   on this exact unit).
+
+2. **The final tap itself wasn't reliably landing even on SHG07/SHG10,
+   where navigation otherwise succeeded** — client reported "not possible
+   to click on アクセス ポイント名". Root cause, confirmed by direct
+   evidence in the SOG08 dump: this row sits right at the very bottom
+   edge of the screen — its bounds' bottom edge lands exactly on the
+   screen's content-area boundary (SHG07), and SOG08's dump explicitly
+   shows `android:id/navigationBarBackground` starting at the EXACT same
+   y-coordinate (1406) where this row's own bounds end. A tap at the
+   row's literal center risks being consumed by the system
+   navigation/gesture bar instead of the app. Fixed:
+   `_navigate_apn_menu()` now scrolls down once before tapping the final
+   step, same defensive pattern already used for MCC/MNC's
+   below-the-fold rows (`_fill_labeled_field()`). Applies to every model
+   using `reach_via_wifi_settings_intent`, not just SHG07/SHG10.
+
+New tests: `test_configure_apn_scrolls_before_tapping_the_final_sim_
+scoped_step`, `test_configure_apn_reach_via_wifi_settings_rejects_non_
+text_final_step` (`tests/test_apn_setup.py`); `test_access_point_names_
+row_is_real_and_tappable`, `test_mobile_network_screen_has_a_navigation_
+bar_occupying_the_bottom`, plus the same screen-title/generic-id tests
+already established for SHG07 (`tests/test_real_sog08_fixtures.py`).
+
+**Not yet re-confirmed end-to-end on real hardware for ANY of the four
+models with this fix in place** — the next real test needs to show
+navigation reaching the real SIM-scoped screen, the final tap actually
+landing, AND a saved entry actually appearing there afterward, on all
+four devices. See PENDING_REAL_DEVICE_DATA.md.
 
 ---
 

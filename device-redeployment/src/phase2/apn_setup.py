@@ -583,8 +583,36 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
         menu_path = apn.get("menu_path")
         if not menu_path:
             return False
-        if not navigate_menu_path(client, menu_path):
+        if len(menu_path) > 1 and not navigate_menu_path(client, menu_path[:-1]):
             return False
+
+        # Real finding (2026-09-18): the final step's target
+        # ("アクセス ポイント名") sits right at the very bottom edge of
+        # this screen on every real device checked so far — its captured
+        # bounds' bottom edge lands exactly on the screen's own content
+        # boundary (SHG07; SOG08's dump explicitly shows a
+        # navigationBarBackground node starting exactly where the row
+        # ends). A tap landing this close to a system navigation/gesture
+        # bar risks being swallowed by it instead of the app. Scroll down
+        # once first so the row settles comfortably clear of the edge —
+        # same defensive pattern already used for MCC/MNC's
+        # below-the-fold rows (_fill_labeled_field()).
+        last_step = menu_path[-1]
+        step_type = last_step.get("type", "text") if isinstance(last_step, dict) else "text"
+        step_value = last_step["value"] if isinstance(last_step, dict) else last_step
+        if step_type != "text":
+            raise ValueError(
+                "reach_via_wifi_settings_intent's menu_path must end with "
+                f"a {{'type': 'text', ...}} step, got {step_type!r}"
+            )
+        scroll_down(client)
+        if not tap_by_text(client, step_value):
+            logger.error(
+                "apn: could not find/tap the final SIM-scoped menu_path "
+                "step (%r) even after scrolling", step_value,
+            )
+            return False
+
         ui_xml = dump_ui(client)
         if _looks_like_apn_list_screen(ui_xml):
             logger.info("reached APN list via the SIM-scoped menu_path")

@@ -28,6 +28,7 @@ APN_ENTRY_TOP_XML = (FIXTURES_DIR / "apn_entry_top_SOG08.xml").read_text(encodin
 APN_ENTRY_MIDDLE_XML = (FIXTURES_DIR / "apn_entry_middle_SOG08.xml").read_text(encoding="utf-8")
 APN_ENTRY_BOTTOM_XML = (FIXTURES_DIR / "apn_entry_bottom_SOG08.xml").read_text(encoding="utf-8")
 APN_OVERFLOW_MENU_XML = (FIXTURES_DIR / "apn_overflow_menu_SOG08.xml").read_text(encoding="utf-8")
+MOBILE_NETWORK_XML = (FIXTURES_DIR / "mobile_network_SOG08.xml").read_text(encoding="utf-8")
 
 
 def test_wifi_row_title_is_ambiguous_without_disambiguator():
@@ -99,3 +100,40 @@ def test_apn_overflow_menu_save_and_cancel_share_generic_title_id():
         find_resource_id(APN_OVERFLOW_MENU_XML, "android:id/title", text="キャンセル")
         is not None
     )
+
+
+# --- Mobile network (carrier-specific) settings screen, 2026-09-18 ---------
+# Real finding: android.settings.APN_SETTINGS reaches a non-authoritative
+# APN context (first found on SHG07) — the real, live one is reached by
+# navigating to THIS screen and tapping its "アクセス ポイント名" row. See
+# apn_setup.py's _navigate_apn_menu() docstring for the full account.
+
+
+def test_mobile_network_screen_title_is_the_carrier_name():
+    """Same real pattern as SHG07: the collapsing_toolbar's content-desc
+    is the SIM's carrier name ("Rakuten"), confirming this is the
+    per-SIM settings screen."""
+    assert find_by_content_desc(MOBILE_NETWORK_XML, "Rakuten") is not None
+
+
+def test_mobile_network_row_titles_share_generic_id():
+    with pytest.raises(AmbiguousResourceIdError):
+        find_resource_id(MOBILE_NETWORK_XML, "android:id/title")
+
+
+def test_access_point_names_row_is_real_and_tappable():
+    """Confirms the critical finding independently on SOG08's own real
+    hardware (not just inherited from SHG07): "アクセス ポイント名"
+    (WITH a space) is a genuine android:id/title row here too — same
+    byte-identical pattern as SHG07's, across manufacturers."""
+    coords = find_resource_id(MOBILE_NETWORK_XML, "android:id/title", text="アクセス ポイント名")
+    assert coords is not None
+
+
+def test_mobile_network_screen_has_a_navigation_bar_occupying_the_bottom():
+    """Real, concrete evidence for why _navigate_apn_menu() scrolls down
+    before tapping this row: android:id/navigationBarBackground starts
+    at y=1406, exactly where the content area (and this row's own
+    bounds) ends — a tap right at the row's bottom edge risks landing on
+    the system nav bar instead of the app."""
+    assert 'resource-id="android:id/navigationBarBackground"' in MOBILE_NETWORK_XML

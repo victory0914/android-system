@@ -958,6 +958,57 @@ def test_configure_apn_wifi_settings_nav_fails_loudly_if_intent_errors():
     assert not any(c.startswith("input tap") for c in client.shell_calls)
 
 
+def test_configure_apn_scrolls_before_tapping_the_final_sim_scoped_step():
+    """Real finding (2026-09-18): "アクセス ポイント名" sits right at the
+    very bottom edge of the carrier-settings screen on every real device
+    checked so far, risking a tap swallowed by the system
+    navigation/gesture bar. Must scroll down once before tapping it, same
+    defensive pattern as MCC/MNC's below-the-fold field rows."""
+    client = FakeAdbClient(ui_dumps=[WIFI_SETTINGS_NAV_SCREEN_XML] * 30)
+
+    configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
+
+    gear_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    final_tap = "input tap {} {}".format((0 + 100) // 2, (100 + 200) // 2)
+    swipe = next((c for c in client.shell_calls if c.startswith("input swipe")), None)
+    assert swipe is not None
+    # Order matters: gear icon, THEN scroll, THEN the final tap — not
+    # scrolling before the gear icon (which hasn't been reached yet) or
+    # after the final tap (too late to help).
+    assert (
+        client.shell_calls.index(gear_tap)
+        < client.shell_calls.index(swipe)
+        < client.shell_calls.index(final_tap)
+    )
+
+
+def test_configure_apn_reach_via_wifi_settings_rejects_non_text_final_step():
+    """reach_via_wifi_settings_intent's menu_path must end with a
+    {'type': 'text', ...} step — anything else is a real config mistake
+    that should fail loudly at the point of use, not silently misbehave."""
+    bad_profile = ModelProfile(
+        {
+            "model": "Bad Test",
+            "model_number": "TST13",
+            "manufacturer": "Test",
+            "android_version": 13,
+            "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+            "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+            "apn_settings": {
+                **LABELED_PROFILE.apn_settings(),
+                "reach_via_wifi_settings_intent": True,
+                "menu_path": [
+                    {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
+                    {"type": "resource_id", "value": "not.a.text.step"},
+                ],
+            },
+        }
+    )
+    client = FakeAdbClient(ui_dumps=[WIFI_SETTINGS_NAV_SCREEN_XML] * 30)
+    with pytest.raises(ValueError):
+        configure_apn(client, bad_profile, "rakuten.jp", "440", "11")
+
+
 def test_configure_apn_labeled_shape_missing_mcc_label_fails_cleanly():
     """MCC/MNC are mandatory for the labeled shape (confirmed on real
     hardware, 2026-09-08) — a profile missing mcc_field_label must fail

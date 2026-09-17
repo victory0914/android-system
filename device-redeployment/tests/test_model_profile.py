@@ -260,6 +260,16 @@ def test_load_sog07_model_file_real_apn_and_wifi_data():
     # coordinate above, a live run kept failing MCC — the toggle only
     # actually worked for input_text_direct(), not per-digit keyevents.
     assert apn["use_text_entry_for_numeric"] is True
+    # RESOLVED, 2026-09-18: android.settings.APN_SETTINGS reaches a
+    # non-authoritative APN context — see apn_setup.py's
+    # _navigate_apn_menu() docstring. NOT independently confirmed on
+    # THIS unit; inherited from SOG08's own real confirmation, same
+    # manufacturer/lineup.
+    assert apn["reach_via_wifi_settings_intent"] is True
+    assert apn["menu_path"] == [
+        {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
+        {"type": "text", "value": "アクセス ポイント名"},
+    ]
 
 
 def test_load_sog08_model_file_real_apn_and_wifi_data():
@@ -294,6 +304,16 @@ def test_load_sog08_model_file_real_apn_and_wifi_data():
     # RESOLVED (real, 2026-09-17): same symptom, same fix, this device's
     # own confirmed coordinate.
     assert apn["keyboard_mode_toggle_tap"] == [73, 1352]
+    # RESOLVED — real, directly confirmed ON SOG08 ITSELF (2026-09-18, a
+    # real dump of its own carrier mobile-network-settings screen,
+    # mobile_network_SOG08.xml): android.settings.APN_SETTINGS reaches a
+    # non-authoritative APN context; see apn_setup.py's
+    # _navigate_apn_menu() docstring.
+    assert apn["reach_via_wifi_settings_intent"] is True
+    assert apn["menu_path"] == [
+        {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
+        {"type": "text", "value": "アクセス ポイント名"},
+    ]
 
 
 def test_load_all_keys_by_model_number():

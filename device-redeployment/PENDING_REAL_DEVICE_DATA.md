@@ -87,16 +87,29 @@ routes navigation through `android.settings.WIFI_SETTINGS` + the real
 gear-icon + "アクセス ポイント名" taps instead of the old intent. See
 docs/record.md's new SHG07 subsection for the full account.
 
-**⚠️ SOG07/SOG08 are NOT fixed and may have the identical problem** —
-their equivalent carrier-settings screen has never been captured, so
-they still use the original (now-suspect) `android.settings.APN_SETTINGS`
-path unchanged. Needs its own real dump (Settings > Network & internet >
-SIM > carrier name screen, before AND after tapping whatever the
-equivalent of "アクセス ポイント名" is on Sony's build) before applying
-the same fix there. **Not yet re-confirmed on real hardware for
-SHG07/SHG10 either** — the next real test needs to confirm both that
-navigation reaches the real screen AND that a saved entry actually shows
-up there.
+**🎉 Update, same day: SOG07/SOG08 fixed too.** Client supplied a real
+dump of SOG08's own carrier-settings screen (`mobile_network_SOG08.xml`)
+confirming the identical byte-for-byte pattern as SHG07's — "アクセス
+ポイント名" (with a space) is real and tappable there too.
+`reach_via_wifi_settings_intent` now set on all 4 models
+(`sony_xperia_ace3.yaml` directly confirmed; `sony_xperia_10iv.yaml`
+inherited from SOG08's confirmation, same basis as every other
+SOG07↔SOG08 shared value).
+
+**🎉 Update, same day: fixed why the final tap wasn't landing even on
+SHG07/SHG10.** Client reported "not possible to click on アクセス
+ポイント名" even where navigation otherwise reached the right screen.
+Root cause, confirmed by the SOG08 dump: this row sits right at the very
+bottom screen edge — `android:id/navigationBarBackground` starts at the
+EXACT y-coordinate where the row's own bounds end, so a tap at its
+center risks being consumed by the system nav bar instead of the app.
+Fixed: `_navigate_apn_menu()` now scrolls down once before tapping this
+final step, for every model using `reach_via_wifi_settings_intent`.
+
+**Not yet re-confirmed on real hardware for ANY of the four models with
+this fix in place** — the next real test needs to confirm navigation
+reaches the real screen, the final tap actually lands, AND a saved entry
+actually shows up there, on all four devices.
 
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:

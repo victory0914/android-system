@@ -97,25 +97,32 @@ wifi_settings:
 # this is "three independently-dumped real devices, byte-identical
 # structure, direct confirmation."
 apn_settings:
-  # PRIMARY navigation: android.settings.APN_SETTINGS intent (hardcoded in
-  # apn_setup.py, not driven by this file) — standard Android behavior,
-  # not OEM-specific, already proven on SHG10/SHG07.
-  #
-  # FALLBACK menu_path (only used if the intent fails or doesn't land
-  # correctly). Real, confirmed final step: the gear icon
-  # (com.android.settings:id/settings_button, same resource-id as SHG10).
-  # Intermediate steps NOT independently confirmed for this unit (these
-  # dumps only show the already-landed screens, not the navigation
-  # through Settings' own menus to reach them) — informed by SHG10's real
-  # path, adjusted for this device's own confirmed "インターネット" screen
-  # title from wifi_settings above.
+  # SUPERSEDED (real, 2026-09-18 — see apn_setup.py's _navigate_apn_menu()
+  # docstring for the full account, and SHG07's identical note in
+  # sharp_aquos_sense6s.yaml): android.settings.APN_SETTINGS reaches a
+  # screen that looks like an APN editor but isn't the active SIM's real,
+  # live context — confirmed on SHG07 (saves made there never appeared on
+  # the APN list reached by manually navigating Settings > Network &
+  # internet > SIM > (carrier) > "アクセス ポイント名"). NOT independently
+  # confirmed on THIS unit's own hardware — inherited from SOG08's own
+  # real confirmation (tests/fixtures/Xperia Ace III（SOG08）/
+  # mobile_network_SOG08.xml, 2026-09-18), same manufacturer/lineup, same
+  # byte-identical structural pattern already established across every
+  # other screen checked for these two Sony models.
+  reach_via_wifi_settings_intent: true
+  # menu_path now holds ONLY the steps needed AFTER
+  # android.settings.WIFI_SETTINGS reaches "インターネット" (this
+  # device's real, confirmed combined Wi-Fi/mobile-network screen title —
+  # reach_via_wifi_settings_intent above skips the 設定/インターネット
+  # text-tap steps that used to manually re-derive that same screen). The
+  # gear icon step was already real/confirmed; the final
+  # "アクセス ポイント名" tap (WITH a space) is the new step, confirmed
+  # real via the SOG08 dump referenced above.
   menu_path:
-    - type: text
-      value: "設定"
-    - type: text
-      value: "インターネット"
     - type: resource_id
       value: "com.android.settings:id/settings_button"
+    - type: text
+      value: "アクセス ポイント名"
 
   # RESOLVED (real). Every field row shares this one generic id,
   # disambiguated only by visible Japanese label — same pattern as SHG10.

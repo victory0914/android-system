@@ -80,22 +80,29 @@ wifi_settings:
 # the plain, unskinned AOSP APN editor, confirmed now across 3 real
 # devices and 2 manufacturers.
 apn_settings:
-  # PRIMARY navigation: android.settings.APN_SETTINGS intent (hardcoded in
-  # apn_setup.py) — standard Android behavior, already proven on
-  # SHG10/SHG07.
-  #
-  # FALLBACK menu_path (only used if the intent fails or doesn't land
-  # correctly). Real, confirmed final step: the gear icon
-  # (com.android.settings:id/settings_button, same resource-id as
-  # SOG07/SHG10). Intermediate steps not independently confirmed for this
-  # unit — informed by SOG07/SHG10's real paths.
+  # SUPERSEDED (real, 2026-09-18 — see apn_setup.py's _navigate_apn_menu()
+  # docstring for the full account): android.settings.APN_SETTINGS
+  # reaches a screen that looks like an APN editor but isn't the active
+  # SIM's real, live context — first confirmed on SHG07, then directly
+  # confirmed on THIS device too via a real dump of its own
+  # carrier-specific mobile-network-settings screen,
+  # tests/fixtures/Xperia Ace III（SOG08）/mobile_network_SOG08.xml
+  # (2026-09-18): "アクセス ポイント名" (WITH a space) is a genuinely
+  # real, tappable android:id/title row there, same pattern as SHG07's.
+  reach_via_wifi_settings_intent: true
+  # menu_path now holds ONLY the steps needed AFTER
+  # android.settings.WIFI_SETTINGS reaches "インターネット" (this
+  # device's real, confirmed combined Wi-Fi/mobile-network screen title —
+  # reach_via_wifi_settings_intent above skips the 設定/インターネット
+  # text-tap steps that used to manually re-derive that same screen). The
+  # gear icon step was already real/confirmed; the final
+  # "アクセス ポイント名" tap is the new step, real and confirmed via the
+  # dump referenced above.
   menu_path:
-    - type: text
-      value: "設定"
-    - type: text
-      value: "インターネット"
     - type: resource_id
       value: "com.android.settings:id/settings_button"
+    - type: text
+      value: "アクセス ポイント名"
 
   # RESOLVED (real). Every field row shares this one generic id,
   # disambiguated only by visible Japanese label.
