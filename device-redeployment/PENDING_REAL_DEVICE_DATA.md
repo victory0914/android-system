@@ -153,6 +153,21 @@ models persisting toggle state across fields. **Still not yet run to full
 end-to-end completion on real hardware with this in place** — the next
 real-hardware milestone.
 
+**Sixth finding, same day: efficiency feedback.** The client asked
+whether retyping the whole MCC/MNC value on every toggle-correction
+attempt could be avoided by detecting the keyboard's current mode
+directly instead. Re-confirmed it can't (invisible to `uiautomator dump`;
+`get_current_ime()` only reports the IME package, not this Gboard-internal
+UI state) — so instead, numeric fields now probe with only the value's
+own FIRST DIGIT (digits commit immediately, no romaji composing delay to
+worry about), and only type the rest once that's confirmed correct.
+Deliberately not applied to 名前/APN (romaji composing makes a
+single-letter probe unreliable there, and neither field has needed a
+retry in any real run so far). This also surfaced and fixed a real bug in
+the TEST DOUBLES (not production code): both fake clients modeled
+`input text` as replacing the field instead of appending, which broke
+once a field could legitimately be typed into twice (probe, then rest).
+
 ## Highest priority
 
 ### 🎉 SHG07 text entry: real fix found, confirmed end-to-end (2026-09-15)

@@ -131,6 +131,36 @@ _KEYBOARD_TOGGLE_TAP_DELAY_SECONDS = 0.5
 _KEYBOARD_TOGGLE_MAX_ATTEMPTS = 4
 
 
+def _cleanup_mismatched_field_dialog(client: AdbClientProtocol, apn: dict, label: str) -> None:
+    """Best-effort: tap Cancel, then the toolbar's navigate-up icon, to
+    back out of a field dialog cleanly after a hard field-fill failure —
+    real, two-part finding (2026-09-15, SHG07; see docs/record.md).
+    Cancelling the dialog alone isn't enough: it leaves the device sitting
+    on the "アクセスポイントの編集" edit *form* for the in-progress new
+    entry (never saved, never discarded), not back on the APN *list* —
+    the next run's android.settings.APN_SETTINGS intent then lands on
+    that leftover form instead of the list, failing navigation on every
+    attempt. Both steps are best-effort and only ever logged on failure,
+    never raised — this must not mask whatever real error triggered the
+    cleanup in the first place."""
+    cancel_button = apn.get("dialog_cancel_button_resource_id")
+    if cancel_button and not tap_resource_id(client, cancel_button):
+        logger.warning(
+            "apn field %r: also could not tap the cancel button %r to "
+            "back out of the mismatched dialog — the device may be left "
+            "showing it; check before the next run.",
+            label, cancel_button,
+        )
+    navigate_up_content_desc = apn.get("navigate_up_content_desc")
+    if navigate_up_content_desc and not tap_by_content_desc(client, navigate_up_content_desc):
+        logger.warning(
+            "apn field %r: also could not tap the navigate-up icon "
+            "(content-desc %r) to exit the abandoned new-entry form — "
+            "the device may be left showing it; check before the next run.",
+            label, navigate_up_content_desc,
+        )
+
+
 def _fill_legacy_field(client: AdbClientProtocol, resource_id: str, value: str) -> bool:
     """Stage A shape: the field itself has a dedicated resource-id — tap it
     to focus, then inject text. Returns False if the field wasn't found."""
@@ -213,6 +243,18 @@ def _fill_labeled_field(
     keypad, not input_digits_direct()'s per-keyevent one. Device-specific
     like every other text-entry flag here; SHG10/SHG07 keep the original
     keyevent mechanism, which is proven working for them.
+
+    For numeric_only fields specifically, when a toggle coordinate AND
+    edit_field are both configured, only the value's own FIRST digit is
+    used to probe the toggle's self-correction loop — not the whole
+    value — and the rest is typed once, for real, only after that probe
+    is confirmed correct (client feedback, 2026-09-17: retyping the whole
+    value on every correction attempt was needlessly slow). Digits commit
+    immediately per keystroke, with no multi-key romaji composing delay
+    the way letters can have, so a single digit reliably reveals the
+    current mode — this optimization is deliberately NOT applied to
+    non-numeric fields for that reason (and 名前/APN have not needed a
+    second attempt in any real run so far anyway).
     """
     row_resource_id = apn["field_row_resource_id"]
     if not tap_resource_id(client, row_resource_id, text=label):
@@ -263,136 +305,162 @@ def _fill_labeled_field(
     else:
         toggle_coords = apn.get("keyboard_mode_toggle_tap")
 
-    def _type_value() -> bool:
-        if numeric_only:
-            # `apn_settings.use_text_entry_for_numeric` (SOG07,
-            # 2026-09-17): even with the correct toggle coordinate, a
-            # live run kept committing full-width digits — the toggle
-            # only actually took effect for input_text_direct()'s
-            # mechanism on this keypad, not input_digits_direct()'s
-            # per-keyevent one. Mirror image of SHG10's original finding
-            # (there, `input text` was the broken mechanism and keyevents
-            # were the fix) — device-specific either way, so opt-in.
-            if apn.get("use_text_entry_for_numeric"):
-                return input_text_direct(client, value)
-            return input_digits_direct(client, value)
-        if apn.get("use_keyevent_text_entry"):
-            # Real-device finding (client report, 2026-09-14, SHG07):
-            # unlike SHG10, where input_text_direct() works fine for
-            # 名前/APN, on this model the active Japanese IME affects
-            # plain alphanumeric `input text` entry too — not just
-            # digits. Per-character keyevents route around it the same
-            # way numeric_only already does. See input_ascii_direct()'s
-            # docstring for why this doesn't instead try to
-            # detect-and-switch the device's IME.
-            return input_ascii_direct(client, value)
-        return input_text_direct(client, value)
+    def _type_fn(text: str):
+        """Returns a zero-arg callable that types `text` via whatever
+        mechanism this model/field wants — a closure factory rather than
+        one fixed function, since the probe-based numeric path below
+        needs to type first a single probe character, then (separately)
+        the rest of the value, through the same mechanism."""
+        def _do() -> bool:
+            if numeric_only:
+                # `apn_settings.use_text_entry_for_numeric` (SOG07,
+                # 2026-09-17): even with the correct toggle coordinate, a
+                # live run kept committing full-width digits — the toggle
+                # only actually took effect for input_text_direct()'s
+                # mechanism on this keypad, not input_digits_direct()'s
+                # per-keyevent one. Mirror image of SHG10's original
+                # finding (there, `input text` was the broken mechanism
+                # and keyevents were the fix) — device-specific either
+                # way, so opt-in.
+                if apn.get("use_text_entry_for_numeric"):
+                    return input_text_direct(client, text)
+                return input_digits_direct(client, text)
+            if apn.get("use_keyevent_text_entry"):
+                # Real-device finding (client report, 2026-09-14, SHG07):
+                # unlike SHG10, where input_text_direct() works fine for
+                # 名前/APN, on this model the active Japanese IME affects
+                # plain alphanumeric `input text` entry too — not just
+                # digits. Per-character keyevents route around it the
+                # same way numeric_only already does. See
+                # input_ascii_direct()'s docstring for why this doesn't
+                # instead try to detect-and-switch the device's IME.
+                return input_ascii_direct(client, text)
+            return input_text_direct(client, text)
+        return _do
 
-    # Real root cause identified by the client (2026-09-17, SOG07): the
-    # toggle key's mode does NOT reset for each new field's dialog — it
-    # carries over from wherever the PREVIOUS field's typing left it. A
-    # single fixed "tap exactly twice" only works for the first field
-    # opened in a fresh dialog session; every field after that can start
-    # from an unpredictable carried-over state. See
-    # _KEYBOARD_TOGGLE_MAX_ATTEMPTS's module-level comment for the full
-    # reasoning and why this probes empirically (type + read back +
-    # correct) rather than trying to track the toggle's actual state.
-    actual = None
-    max_attempts = _KEYBOARD_TOGGLE_MAX_ATTEMPTS if toggle_coords else 1
-    for attempt in range(max_attempts):
-        if toggle_coords:
-            time.sleep(_KEYBOARD_TOGGLE_TAP_DELAY_SECONDS)
-            x, y = toggle_coords
-            if attempt == 0:
-                # The proven SHG07 starting recipe: a fresh dialog starts
-                # in kana mode and needs exactly two taps to reach the
-                # usable alphanumeric/half-width mode.
-                tap_at_coordinates(client, x, y)
-                tap_at_coordinates(client, x, y)
-            else:
-                # A previous attempt's wrong value is still sitting in
-                # the field — clear it (one backspace per character; the
-                # field's own committed length, not len(value), since a
-                # full-width mismatch isn't necessarily the same length)
-                # before retyping, then advance the toggle by one more
-                # single step and try again.
-                if actual:
-                    for _ in range(len(actual)):
-                        client.shell("input keyevent KEYCODE_DEL")
-                tap_at_coordinates(client, x, y)
+    def _toggle_and_type_with_retry(type_fn, expected: str) -> tuple[bool | None, str | None]:
+        """Real root cause identified by the client (2026-09-17, SOG07):
+        the toggle key's mode does NOT reset for each new field's
+        dialog — it carries over from wherever the PREVIOUS field's
+        typing left it. A single fixed "tap exactly twice" only works for
+        the first field opened in a fresh dialog session; every field
+        after that can start from an unpredictable carried-over state.
+        See _KEYBOARD_TOGGLE_MAX_ATTEMPTS's module-level comment for the
+        full reasoning and why this probes empirically (type + read back
+        + correct) rather than trying to track the toggle's actual
+        state.
 
-        if not _type_value():
-            return False
+        Calls type_fn(), reads the field back, and — if it doesn't match
+        `expected` — clears it and advances the toggle by one more single
+        tap before retrying, up to _KEYBOARD_TOGGLE_MAX_ATTEMPTS total
+        attempts. Returns (True, actual) on a confirmed match,
+        (False, actual) if the attempt budget is exhausted without one,
+        or (None, None) if type_fn() itself reported a hard failure
+        (caller should propagate that as an immediate False, no cleanup
+        needed since nothing was typed).
+        """
+        actual = None
+        max_attempts = _KEYBOARD_TOGGLE_MAX_ATTEMPTS if toggle_coords else 1
+        for attempt in range(max_attempts):
+            if toggle_coords:
+                time.sleep(_KEYBOARD_TOGGLE_TAP_DELAY_SECONDS)
+                x, y = toggle_coords
+                if attempt == 0:
+                    # The proven SHG07 starting recipe: a fresh dialog
+                    # starts in kana mode and needs exactly two taps to
+                    # reach the usable alphanumeric/half-width mode.
+                    tap_at_coordinates(client, x, y)
+                    tap_at_coordinates(client, x, y)
+                else:
+                    # A previous attempt's wrong value is still sitting
+                    # in the field — clear it (one backspace per
+                    # character; the field's own committed length, not
+                    # len(expected), since a full-width mismatch isn't
+                    # necessarily the same length) before retyping, then
+                    # advance the toggle by one more single step and try
+                    # again.
+                    if actual:
+                        for _ in range(len(actual)):
+                            client.shell("input keyevent KEYCODE_DEL")
+                    tap_at_coordinates(client, x, y)
 
-        if not edit_field:
-            # Nothing to read back from — trust it, same as before this
-            # retry loop existed (only legacy/unconfirmed-dialog models
-            # reach this).
-            break
+            if not type_fn():
+                return None, None
 
-        # Read back what actually landed in the field BEFORE confirming —
-        # real, concrete proof this matters (client screenshot,
-        # 2026-09-15, SHG07): the active IME silently transformed
-        # keyevent-typed "rakuten.jp" into "らくてん。" — the field-row
-        # tap, the edit-field tap, the typing call, and the confirm-button
-        # tap would all "succeed" with no error, so nothing before this
-        # point could have caught it.
-        ui_xml = dump_ui(client)
-        actual = get_node_text(ui_xml, edit_field)
-        if actual == value:
-            break
-    else:
+            if not edit_field:
+                # Nothing to read back from — trust it, same as before
+                # this retry loop existed (only legacy/unconfirmed-dialog
+                # models reach this).
+                return True, None
+
+            # Read back what actually landed in the field BEFORE
+            # confirming — real, concrete proof this matters (client
+            # screenshot, 2026-09-15, SHG07): the active IME silently
+            # transformed keyevent-typed "rakuten.jp" into "らくてん。" —
+            # the field-row tap, the edit-field tap, the typing call, and
+            # the confirm-button tap would all "succeed" with no error,
+            # so nothing before this point could have caught it.
+            ui_xml = dump_ui(client)
+            actual = get_node_text(ui_xml, edit_field)
+            if actual == expected:
+                return True, actual
+        return False, actual
+
+    def _fail_mismatch(typed: str, actual: str | None, attempts: int) -> None:
         logger.error(
             "apn field %r: typed %r but the field now reads %r after %d "
             "toggle attempt(s) — the active input method appears to have "
             "transformed it every time (see docs/record.md, 2026-09-17). "
             "Refusing to confirm/save a value that doesn't match what was "
             "actually intended.",
-            label, value, actual, max_attempts,
+            label, typed, actual, attempts,
         )
         # Real finding (2026-09-15): simply returning False here left this
-        # dialog open on the device — the *next* run then found
-        # android.settings.APN_SETTINGS "didn't land on a recognizable APN
-        # list screen" on every attempt (including its very first, before
-        # any retry), because the stuck dialog from the PREVIOUS run's
-        # failure was still covering the screen. A hard failure must not
-        # also leave the device in a worse state for whatever runs next —
-        # tap Cancel (best-effort: this must never mask the real error
-        # above, so its own failure is only logged, not raised) to back
-        # out of the dialog cleanly before returning.
-        cancel_button = apn.get("dialog_cancel_button_resource_id")
-        if cancel_button and not tap_resource_id(client, cancel_button):
-            logger.warning(
-                "apn field %r: also could not tap the cancel button "
-                "%r to back out of the mismatched dialog — the device "
-                "may be left showing it; check before the next run.",
-                label, cancel_button,
-            )
-        # Second real finding, same day: cancelling the *field* dialog
-        # alone wasn't enough either — it leaves the device sitting on
-        # the "アクセスポイントの編集" edit *form* for the in-progress
-        # new entry (never saved, never discarded), not back on the APN
-        # *list*. The next run's android.settings.APN_SETTINGS intent
-        # then landed on that leftover edit form instead of the list,
-        # failing navigation again on every attempt. Also tap the
-        # toolbar's "上へ移動" (navigate up) icon — real, confirmed
-        # content-desc (tests/fixtures/apn_restricted_SHG10.xml), the
-        # standard AOSP back-arrow, present on both the list and edit
-        # form screens — to fully exit the abandoned new entry. Also
-        # best-effort: this is a second layer of the same cleanup
-        # principle, never allowed to mask the real error above.
-        navigate_up_content_desc = apn.get("navigate_up_content_desc")
-        if navigate_up_content_desc and not tap_by_content_desc(
-            client, navigate_up_content_desc
-        ):
-            logger.warning(
-                "apn field %r: also could not tap the navigate-up icon "
-                "(content-desc %r) to exit the abandoned new-entry "
-                "form — the device may be left showing it; check "
-                "before the next run.",
-                label, navigate_up_content_desc,
-            )
-        return False
+        # dialog open on the device — see _cleanup_mismatched_field_dialog()'s
+        # docstring for why both a Cancel tap and a navigate-up tap are
+        # needed to avoid breaking the *next* run's navigation too.
+        _cleanup_mismatched_field_dialog(client, apn, label)
+
+    if numeric_only and toggle_coords and edit_field:
+        # Efficiency improvement (client feedback, 2026-09-17): retyping
+        # the ENTIRE value on every toggle-correction attempt is wasted
+        # work — MCC/MNC only need ONE character probed to tell whether
+        # the current mode is right or wrong, since digits (unlike romaji
+        # letters) commit immediately per keystroke with no multi-key
+        # composing delay to worry about. Probe with just the value's own
+        # first digit; only once that's confirmed correct is the
+        # (much cheaper, now guaranteed-safe) rest of the value typed —
+        # for real, exactly once, never retried. Deliberately NOT applied
+        # to non-numeric fields: letters typed via romaji CAN have a
+        # multi-keystroke composing delay before anything commits, so a
+        # single-character probe wouldn't reliably reveal the mode there
+        # the way it does for plain digits — and 名前/APN have not needed
+        # a second attempt in any real run so far anyway.
+        probe, rest = value[0], value[1:]
+        matched, actual = _toggle_and_type_with_retry(_type_fn(probe), probe)
+        if matched is None:
+            return False
+        if not matched:
+            _fail_mismatch(probe, actual, _KEYBOARD_TOGGLE_MAX_ATTEMPTS)
+            return False
+        if rest and not _type_fn(rest)():
+            return False
+        if edit_field:
+            ui_xml = dump_ui(client)
+            actual = get_node_text(ui_xml, edit_field)
+            if actual != value:
+                # Unexpected: the probe confirmed the mode was correct,
+                # but the full value still doesn't match. Something else
+                # is wrong — fail loudly rather than guess why.
+                _fail_mismatch(value, actual, 1)
+                return False
+    else:
+        matched, actual = _toggle_and_type_with_retry(_type_fn(value), value)
+        if matched is None:
+            return False
+        if not matched:
+            _fail_mismatch(value, actual, _KEYBOARD_TOGGLE_MAX_ATTEMPTS if toggle_coords else 1)
+            return False
 
     confirm_button = apn.get("dialog_confirm_button_resource_id")
     if confirm_button and not tap_resource_id(client, confirm_button):

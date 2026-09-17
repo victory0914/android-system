@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from src.device.model_profile import ModelProfile
-from src.phase2.apn_setup import configure_apn
+from src.phase2.apn_setup import _fill_labeled_field, configure_apn
 from tests.fakes import FakeAdbClient
 
 
@@ -54,6 +54,14 @@ class _EchoingEditFieldMixin:
     session starting) — every profile fixture in this file uses
     "android:id/edit" for dialog_edit_field_resource_id, so that's hardcoded
     here rather than threaded through every call site.
+
+    `input text` APPENDS at the current cursor position (it synthesizes
+    real keystrokes — a real device never clears the field first), so two
+    separate `input text` calls for the same field must accumulate, not
+    replace each other. This matters since 2026-09-17's probe-then-rest
+    optimization for numeric fields calls it twice per field (a
+    single-character probe, then the rest of the value) when
+    use_text_entry_for_numeric is set.
     """
 
     _EDIT_FIELD_RESOURCE_ID = "android:id/edit"
@@ -64,7 +72,7 @@ class _EchoingEditFieldMixin:
         if command.startswith("input tap"):
             self._typed = ""
         elif command.startswith('input text "'):
-            self._typed = command[len('input text "') : -1]
+            self._typed += command[len('input text "') : -1]
         elif command.startswith("input keyevent "):
             keycode = command[len("input keyevent ") :]
             self._typed += _KEYEVENT_TO_CHAR.get(keycode, "")
@@ -126,8 +134,10 @@ class _CyclingKeyboardModeClient(FakeAdbClient):
             # survives across these.
             self._typed = ""
         elif command.startswith('input text "'):
+            # Appends, same real-device reasoning as
+            # _EchoingEditFieldMixin's docstring above.
             value = command[len('input text "') : -1]
-            self._typed = value if self._mode == self._CORRECT_MODE else "ガーブル"
+            self._typed += value if self._mode == self._CORRECT_MODE else "ガーブル"
         elif command == "input keyevent KEYCODE_DEL":
             self._typed = self._typed[:-1]
         elif command.startswith("input keyevent "):
@@ -463,7 +473,12 @@ def test_configure_apn_self_corrects_when_toggle_state_carries_over_between_fiel
     fixed-two-taps code did. (KEYBOARD_TOGGLE_PROFILE has no save-flow
     config, same as its other tests in this file — configure_apn() still
     returns False overall at the save step, which is expected and not
-    what this test is checking.)"""
+    what this test is checking.)
+
+    Mode transitions depend only on toggle TAPS, not on what's typed, so
+    MCC/MNC's 2026-09-17 single-digit-probe optimization (see the
+    dedicated test below) doesn't change how many attempts/taps any field
+    needs here — only how much gets typed and cleared on a wrong one."""
     client = _CyclingKeyboardModeClient(
         ui_dumps=[LABELED_SCREEN_XML] * 40,
         toggle_coords=(106, 2239),
@@ -478,12 +493,13 @@ def test_configure_apn_self_corrects_when_toggle_state_carries_over_between_fiel
     # each (one single-tap correction apiece) = 3 each. 2 + 3*3 = 11.
     assert client.shell_calls.count(toggle_tap) == 11
     # One corrective clear for each of the 3 fields that needed
-    # correcting: APN (non-numeric, `input text` path) commits the fixed
-    # 4-character "ガーブル" placeholder when wrong; MCC/MNC (numeric,
-    # per-digit keyevent path, no use_text_entry_for_numeric on this
-    # profile) commit one "ガ" per digit typed instead — 3 for "440", 2
-    # for "11". 4 + 3 + 2 = 9.
-    assert client.shell_calls.count("input keyevent KEYCODE_DEL") == 9
+    # correcting: APN (non-numeric, no probe optimization — the full
+    # value is retyped and cleared) commits the fixed 4-character
+    # "ガーブル" placeholder when wrong = 4 DELs. MCC/MNC (numeric, probe
+    # optimization: only the value's first digit is typed/cleared on a
+    # wrong attempt, not the whole value) each commit one "ガ" for their
+    # single-digit probe = 1 DEL apiece. 4 + 1 + 1 = 6.
+    assert client.shell_calls.count("input keyevent KEYCODE_DEL") == 6
 
 
 def test_configure_apn_gives_up_after_max_toggle_attempts():
@@ -502,6 +518,35 @@ def test_configure_apn_gives_up_after_max_toggle_attempts():
     )
     result = configure_apn(client, KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
     assert result is False
+
+
+def test_fill_labeled_field_numeric_probe_only_retypes_first_digit_on_wrong_attempt():
+    """Efficiency fix (client feedback, 2026-09-17): retyping the WHOLE
+    MCC/MNC value on every toggle-correction attempt was needlessly slow.
+    Digits commit immediately per keystroke — no multi-key romaji
+    composing delay the way letters can have — so only the value's own
+    first digit needs probing to reveal the current mode; the rest is
+    typed once, for real, only after that's confirmed correct."""
+    client = _CyclingKeyboardModeClient(
+        ui_dumps=[LABELED_SCREEN_XML] * 20,
+        toggle_coords=(106, 2239),
+        cycle_length=3,
+        starting_mode=0,  # attempt 0's 2 taps land on mode 2 — wrong.
+    )
+    apn = {**LABELED_PROFILE.apn_settings(), "keyboard_mode_toggle_tap": [106, 2239]}
+    result = _fill_labeled_field(client, apn, "MCC", "440", numeric_only=True)
+    assert result is True
+    # Exactly one corrective backspace — clearing the 1-character wrong
+    # probe "ガ", never the full (wrongly-typed) 3-digit value.
+    assert client.shell_calls.count("input keyevent KEYCODE_DEL") == 1
+    # "4" (the probe, "440"[0]) is sent twice as the probe itself — once
+    # wrong (attempt 0), once more after the correction (attempt 1) — then
+    # a third time as part of "40" (the rest of the value, typed once for
+    # real). "0" is typed exactly once, as part of that same rest — never
+    # as part of any wrong attempt, since the probe alone was enough to
+    # reveal the wrong mode without needing to type the whole value.
+    assert client.shell_calls.count("input keyevent KEYCODE_4") == 3
+    assert client.shell_calls.count("input keyevent KEYCODE_0") == 1
 
 
 def test_configure_apn_taps_keyboard_toggle_twice_before_every_field():
@@ -596,11 +641,16 @@ TEXT_ENTRY_NUMERIC_PROFILE = ModelProfile(
 
 def test_configure_apn_use_text_entry_for_numeric_types_mcc_mnc_via_input_text():
     """With the flag set, MCC/MNC must be typed via `input text`, not
-    per-digit keyevents."""
+    per-digit keyevents. Sent as two separate calls — a single-digit
+    probe ("4"/"1"), then the rest of the value ("40"/"1") — per the
+    2026-09-17 probe optimization, rather than one combined call; a real
+    device's `input text` appends at the cursor, so these two calls
+    together still commit the full "440"/"11"."""
     client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
     configure_apn(client, TEXT_ENTRY_NUMERIC_PROFILE, "rakuten.jp", "440", "11")
-    assert 'input text "440"' in client.shell_calls
-    assert 'input text "11"' in client.shell_calls
+    assert 'input text "4"' in client.shell_calls
+    assert 'input text "40"' in client.shell_calls
+    assert 'input text "1"' in client.shell_calls
     assert "input keyevent KEYCODE_4" not in client.shell_calls
 
 

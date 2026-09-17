@@ -1215,6 +1215,44 @@ this unit.
   succeeds; the other confirms a toggle that never reaches the correct
   mode within the attempt budget still fails loudly rather than looping
   forever or accepting a wrong value.
+- *2026-09-17 (sixth finding, same day): efficiency feedback from the
+  client.* Retyping the ENTIRE MCC/MNC value on every toggle-correction
+  attempt was needlessly slow — the client asked whether the keyboard's
+  current mode could be detected directly to avoid this. Confirmed (again)
+  that it can't: the on-screen keyboard is invisible to `uiautomator
+  dump`, and `get_current_ime()` only reports the active IME package, not
+  its internal mode — this かな/英数 toggle is Gboard's own private UI
+  state, not something Android's IME-subtype framework tracks at all, so
+  there's no system API surface left to query. Instead, `_fill_labeled_field()`
+  now probes with only the value's OWN FIRST DIGIT for numeric_only
+  fields — digits commit immediately per keystroke, with no multi-key
+  romaji composing delay the way letters can have, so a single digit
+  reliably reveals the current mode. Only once that probe is confirmed
+  correct is the rest of the value typed, once, for real — cutting a
+  wrong attempt's cost from "retype + clear the whole value" down to
+  "retype + clear one digit." Deliberately NOT applied to 名前/APN:
+  romaji-based composing can delay when a character actually commits, so
+  a single-letter probe wouldn't be as reliable, and neither field has
+  needed a second attempt in any real run so far.
+- Refactored the retry loop into a reusable `_toggle_and_type_with_retry()`
+  closure and factored the cancel/navigate-up cleanup into a shared
+  `_cleanup_mismatched_field_dialog()` helper, so the new probe-based
+  numeric path and the existing full-value path (still used for
+  non-numeric fields) share the same tested mechanics rather than
+  duplicating them.
+- Fixed a real bug this surfaced in the TEST DOUBLES (not production
+  code): `_EchoingEditFieldMixin` and `_CyclingKeyboardModeClient` both
+  modeled `input text` as REPLACING the field's content, which was
+  harmless when a field was only ever typed into once but wrong for two
+  separate `input text` calls on the same field (the new probe-then-rest
+  design) — a real device's `input text` appends at the cursor, it never
+  clears first. Fixed both to append; three existing test assertions
+  that had baked in the old (now-corrected) per-numeric-field call counts
+  were updated to match.
+- New dedicated test,
+  `test_fill_labeled_field_numeric_probe_only_retypes_first_digit_on_wrong_attempt`,
+  confirms MCC only retypes/clears its first digit on a wrong attempt,
+  never the whole value.
 - Still not yet run to full end-to-end completion against real hardware
   with this fix in place — next real-hardware milestone for SOG07.
 
