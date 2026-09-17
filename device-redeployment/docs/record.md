@@ -1177,6 +1177,46 @@ this unit.
   session showed how that can hide/repeat an identical failure 3 times
   before it's visible, they were reminded to use `--max-retries 0` while
   iterating on a specific, repeatable issue like this one.
+- **🎉 *2026-09-17 (fifth finding, same day): the client identified the
+  actual real root cause.** From watching the automated run closely, the
+  client determined the on-screen keyboard's mode-toggle key does NOT
+  reset to a known state for each new field's dialog — it carries over
+  from wherever the PREVIOUS field's typing left it. Their own account:
+  名前 (starting from the dialog's initial state) lands correctly after
+  the usual two taps; APN's two taps, applied on top of whatever state
+  名前's typing left the keyboard in, still happens to land correctly;
+  but by MCC (the third field typed into), the same fixed "tap exactly
+  twice" overshoots past the correct mode, landing back in Japanese
+  input and producing full-width digits. This is a coherent, real
+  explanation for every previous SOG07 MCC/MNC finding this session —
+  the numeric-keypad coordinate and the input_text_direct() mechanism
+  fix were both real and necessary, but neither could succeed reliably
+  while the code also assumed a fixed starting state that doesn't hold
+  past the first field.
+- There is no way to directly read the keyboard's actual current mode —
+  confirmed unreachable via `uiautomator dump` (invisible keyboard,
+  SHG07 finding) and `get_current_ime()` only reports the IME package,
+  not its subtype. So instead of tracking or predicting the toggle's
+  state machine, `_fill_labeled_field()` (`src/phase2/apn_setup.py`) now
+  PROBES it empirically: type, read the field back (the verification
+  that already existed), and if it doesn't match, clear the field (one
+  backspace per character actually committed) and advance the toggle by
+  one more single tap before retrying — up to
+  `_KEYBOARD_TOGGLE_MAX_ATTEMPTS = 4` total attempts (the proven initial
+  2-tap recipe, then up to 3 single-tap corrections) before giving up
+  through the existing cancel/navigate-up cleanup path. Self-correcting
+  regardless of the toggle's actual cycle length or starting state,
+  without needing to inspect anything the accessibility tree can't see.
+- Two new tests in `tests/test_apn_setup.py` using a new
+  `_CyclingKeyboardModeClient` fake (models a toggle that persists its
+  mode across separate field dialogs, unlike the existing
+  `_EchoingEditFieldMixin`'s always-correct happy path): one confirms a
+  field that starts in the wrong carried-over mode self-corrects and
+  succeeds; the other confirms a toggle that never reaches the correct
+  mode within the attempt budget still fails loudly rather than looping
+  forever or accepting a wrong value.
+- Still not yet run to full end-to-end completion against real hardware
+  with this fix in place — next real-hardware milestone for SOG07.
 
 ## SOG08 (Sony Xperia Ace III, Android 13)
 

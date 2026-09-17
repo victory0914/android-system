@@ -90,6 +90,67 @@ class EchoingFakeAdbClient(_EchoingEditFieldMixin, FakeAdbClient):
     correct field-typing echo but none of ApnPostSaveClient's/
     ScrollRevealsMncClient's other stateful behavior."""
 
+
+class _CyclingKeyboardModeClient(FakeAdbClient):
+    """Real root cause the client diagnosed on SOG07 (2026-09-17): the
+    on-screen keyboard's mode-toggle key does NOT reset to a known state
+    for each new field's dialog — it carries over from wherever the
+    PREVIOUS field's typing left it. _EchoingEditFieldMixin's happy-path
+    model (every typed value always echoes back correctly) can't exercise
+    this; this client models a toggle key that advances through a
+    fixed-length cycle on every tap of `toggle_coords` specifically, and
+    PERSISTS that state across separate field dialogs. Typing while not in
+    `_CORRECT_MODE` commits a fixed garbled marker instead of the real
+    value, so a test can assert the retry-and-recheck logic in
+    _fill_labeled_field() actually detects and corrects it — not just
+    that taps happen."""
+
+    _CORRECT_MODE = 0
+
+    def __init__(self, *args, toggle_coords, cycle_length, starting_mode, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._toggle_tap = f"input tap {toggle_coords[0]} {toggle_coords[1]}"
+        self._cycle_length = cycle_length
+        self._mode = starting_mode
+        self._typed = ""
+
+    def shell(self, command, timeout=30):
+        result = super().shell(command, timeout=timeout)
+        if command == self._toggle_tap:
+            self._mode = (self._mode + 1) % self._cycle_length
+        elif command.startswith("input tap"):
+            # Any OTHER tap (the field row, the edit-field itself) is a
+            # new dialog's own typing session starting — clears whatever
+            # was typed, but deliberately does NOT touch self._mode: the
+            # whole point being modeled here is that the toggle's mode
+            # survives across these.
+            self._typed = ""
+        elif command.startswith('input text "'):
+            value = command[len('input text "') : -1]
+            self._typed = value if self._mode == self._CORRECT_MODE else "ガーブル"
+        elif command == "input keyevent KEYCODE_DEL":
+            self._typed = self._typed[:-1]
+        elif command.startswith("input keyevent "):
+            keycode = command[len("input keyevent ") :]
+            if self._mode == self._CORRECT_MODE:
+                self._typed += _KEYEVENT_TO_CHAR.get(keycode, "")
+            else:
+                self._typed += "ガ"
+        return result
+
+    def pull(self, remote_path, local_path):
+        result = super().pull(remote_path, local_path)
+        with open(local_path, encoding="utf-8") as fh:
+            xml_text = fh.read()
+        if 'resource-id="android:id/edit"' in xml_text:
+            root = ET.fromstring(xml_text)
+            for node in root.iter("node"):
+                if node.get("resource-id") == "android:id/edit":
+                    node.set("text", self._typed)
+            with open(local_path, "w", encoding="utf-8") as fh:
+                fh.write(ET.tostring(root, encoding="unicode"))
+        return result
+
 LEGACY_PROFILE = ModelProfile(
     {
         "model": "Test Legacy",
@@ -382,6 +443,65 @@ def test_configure_apn_waits_before_toggle_taps(monkeypatch):
 
     # 4 fields, one delay before each field's pair of toggle taps.
     assert sleep_calls == [_KEYBOARD_TOGGLE_TAP_DELAY_SECONDS] * 4
+
+
+def test_configure_apn_self_corrects_when_toggle_state_carries_over_between_fields(caplog):
+    """Direct regression test for the client's real, diagnosed root cause
+    (2026-09-17, SOG07): the toggle key's mode does NOT reset for each new
+    field's dialog — it carries over from wherever the PREVIOUS field's
+    typing left it, so a fixed "always tap exactly twice" can silently
+    land in the wrong mode for a later field even though it worked for an
+    earlier one.
+
+    _CyclingKeyboardModeClient models a 3-state toggle, starting in a mode
+    such that: field 1 (名前) coincidentally lands correct after the usual
+    two taps, but every field after that starts from a carried-over state
+    where two taps overshoots into the wrong mode — requiring exactly one
+    single-tap correction (clear + retype) each time. All 4 fields must
+    still be filled successfully, self-correcting via the
+    read-back-and-retry loop rather than failing outright the way the old
+    fixed-two-taps code did. (KEYBOARD_TOGGLE_PROFILE has no save-flow
+    config, same as its other tests in this file — configure_apn() still
+    returns False overall at the save step, which is expected and not
+    what this test is checking.)"""
+    client = _CyclingKeyboardModeClient(
+        ui_dumps=[LABELED_SCREEN_XML] * 40,
+        toggle_coords=(106, 2239),
+        cycle_length=3,
+        starting_mode=1,
+    )
+    with caplog.at_level(logging.ERROR):
+        configure_apn(client, KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
+    assert "could not be filled" not in caplog.text
+    toggle_tap = "input tap 106 2239"
+    # 名前: 2 taps (lands correct immediately). APN/MCC/MNC: 2 + 1 more
+    # each (one single-tap correction apiece) = 3 each. 2 + 3*3 = 11.
+    assert client.shell_calls.count(toggle_tap) == 11
+    # One corrective clear for each of the 3 fields that needed
+    # correcting: APN (non-numeric, `input text` path) commits the fixed
+    # 4-character "ガーブル" placeholder when wrong; MCC/MNC (numeric,
+    # per-digit keyevent path, no use_text_entry_for_numeric on this
+    # profile) commit one "ガ" per digit typed instead — 3 for "440", 2
+    # for "11". 4 + 3 + 2 = 9.
+    assert client.shell_calls.count("input keyevent KEYCODE_DEL") == 9
+
+
+def test_configure_apn_gives_up_after_max_toggle_attempts():
+    """If the toggle never reaches the correct mode within
+    _KEYBOARD_TOGGLE_MAX_ATTEMPTS, this must still fail loudly (with the
+    existing cancel/navigate-up cleanup) rather than loop forever or
+    silently accept a wrong value."""
+    client = _CyclingKeyboardModeClient(
+        ui_dumps=[LABELED_SCREEN_XML] * 40,
+        toggle_coords=(106, 2239),
+        # A cycle length longer than _KEYBOARD_TOGGLE_MAX_ATTEMPTS's total
+        # reachable taps (2 for attempt 0, +1 per further attempt) means
+        # 名前 can never land on the correct mode within the budget.
+        cycle_length=100,
+        starting_mode=1,
+    )
+    result = configure_apn(client, KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
+    assert result is False
 
 
 def test_configure_apn_taps_keyboard_toggle_twice_before_every_field():

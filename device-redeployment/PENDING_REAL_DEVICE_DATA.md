@@ -131,6 +131,28 @@ on `main_phase2.py` (default: config's value, 3; `--max-retries 0` = a
 single attempt) — useful for iterating on a real, repeatable failure
 without waiting through 3 identical retries each time.
 
+**🎉 Fifth finding, same day: the client identified the actual real root
+cause.** The on-screen keyboard's mode-toggle key does NOT reset to a
+known state for each new field's dialog — it carries over from wherever
+the PREVIOUS field's typing left it. A fixed "always tap exactly twice"
+only reliably works for the first field opened in a fresh dialog session;
+every field after that can start from an unpredictable carried-over
+state, which is exactly why 名前/APN worked but MCC (the third field
+typed into) didn't. There is no way to directly read the keyboard's
+actual mode (confirmed unreachable via `uiautomator dump` and
+`get_current_ime()`), so `_fill_labeled_field()` now probes it
+empirically instead: type, read back, and if wrong, clear the field and
+advance the toggle by one more single tap before retrying, up to
+`_KEYBOARD_TOGGLE_MAX_ATTEMPTS = 4` total attempts before giving up
+through the existing cancel/navigate-up cleanup. Self-correcting
+regardless of the toggle's actual cycle length, applies automatically to
+any model with `keyboard_mode_toggle_tap`/`keyboard_mode_toggle_tap_numeric`
+set — no new per-model config needed. Two new tests confirm both the
+self-correction and the bounded give-up behavior with a fake client that
+models persisting toggle state across fields. **Still not yet run to full
+end-to-end completion on real hardware with this in place** — the next
+real-hardware milestone.
+
 ## Highest priority
 
 ### 🎉 SHG07 text entry: real fix found, confirmed end-to-end (2026-09-15)
