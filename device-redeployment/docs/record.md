@@ -704,6 +704,31 @@ ever show this symptom on a future run.
   this is a well-known class of `uiautomator dump` flakiness, not specific
   to this device, so the fix is in the shared `dump_ui()` used by every
   tap/find call, not just the APN path that happened to surface it.
+- *2026-09-18:* Client hypothesis, confirmed: a parallel 4-device run's
+  post-save soft check warned `'rakuten.jp' wasn't spotted back on the
+  APN list` for all 4 devices, and this time the client independently
+  verified on all 4 devices themselves (not just via the automation's own
+  log) that the entry genuinely wasn't there — the first time this
+  known-since-2026-09-11 soft warning turned out NOT to be a false
+  negative. The client's own diagnosis: the screen shown when re-checking
+  looked identical to the screen shown *before* the APN was even
+  registered, pointing at the `am start -a android.settings.APN_SETTINGS`
+  re-navigation step itself (`_save_apn()`'s 3rd-tier recheck, added
+  2026-09-15) — re-sending that same intent while Settings is already
+  running most likely just brings the existing, possibly stale/cached
+  Activity back to the foreground (Android's normal task-reuse behavior
+  for `am start`) rather than forcing a real reload from the underlying
+  database, which would explain why this step wasn't reliably fixing the
+  exact problem it was built for. Fixed: `am force-stop
+  com.android.settings` now runs immediately before that re-navigation
+  intent, guaranteeing a genuinely fresh process with no cached UI state
+  to fall back on. New test,
+  `test_configure_apn_force_stops_settings_before_renavigating`, confirms
+  both that the force-stop happens and that it happens before the
+  re-navigation, not after. Shared code path (`_save_apn()` in
+  `apn_setup.py`) used by every Stage B model — this fix applies to
+  SHG10/SHG07/SOG07/SOG08 alike, not just whichever device happened to
+  surface it.
 
 ### Windows/client-PC environment — relevant to deployment & setup docs
 - *2026-09-04:* Freshly-extracted executables on the client PC are **silently

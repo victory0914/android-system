@@ -595,11 +595,17 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
       giving up: first waits `_POST_SAVE_RECHECK_DELAY_SECONDS` and dumps
       the same screen again (a real run, 2026-09-11, showed the list can
       take a moment to actually refresh after 保存); if that still doesn't
-      find it, re-launches the `android.settings.APN_SETTINGS` intent to
-      force a genuine screen reload (a later real run, 2026-09-15,
-      SHG07, showed simply waiting on the already-open screen isn't
-      always enough, but leaving and re-entering Settings does show the
-      entry). Still soft either way — never a hard failure on its own.
+      find it, force-stops `com.android.settings` and re-launches the
+      `android.settings.APN_SETTINGS` intent to force a genuine screen
+      reload (a later real run, 2026-09-15, SHG07, showed simply waiting
+      on the already-open screen isn't always enough, but leaving and
+      re-entering Settings does show the entry — and a further real run,
+      2026-09-18, all 4 devices in a parallel batch, showed re-sending
+      the SAME intent alone still wasn't reliable, most likely because
+      `am start` just re-foregrounds an already-running, possibly
+      stale/cached Activity rather than actually reloading it; the
+      force-stop guarantees a genuinely fresh process first). Still soft
+      either way — never a hard failure on its own.
 
     - Legacy (3 untouched models): a single literal save button.
     """
@@ -645,12 +651,26 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
             # above can still show a stale list — the client confirmed
             # manually that simply waiting on the SAME still-open screen
             # isn't always enough, but leaving and re-entering Settings
-            # does show the entry. A fresh android.settings.APN_SETTINGS
-            # intent forces the screen to actually reload from the
-            # underlying data, unlike re-dumping an already-open one.
-            # Still soft — a failure here only skips this last recheck,
-            # never turns into a hard failure.
+            # does show the entry.
+            #
+            # Real finding, round 2 (2026-09-18, client hypothesis
+            # confirmed by a run where this warning hit all 4 devices in
+            # a parallel batch, then the client independently verified
+            # the entry was still missing on the device itself, not just
+            # in our own soft check): re-sending the SAME
+            # `android.settings.APN_SETTINGS` intent while the Settings
+            # app/Activity is already running most likely just brings
+            # that existing (and possibly stale/cached) instance back to
+            # the foreground — Android's normal task-reuse behavior for
+            # `am start` — rather than forcing it to actually reload from
+            # the underlying database. That would explain why this
+            # "re-navigate to force a reload" step wasn't reliably fixing
+            # the exact problem it was built for. Force-stopping the
+            # Settings app first guarantees a genuinely fresh process
+            # with no cached UI state to fall back on, before the intent
+            # re-launches it.
             try:
+                client.shell("am force-stop com.android.settings")
                 client.shell("am start -a android.settings.APN_SETTINGS")
             except AdbCommandError as exc:
                 logger.info(

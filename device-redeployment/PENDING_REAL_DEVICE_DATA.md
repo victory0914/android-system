@@ -54,6 +54,23 @@ day," not permanently immune** — worth remembering if any of them show
 this symptom on a future run. See docs/record.md's SHG10 section for
 the full account.
 
+**🎉 Update, 2026-09-18: fixed a real bug in the post-save soft check
+itself.** After the SHG10 fix above, a re-run of that same 4-device
+parallel command logged the `'rakuten.jp' wasn't spotted back on the APN
+list` warning for all 4 devices again — but this time the client
+independently checked all 4 devices' actual APN lists and confirmed the
+entry genuinely wasn't there, the first time this known-since-2026-09-11
+warning turned out to be a real problem, not a false negative. Client
+diagnosis (confirmed correct): the `_save_apn()` re-navigation step
+(re-sending `android.settings.APN_SETTINGS` to force a reload) most
+likely just re-foregrounds the already-running, possibly stale Settings
+Activity rather than actually reloading it. Fixed: `am force-stop
+com.android.settings` now runs immediately before that re-navigation
+intent. Shared code, applies to every model. See docs/record.md's "Real
+hardware bugs found running the automation" section for the full
+account. **Not yet re-confirmed on real hardware with this fix in
+place** — next thing to retest.
+
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:
 `SUCCESS: device 352063910272451 reached LOGIN_INSTALL` — Wi-Fi (already

@@ -1185,6 +1185,31 @@ def test_configure_apn_falls_back_to_renavigation_when_waiting_alone_is_not_enou
     assert any("confirmed visible" in m for m in messages)
 
 
+def test_configure_apn_force_stops_settings_before_renavigating(monkeypatch):
+    """2026-09-18, client hypothesis: re-sending the SAME
+    android.settings.APN_SETTINGS intent while Settings is already
+    running most likely just re-foregrounds the existing (possibly
+    stale/cached) Activity instead of forcing a real reload — a run
+    where this warning hit all 4 devices in a parallel batch, then the
+    client independently confirmed on-device the entry was genuinely
+    still missing, not just a soft-check false negative. Force-stopping
+    com.android.settings first must happen, and it must happen BEFORE
+    the re-navigation intent, not after."""
+    monkeypatch.setattr("src.phase2.apn_setup.time.sleep", lambda _seconds: None)
+    client = ApnPostSaveRequiresRenavigationClient(
+        ui_dumps=[SAVE_FLOW_SCREEN_XML] * 30,
+        post_save_xml=POST_SAVE_NOT_YET_REFRESHED_XML,
+        delayed_post_save_xml=POST_SAVE_SUCCESS_XML,
+    )
+    configure_apn(client, SAVE_FLOW_PROFILE, "rakuten.jp", "440", "11")
+    force_stop = "am force-stop com.android.settings"
+    renavigate = "am start -a android.settings.APN_SETTINGS"
+    assert force_stop in client.shell_calls
+    assert client.shell_calls.index(force_stop) < client.shell_calls.index(
+        renavigate, client.shell_calls.index(force_stop)
+    )
+
+
 def test_configure_apn_taps_estimated_add_button_position_when_unresolved():
     """Real screenshot (2026-09-11): add_button_resource_id ("+") has never
     been captured (no dump of the list screen with an empty/known-count APN
