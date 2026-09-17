@@ -226,6 +226,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "redeployment run — it removes the check that the device actually "
         "finished setup.",
     )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=None,
+        help="Override config/settings.yaml's retry.max_retries (default: "
+        "3) for this run only. 0 means a single attempt with no retries — "
+        "useful while debugging a real-device issue, so an identical "
+        "failure isn't repeated 3 times before you see the result. Never "
+        "changes the config file itself.",
+    )
     return parser
 
 
@@ -292,6 +302,9 @@ def main(argv: list[str] | None = None) -> int:
     adb_cfg = settings.get("adb", {})
     retry_cfg = settings.get("retry", {})
     max_retry = int(retry_cfg.get("max_retries", 3))
+    if args.max_retries is not None:
+        max_retry = args.max_retries
+        logger.info("--max-retries override: using %d instead of config's default", max_retry)
 
     logger.info("loading model profiles from %s", args.models_dir)
     try:

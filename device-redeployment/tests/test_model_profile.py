@@ -233,6 +233,10 @@ def test_load_sog07_model_file_real_apn_and_wifi_data():
     # numeric keypad on this device — its own toggle key sits at a
     # different X than the text keyboard's, confirmed independently.
     assert apn["keyboard_mode_toggle_tap_numeric"] == [93, 2300]
+    # RESOLVED (real, 2026-09-17, same-day second finding): even with the
+    # coordinate above, a live run kept failing MCC — the toggle only
+    # actually worked for input_text_direct(), not per-digit keyevents.
+    assert apn["use_text_entry_for_numeric"] is True
 
 
 def test_load_sog08_model_file_real_apn_and_wifi_data():

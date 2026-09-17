@@ -170,6 +170,15 @@ def _fill_labeled_field(
     whose toggle key sits at a different position — reusing the
     text-keyboard coordinate there is a near-miss at best (silently
     lands on the wrong key) and a mistap at worst.
+
+    `apn_settings.use_text_entry_for_numeric` (SOG07, 2026-09-17) makes
+    MCC/MNC use input_text_direct() instead of input_digits_direct().
+    Real finding: even with the correct toggle coordinate confirmed and
+    applied, a live run kept committing full-width digits — the toggle
+    only actually took effect for input_text_direct()'s mechanism on this
+    keypad, not input_digits_direct()'s per-keyevent one. Device-specific
+    like every other text-entry flag here; SHG10/SHG07 keep the original
+    keyevent mechanism, which is proven working for them.
     """
     row_resource_id = apn["field_row_resource_id"]
     if not tap_resource_id(client, row_resource_id, text=label):
@@ -233,7 +242,26 @@ def _fill_labeled_field(
         tap_at_coordinates(client, x, y)
 
     if numeric_only:
-        if not input_digits_direct(client, value):
+        # Real finding, SOG07 (2026-09-17): a live run kept failing MCC
+        # even with the correct keyboard_mode_toggle_tap_numeric coordinate
+        # confirmed and applied — every retry (3/3, identical) produced
+        # "440" -> "４４０" regardless. The coordinate itself was already
+        # independently confirmed via a scripted `adb shell input tap`
+        # + `input text "440"` test (client screenshot showed plain ASCII
+        # committed) — so the toggle genuinely works, but only for
+        # input_text_direct()'s mechanism (`input text`), not for
+        # input_digits_direct()'s per-digit KEYCODE_<n> events, which kept
+        # committing full-width on this specific keypad even post-toggle.
+        # This is the mirror image of SHG10's original finding (there,
+        # `input text` was the broken mechanism for digits and keyevents
+        # were the fix) — device/keyboard-dependent either way, so this is
+        # opt-in per model rather than assumed. use_text_entry_for_numeric
+        # (SOG07, 2026-09-17) switches MCC/MNC to input_text_direct();
+        # every other model keeps the original input_digits_direct().
+        if apn.get("use_text_entry_for_numeric"):
+            if not input_text_direct(client, value):
+                return False
+        elif not input_digits_direct(client, value):
             return False
     elif apn.get("use_keyevent_text_entry"):
         # Real-device finding (client report, 2026-09-14, SHG07): unlike

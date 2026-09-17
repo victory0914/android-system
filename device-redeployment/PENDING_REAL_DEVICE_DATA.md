@@ -88,9 +88,30 @@ Sony hardware (unlike SHG07, where one coordinate covered every field).
 `keyboard_mode_toggle_tap` when unset, so SHG07 is unaffected). SOG07's
 numeric coordinate is confirmed: `[93, 2300]`. **SOG08's numeric
 coordinate is still outstanding** — its MCC/MNC keypad hasn't been
-captured yet. Neither device has completed a full end-to-end
-`configure_apn()` run with all fields' fixes in place — that's the next
+captured yet.
+
+**Third finding, same day: the numeric coordinate alone wasn't enough —
+MCC/MNC also needed a different typing mechanism.** A full SOG07 run
+with the numeric toggle coordinate in place still failed MCC identically
+on all 3/3 retries, even though the coordinate itself was independently
+confirmed correct via the scripted test. Turned out the toggle only
+actually took effect for `input text`, not for
+`input_digits_direct()`'s per-keyevent mechanism (the one MCC/MNC
+normally use, proven correct on SHG10/SHG07) — the mirror image of
+SHG10's original finding, where `input text` was the broken mechanism
+and keyevents were the fix. New opt-in flag
+`use_text_entry_for_numeric` switches MCC/MNC to `input_text_direct()`;
+SOG07's config now sets it. **SOG08 needs the same
+capture-and-confirm treatment for MCC/MNC (both the toggle coordinate
+and possibly this same typing-mechanism issue) before its APN flow can
+be trusted.** Neither device has completed a full end-to-end
+`configure_apn()` run with all fixes in place yet — that's the next
 real-hardware milestone to watch for.
+
+Also added, same day at the client's request: `--max-retries` CLI flag
+on `main_phase2.py` (default: config's value, 3; `--max-retries 0` = a
+single attempt) — useful for iterating on a real, repeatable failure
+without waiting through 3 identical retries each time.
 
 ## Highest priority
 
@@ -288,14 +309,18 @@ final step uses this real value for both Sony models.
   via a scripted `adb shell input tap` + plain-ASCII text-entry test. See
   docs/record.md and the update note near the top of this file for the
   full account.
-- **NEW, still outstanding: SOG08's MCC/MNC keyboard-toggle coordinate.**
-  A full SOG07 run revealed MCC/MNC use a different numeric-only keypad
-  than 名前/APN, with its own toggle key at a different position —
-  SOG07's is confirmed (`keyboard_mode_toggle_tap_numeric: [93, 2300]`).
-  SOG08's equivalent hasn't been captured yet; until it is, SOG08's
-  MCC/MNC will fall back to its 名前/APN coordinate (`[73, 1352]`), which
-  is not confirmed correct for that keypad and may well repeat the same
-  bug SOG07 just hit.
+- **NEW, still outstanding: SOG08's MCC/MNC keyboard-toggle coordinate
+  AND typing mechanism.** A full SOG07 run revealed MCC/MNC use a
+  different numeric-only keypad than 名前/APN, with its own toggle key at
+  a different position, AND that even the correct toggle coordinate
+  isn't enough — MCC/MNC also need `input_text_direct()` instead of the
+  usual per-keyevent mechanism on this keypad. SOG07's both are now
+  confirmed (`keyboard_mode_toggle_tap_numeric: [93, 2300]`,
+  `use_text_entry_for_numeric: true`). SOG08's equivalents haven't been
+  captured/tested yet; until they are, SOG08's MCC/MNC will fall back to
+  its 名前/APN coordinate (`[73, 1352]`) and the original keyevent
+  mechanism, neither confirmed correct for that keypad — likely to repeat
+  the same bugs SOG07 just hit.
 
 **Both devices' keyboard-toggle fix is confirmed at the single-field
 level, but neither has completed a full end-to-end `configure_apn()` run

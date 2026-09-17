@@ -422,6 +422,47 @@ def test_configure_apn_numeric_toggle_falls_back_to_shared_coordinate_when_unset
     assert client.shell_calls.count(toggle_tap) == 8
 
 
+# SOG07 (2026-09-17, second finding same day): even with the correct
+# numeric-keypad toggle coordinate confirmed and applied, a live run kept
+# failing MCC — the toggle only actually took effect for input_text_direct()
+# on this keypad, not input_digits_direct()'s per-keyevent mechanism.
+# use_text_entry_for_numeric switches MCC/MNC to input_text_direct().
+TEXT_ENTRY_NUMERIC_PROFILE = ModelProfile(
+    {
+        "model": "SOG07-like Numeric-Text-Entry Test",
+        "model_number": "TST10",
+        "manufacturer": "Test",
+        "android_version": 14,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+        "apn_settings": {
+            **NUMERIC_KEYBOARD_TOGGLE_PROFILE.apn_settings(),
+            "use_text_entry_for_numeric": True,
+        },
+    }
+)
+
+
+def test_configure_apn_use_text_entry_for_numeric_types_mcc_mnc_via_input_text():
+    """With the flag set, MCC/MNC must be typed via `input text`, not
+    per-digit keyevents."""
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    configure_apn(client, TEXT_ENTRY_NUMERIC_PROFILE, "rakuten.jp", "440", "11")
+    assert 'input text "440"' in client.shell_calls
+    assert 'input text "11"' in client.shell_calls
+    assert "input keyevent KEYCODE_4" not in client.shell_calls
+
+
+def test_configure_apn_use_text_entry_for_numeric_is_opt_in():
+    """Without the flag (NUMERIC_KEYBOARD_TOGGLE_PROFILE), MCC/MNC must
+    keep using the original per-digit keyevent mechanism, proven correct
+    on SHG10/SHG07."""
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    configure_apn(client, NUMERIC_KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
+    assert "input keyevent KEYCODE_4" in client.shell_calls
+    assert 'input text "440"' not in client.shell_calls
+
+
 def test_configure_apn_missing_save_button_never_taps_anything_claiming_save():
     """With save_button_resource_id unresolved (None), configure_apn() must
     not silently guess a save action — this is the direct instruction from

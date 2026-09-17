@@ -178,6 +178,15 @@ apn_settings:
   # this keypad's own, independently confirmed via the same scripted
   # `adb shell input tap` + text-entry test.
   keyboard_mode_toggle_tap_numeric: [93, 2300]
+  # RESOLVED (real, 2026-09-17) — a full automated run still failed MCC
+  # identically on all 3 retries even with the numeric toggle coordinate
+  # above confirmed and applied. Root cause: on this keypad, the toggle
+  # only actually takes effect for `input text`, not for the per-keyevent
+  # KEYCODE_<n> mechanism input_digits_direct() normally uses for
+  # MCC/MNC (proven correct on SHG10/SHG07, but not here). Switches
+  # MCC/MNC to input_text_direct() instead — see _fill_labeled_field()'s
+  # docstring in apn_setup.py for the full account.
+  use_text_entry_for_numeric: true
   # navigate_up_content_desc left unset here on purpose too — SHG10's
   # real dumps confirm "上へ移動" for that device, and this device's own
   # apn_list_SOG07.xml dump ALSO shows the identical content-desc, so this

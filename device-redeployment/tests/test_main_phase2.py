@@ -60,6 +60,23 @@ def test_skip_wizard_flag_can_be_set():
     assert args.skip_wizard is True
 
 
+# --- --max-retries (2026-09-17): lets a manual debugging run stop after a
+# single failure instead of repeating an identical error 3 times (the
+# config-file default) before reporting it. -------------------------------
+
+
+def test_max_retries_flag_defaults_to_none_meaning_use_config_value():
+    args = build_arg_parser().parse_args(["--serial", "ABC123", "--model", "SHG10"])
+    assert args.max_retries is None
+
+
+def test_max_retries_flag_can_be_set_to_zero_for_a_single_attempt():
+    args = build_arg_parser().parse_args(
+        ["--serial", "ABC123", "--model", "SHG10", "--max-retries", "0"]
+    )
+    assert args.max_retries == 0
+
+
 # --- --device (multi-device parallel mode, 2026-09-14) ---------------------
 
 

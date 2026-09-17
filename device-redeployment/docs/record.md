@@ -1113,6 +1113,39 @@ this unit.
 - Still not yet run to full end-to-end completion against real hardware
   with both coordinates in place — only the single-field scripted tests
   (name/APN and now MCC) have been confirmed so far.
+- *2026-09-17 (third finding, same day):* A full automated run with
+  `keyboard_mode_toggle_tap_numeric` in place still failed MCC —
+  identically, on all 3/3 retries: `typed '440' but the field now reads
+  '４４０'`. This time 名前/APN succeeded on every retry too (no longer a
+  factor). Root cause: the numeric-keypad toggle coordinate itself IS
+  correct (already independently confirmed via the scripted
+  `input text "440"` test), but the *automated code's typing mechanism
+  for MCC/MNC* is `input_digits_direct()` (per-digit `KEYCODE_<n>`
+  keyevents), not `input text` — and on this specific keypad, the toggle
+  only actually takes effect for `input text`; keyevent-typed digits kept
+  committing full-width even after the identical toggle sequence. This is
+  the exact mirror image of SHG10's original 2026-09-11 finding (there,
+  `input text` was the broken mechanism for MCC/MNC and keyevents were
+  the fix) — genuinely device/keyboard-dependent in both directions, not
+  something to assume either way.
+- Implication: `_fill_labeled_field()` now reads a new
+  `use_text_entry_for_numeric` flag — when set, MCC/MNC use
+  `input_text_direct()` instead of `input_digits_direct()`. Opt-in, so
+  SHG10/SHG07 (proven correct with the original keyevent mechanism) are
+  unaffected. `config/models/sony_xperia_10iv.yaml`:
+  `use_text_entry_for_numeric: true`.
+- Client also requested `--max-retries` be overridable from the CLI
+  (previously hardcoded to config/settings.yaml's `retry.max_retries`,
+  always 3) — useful while iterating on a real, repeatable failure like
+  this one, where 3 identical retries just repeat the same result and
+  waste time before the log is even visible. Added `--max-retries N` to
+  `main_phase2.py` (`--max-retries 0` = a single attempt, no retries);
+  defaults to the config value when omitted, and never modifies the
+  config file itself.
+- Still not yet run to full end-to-end completion against real hardware
+  with all three fixes in place (numeric toggle coordinate + numeric
+  text-entry mechanism + text-keyboard coordinate) — next real-hardware
+  milestone.
 
 ## SOG08 (Sony Xperia Ace III, Android 13)
 
