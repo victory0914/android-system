@@ -244,17 +244,14 @@ def _fill_labeled_field(
     like every other text-entry flag here; SHG10/SHG07 keep the original
     keyevent mechanism, which is proven working for them.
 
-    For numeric_only fields specifically, when a toggle coordinate AND
-    edit_field are both configured, only the value's own FIRST digit is
-    used to probe the toggle's self-correction loop — not the whole
-    value — and the rest is typed once, for real, only after that probe
-    is confirmed correct (client feedback, 2026-09-17: retyping the whole
-    value on every correction attempt was needlessly slow). Digits commit
-    immediately per keystroke, with no multi-key romaji composing delay
-    the way letters can have, so a single digit reliably reveals the
-    current mode — this optimization is deliberately NOT applied to
-    non-numeric fields for that reason (and 名前/APN have not needed a
-    second attempt in any real run so far anyway).
+    Whenever a toggle coordinate AND edit_field are both configured
+    (every field this applies to, numeric or not), only the value's own
+    FIRST character is used to probe the toggle's self-correction loop —
+    not the whole value — and the rest is typed once, for real, only
+    after that probe is confirmed correct (client feedback, 2026-09-17:
+    retyping the whole value on every correction attempt was needlessly
+    slow, then extended from numeric-only to every field after the same
+    full-value retyping was observed on 名前/APN on real SOG07 hardware).
     """
     row_resource_id = apn["field_row_resource_id"]
     if not tap_resource_id(client, row_resource_id, text=label):
@@ -421,21 +418,30 @@ def _fill_labeled_field(
         # needed to avoid breaking the *next* run's navigation too.
         _cleanup_mismatched_field_dialog(client, apn, label)
 
-    if numeric_only and toggle_coords and edit_field:
+    if toggle_coords and edit_field:
         # Efficiency improvement (client feedback, 2026-09-17): retyping
         # the ENTIRE value on every toggle-correction attempt is wasted
-        # work — MCC/MNC only need ONE character probed to tell whether
-        # the current mode is right or wrong, since digits (unlike romaji
-        # letters) commit immediately per keystroke with no multi-key
-        # composing delay to worry about. Probe with just the value's own
-        # first digit; only once that's confirmed correct is the
+        # work — only ONE character needs probing to tell whether the
+        # current mode is right or wrong. Probe with just the value's own
+        # first character; only once that's confirmed correct is the
         # (much cheaper, now guaranteed-safe) rest of the value typed —
-        # for real, exactly once, never retried. Deliberately NOT applied
-        # to non-numeric fields: letters typed via romaji CAN have a
-        # multi-keystroke composing delay before anything commits, so a
-        # single-character probe wouldn't reliably reveal the mode there
-        # the way it does for plain digits — and 名前/APN have not needed
-        # a second attempt in any real run so far anyway.
+        # for real, exactly once, never retried, regardless of correction
+        # count.
+        #
+        # Originally scoped to numeric_only fields only, on the theory
+        # that romaji letters (unlike digits) can have a multi-keystroke
+        # composing delay before anything commits, making a single-letter
+        # probe less reliable there. Client feedback (2026-09-17,
+        # observed on real SOG07 hardware) asked for the same treatment
+        # on 名前/APN too — extended here to every field with a
+        # configured toggle, since the retry loop's own read-back check
+        # is robust to whatever the probe's actual committed length turns
+        # out to be (it always backspaces the field's own reported
+        # length, never an assumed one — see
+        # _toggle_and_type_with_retry()'s comment). Whether a
+        # single-letter probe is as reliable for romaji text as it is for
+        # digits is NOT independently confirmed the way the numeric case
+        # was — worth watching on the next real 名前/APN correction.
         probe, rest = value[0], value[1:]
         matched, actual = _toggle_and_type_with_retry(_type_fn(probe), probe)
         if matched is None:

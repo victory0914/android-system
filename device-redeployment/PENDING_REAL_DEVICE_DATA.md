@@ -181,7 +181,22 @@ eliminated by validating the keyboard's mode internally — confirmed not
 achievable without a different mechanism (paste-based entry, needing a
 helper app); **client chose to keep the current behavior** given the
 flicker is minimal (one character, ~one ADB round-trip) and never
-actually saved. See docs/record.md's SOG07 section for the full account.
+actually saved.
+
+**Same-day follow-up:** double-checking on real hardware, the client
+found 名前/APN still retyped the whole value on a wrong attempt (MCC/MNC
+were already confirmed using the single-digit probe) — this was expected
+at the time (名前/APN were deliberately excluded, on a concern that
+romaji composing could make a single-letter probe unreliable), but the
+client asked for the same treatment there too. Extended: the probe
+optimization now applies to EVERY field with a toggle configured, not
+just numeric ones — the retry loop's own read-back check is robust to
+whatever length the probe's actual committed text turns out to be, so
+this generalizes safely even though the romaji-composing reliability
+question remains unconfirmed on real hardware (worth watching on the
+next 名前/APN correction). See docs/record.md's SOG07 section for the
+full account.
+
 Not yet done: the same treatment for SOG08.
 
 ## Highest priority

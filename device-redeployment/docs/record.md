@@ -1289,6 +1289,36 @@ SHG10 and SHG07. Not yet done: the same full treatment for SOG08 (its
 own MCC/MNC toggle coordinate and typing-mechanism confirmation — see
 PENDING_REAL_DEVICE_DATA.md).
 
+**Same-day follow-up: the single-character probe optimization was
+extended from numeric fields to every field.** The client double-checked
+on real hardware and found the "type whole value, detect, correct" flow
+was still happening — but at the 名前/APN stage, not MCC/MNC (which
+were already confirmed using the single-digit probe). This was expected,
+working-as-designed behavior at the time (名前/APN were deliberately
+excluded from probing over a concern that romaji composing could delay
+when a character commits, making a single-letter probe less reliable),
+but the client asked for the same treatment there too. Extended the
+probe branch's condition from `numeric_only and toggle_coords and
+edit_field` to just `toggle_coords and edit_field` — the retry loop's
+own read-back check is robust to whatever the probe's actual committed
+length turns out to be (it always backspaces the field's own *reported*
+length, never an assumed one), so this generalizes safely even though
+the romaji-composing reliability question for a single-letter probe
+remains unconfirmed on real hardware (worth watching on the next 名前/
+APN correction).
+
+This also surfaced a modeling gap in the test double
+(`_CyclingKeyboardModeClient`, not production code): its wrong-mode
+`input text` marker was a fixed 4-character placeholder regardless of
+how much was actually typed — harmless when the whole value was always
+typed in one call, but unrealistic once a field could legitimately be
+probed with just one character. Fixed to one garbled character per
+`input text` call, matching the per-keyevent path's existing model.
+Added a dedicated test,
+`test_fill_labeled_field_text_probe_only_retypes_first_character_on_wrong_attempt`,
+mirroring the numeric one, confirming 名前 only retypes/clears its first
+character ("r") on a wrong attempt, never the whole "rakuten.jp".
+
 ## SOG08 (Sony Xperia Ace III, Android 13)
 
 **Serial:** HQ63460161

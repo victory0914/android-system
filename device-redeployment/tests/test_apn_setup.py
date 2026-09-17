@@ -135,9 +135,14 @@ class _CyclingKeyboardModeClient(FakeAdbClient):
             self._typed = ""
         elif command.startswith('input text "'):
             # Appends, same real-device reasoning as
-            # _EchoingEditFieldMixin's docstring above.
+            # _EchoingEditFieldMixin's docstring above. When wrong, models
+            # exactly one garbled character per `input text` CALL (not
+            # per character of its content) — consistent with the
+            # per-keyevent path below (one "ガ" per keystroke) now that
+            # 2026-09-17's probe optimization means this can be called
+            # with anywhere from one character to the whole value.
             value = command[len('input text "') : -1]
-            self._typed += value if self._mode == self._CORRECT_MODE else "ガーブル"
+            self._typed += value if self._mode == self._CORRECT_MODE else "ガ"
         elif command == "input keyevent KEYCODE_DEL":
             self._typed = self._typed[:-1]
         elif command.startswith("input keyevent "):
@@ -476,9 +481,10 @@ def test_configure_apn_self_corrects_when_toggle_state_carries_over_between_fiel
     what this test is checking.)
 
     Mode transitions depend only on toggle TAPS, not on what's typed, so
-    MCC/MNC's 2026-09-17 single-digit-probe optimization (see the
-    dedicated test below) doesn't change how many attempts/taps any field
-    needs here — only how much gets typed and cleared on a wrong one."""
+    the single-character-probe optimization (see the dedicated tests
+    below — now applies to every field with a toggle configured, not just
+    MCC/MNC) doesn't change how many attempts/taps any field needs here —
+    only how much gets typed and cleared on a wrong one."""
     client = _CyclingKeyboardModeClient(
         ui_dumps=[LABELED_SCREEN_XML] * 40,
         toggle_coords=(106, 2239),
@@ -492,14 +498,19 @@ def test_configure_apn_self_corrects_when_toggle_state_carries_over_between_fiel
     # 名前: 2 taps (lands correct immediately). APN/MCC/MNC: 2 + 1 more
     # each (one single-tap correction apiece) = 3 each. 2 + 3*3 = 11.
     assert client.shell_calls.count(toggle_tap) == 11
-    # One corrective clear for each of the 3 fields that needed
-    # correcting: APN (non-numeric, no probe optimization — the full
-    # value is retyped and cleared) commits the fixed 4-character
-    # "ガーブル" placeholder when wrong = 4 DELs. MCC/MNC (numeric, probe
-    # optimization: only the value's first digit is typed/cleared on a
-    # wrong attempt, not the whole value) each commit one "ガ" for their
-    # single-digit probe = 1 DEL apiece. 4 + 1 + 1 = 6.
-    assert client.shell_calls.count("input keyevent KEYCODE_DEL") == 6
+    # Every field that needed correcting (APN, MCC, MNC) now only probes
+    # with its OWN FIRST CHARACTER when wrong, not the whole value —
+    # _CyclingKeyboardModeClient models one garbled "ガ" character per
+    # wrong-mode `input text`/keyevent call regardless of how much was
+    # actually typed, so each of the 3 corrected fields clears exactly 1
+    # character = 3 DELs total.
+    assert client.shell_calls.count("input keyevent KEYCODE_DEL") == 3
+    # Confirms APN is genuinely probing with just its first character
+    # ("r"), not retyping the whole "rakuten.jp" on the wrong attempt —
+    # the real behavior this test exists to pin down.
+    assert 'input text "r"' in client.shell_calls
+    assert 'input text "akuten.jp"' in client.shell_calls
+    assert 'input text "rakuten.jp"' not in client.shell_calls
 
 
 def test_configure_apn_gives_up_after_max_toggle_attempts():
@@ -547,6 +558,30 @@ def test_fill_labeled_field_numeric_probe_only_retypes_first_digit_on_wrong_atte
     # reveal the wrong mode without needing to type the whole value.
     assert client.shell_calls.count("input keyevent KEYCODE_4") == 3
     assert client.shell_calls.count("input keyevent KEYCODE_0") == 1
+
+
+def test_fill_labeled_field_text_probe_only_retypes_first_character_on_wrong_attempt():
+    """Extended, same day (client feedback from watching real SOG07
+    hardware): 名前/APN were observed retyping the WHOLE value on a wrong
+    attempt, same as MCC/MNC used to. The probe optimization now applies
+    to every field with a toggle configured, not just numeric ones — this
+    pins down that 名前 only retypes/clears its first character ("r"),
+    never the whole "rakuten.jp", on a wrong attempt."""
+    client = _CyclingKeyboardModeClient(
+        ui_dumps=[LABELED_SCREEN_XML] * 20,
+        toggle_coords=(106, 2239),
+        cycle_length=3,
+        starting_mode=0,  # attempt 0's 2 taps land on mode 2 — wrong.
+    )
+    apn = {**LABELED_PROFILE.apn_settings(), "keyboard_mode_toggle_tap": [106, 2239]}
+    result = _fill_labeled_field(client, apn, "名前", "rakuten.jp", numeric_only=False)
+    assert result is True
+    assert 'input text "r"' in client.shell_calls
+    assert 'input text "akuten.jp"' in client.shell_calls
+    assert 'input text "rakuten.jp"' not in client.shell_calls
+    # Exactly one corrective backspace — clearing the 1-character wrong
+    # probe, never the full (wrongly-typed) 10-character value.
+    assert client.shell_calls.count("input keyevent KEYCODE_DEL") == 1
 
 
 def test_configure_apn_taps_keyboard_toggle_twice_before_every_field():
