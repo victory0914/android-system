@@ -71,6 +71,33 @@ hardware bugs found running the automation" section for the full
 account. **Not yet re-confirmed on real hardware with this fix in
 place** — next thing to retest.
 
+**🎉🎉 Update, 2026-09-18: found the ACTUAL root cause — wrong screen,
+not a refresh-timing issue.** The force-stop fix above didn't help,
+because the real problem was never about staleness: `android.settings.
+APN_SETTINGS` reaches a DIFFERENT, non-authoritative APN screen than the
+one the client sees when manually checking (Settings > Network &
+internet > SIM > Rakuten > "アクセス ポイント名"). Client supplied a real
+dump of that carrier-specific screen (`mobile_network_SHG07.xml`),
+proving "アクセス ポイント名" (with a space) is a genuinely real,
+tappable row — distinct from "アクセスポイント名" (no space, the
+destination screen's own title), which an earlier version of this
+project mistakenly concluded wasn't tappable at all. Fixed:
+`apn_settings.reach_via_wifi_settings_intent: true` (SHG07, SHG10) now
+routes navigation through `android.settings.WIFI_SETTINGS` + the real
+gear-icon + "アクセス ポイント名" taps instead of the old intent. See
+docs/record.md's new SHG07 subsection for the full account.
+
+**⚠️ SOG07/SOG08 are NOT fixed and may have the identical problem** —
+their equivalent carrier-settings screen has never been captured, so
+they still use the original (now-suspect) `android.settings.APN_SETTINGS`
+path unchanged. Needs its own real dump (Settings > Network & internet >
+SIM > carrier name screen, before AND after tapping whatever the
+equivalent of "アクセス ポイント名" is on Sony's build) before applying
+the same fix there. **Not yet re-confirmed on real hardware for
+SHG07/SHG10 either** — the next real test needs to confirm both that
+navigation reaches the real screen AND that a saved entry actually shows
+up there.
+
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:
 `SUCCESS: device 352063910272451 reached LOGIN_INSTALL` — Wi-Fi (already

@@ -1083,6 +1083,72 @@ coordinate → applying it to all four fields → this end-to-end success).
 SHG07's Wi-Fi + APN flow is now confirmed working end-to-end on real
 hardware, the same milestone SHG10 reached 2026-09-11.
 
+### 🎉 2026-09-18: root cause found for "saved APN never actually shows up" — wrong screen, not a UI-refresh delay
+
+After both the SHG10 keyboard-toggle fix and the `am force-stop
+com.android.settings` post-save fix, a parallel 4-device run still
+warned `'rakuten.jp' wasn't spotted back on the APN list` for all 4
+devices — and this time the client independently confirmed on-device
+that the entries genuinely weren't there. The client's own diagnosis,
+which turned out correct: the screen `_navigate_apn_menu()` was reaching
+via `android.settings.APN_SETTINGS` was never the same screen the client
+sees when manually checking (Settings > Network & internet > SIM >
+Rakuten > "アクセス ポイント名"/Access Point Names).
+
+Direct evidence: the client supplied a real dump of the carrier-specific
+mobile-network-settings screen,
+`tests/fixtures/AQUOS sense6s（SHG07）/mobile_network_SHG07.xml`
+(2026-09-18). It shows **"アクセス ポイント名" (WITH a space)** as a
+genuine, tappable `android:id/title` row (its parent `LinearLayout` is
+`clickable="true"`) — a DIFFERENT string from **"アクセスポイント名"
+(no space)**, which is the *destination* screen's own title (rendered
+via `content-desc`, confirmed since 2026-09-11). An earlier version of
+this file conflated the two and concluded the with-space variant "was
+never a text node to tap — there was nothing there to find," dropping it
+from `menu_path` entirely. That conclusion was simply wrong — it just
+never had real data for this specific screen before.
+
+This also retroactively explains a detail noted back on 2026-09-11 and
+dismissed as non-blocking at the time: the `android.settings.APN_SETTINGS`
+-reached screen shows a warning, 「このユーザーはアクセスポイント名設定
+を利用できません」("this user cannot use APN name settings"). The "+"
+button there still worked mechanically (a dialog opens, typing works,
+save reports no validation error) — but the warning was likely a real
+signal that this is a different, non-authoritative APN context the whole
+time, not the SIM's actual live one.
+
+**Fix**: `apn_setup.py`'s `_navigate_apn_menu()` gained an opt-in
+`apn_settings.reach_via_wifi_settings_intent` flag. When set, navigation
+uses `android.settings.WIFI_SETTINGS` (the SAME intent `wifi_settings`
+itself already uses reliably, regardless of the device's current
+foreground screen — more robust than `menu_path`'s own first "設定" step,
+which only works starting from the home screen) to reach "Wi-Fi とモバ
+イルネットワーク", then completes the model's `menu_path` (gear icon,
+then the real "アクセス ポイント名" tap) to reach the actual SIM-scoped
+APN list. `android.settings.APN_SETTINGS` is no longer used at all for
+this model. Set on both `sharp_aquos_sense6s.yaml` (real, confirmed on
+this exact unit) and `sharp_aquos_sense7.yaml` (same SHARP AQUOS
+lineage, same original `menu_path` this was copied from — same
+inheritance basis every other shared SHG07↔SHG10 value in this project
+already uses; not independently re-confirmed on the SHG10 unit itself).
+
+New tests: `test_configure_apn_reaches_list_via_wifi_settings_intent_and_
+menu_path`, `test_configure_apn_wifi_settings_nav_fails_loudly_if_intent_
+errors` (`tests/test_apn_setup.py`); `test_mobile_network_screen_title_
+is_the_carrier_name`, `test_mobile_network_row_titles_share_generic_id`,
+`test_access_point_names_row_is_real_and_tappable`,
+`test_access_point_names_row_text_has_a_space_not_the_title_variant`
+(`tests/test_real_shg07_fixtures.py`, against the real fixture directly).
+
+**Not yet re-confirmed end-to-end on real hardware** — the next real test
+needs to show both that navigation reaches the real SIM-scoped screen
+AND that a saved entry actually appears there afterward. **SOG07/SOG08
+have NOT been touched** — their equivalent carrier-settings screen and
+tappable label have not been captured; they still use the original
+`android.settings.APN_SETTINGS` path and may have the exact same
+underlying problem, unconfirmed either way. See
+PENDING_REAL_DEVICE_DATA.md.
+
 ---
 
 ## SOG07 (Sony Xperia 10 IV, Android 14)

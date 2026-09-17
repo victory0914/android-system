@@ -879,6 +879,85 @@ def test_configure_apn_falls_back_to_menu_path_when_intent_lands_elsewhere():
     assert gear_tap in client.shell_calls
 
 
+# --- reach_via_wifi_settings_intent (real, SHG07/SHG10, 2026-09-18) --------
+# android.settings.APN_SETTINGS turned out to reach a non-authoritative APN
+# context — real client testing showed saves made there never appeared on
+# the APN list reached by manually navigating through the SIM's own carrier
+# settings. See apn_setup.py's _navigate_apn_menu() docstring.
+
+WIFI_SETTINGS_NAV_SCREEN_XML = """<hierarchy>
+  <node resource-id="com.android.settings:id/settings_button" bounds="[0,0][100,100]" />
+  <node resource-id="android:id/title" text="アクセス ポイント名" bounds="[0,100][100,200]" />
+  <node content-desc="アクセスポイント名" bounds="[0,200][1080,300]" />
+  <node resource-id="android:id/title" text="名前" bounds="[0,300][100,400]" />
+  <node resource-id="android:id/title" text="APN" bounds="[0,400][100,500]" />
+  <node resource-id="android:id/title" text="MCC" bounds="[0,500][100,600]" />
+  <node resource-id="android:id/title" text="MNC" bounds="[0,600][100,700]" />
+  <node resource-id="android:id/edit" bounds="[0,700][100,800]" />
+  <node resource-id="android:id/button1" bounds="[0,800][100,900]" />
+</hierarchy>"""
+
+WIFI_SETTINGS_NAV_PROFILE = ModelProfile(
+    {
+        "model": "SHG07-like WIFI_SETTINGS-nav Test",
+        "model_number": "TST12",
+        "manufacturer": "Test",
+        "android_version": 13,
+        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+        "apn_settings": {
+            **LABELED_PROFILE.apn_settings(),
+            "reach_via_wifi_settings_intent": True,
+            "menu_path": [
+                {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
+                {"type": "text", "value": "アクセス ポイント名"},
+            ],
+        },
+    }
+)
+
+
+def test_configure_apn_reaches_list_via_wifi_settings_intent_and_menu_path():
+    """With reach_via_wifi_settings_intent set, navigation must use
+    android.settings.WIFI_SETTINGS (never APN_SETTINGS), then complete
+    the full menu_path (gear icon, then the real "アクセス ポイント名"
+    tap) before field-filling starts."""
+    client = FakeAdbClient(ui_dumps=[WIFI_SETTINGS_NAV_SCREEN_XML] * 30)
+
+    result = configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is False  # still fails at the (unresolved) save step, not navigation
+    assert "am start -a android.settings.WIFI_SETTINGS" in client.shell_calls
+    assert "am start -a android.settings.APN_SETTINGS" not in client.shell_calls
+    gear_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    final_tap = "input tap {} {}".format((0 + 100) // 2, (100 + 200) // 2)
+    assert gear_tap in client.shell_calls
+    assert final_tap in client.shell_calls
+    # Positive proof landing was recognized and field-filling proceeded.
+    name_field_tap = "input tap {} {}".format((0 + 100) // 2, (300 + 400) // 2)
+    assert name_field_tap in client.shell_calls
+
+
+def test_configure_apn_wifi_settings_nav_fails_loudly_if_intent_errors():
+    """If the WIFI_SETTINGS intent itself fails, this path has no
+    fallback (unlike the original APN_SETTINGS path) — must fail loudly
+    rather than silently trying something else."""
+
+    class NoIntentClient(FakeAdbClient):
+        def shell(self, command, timeout=30):
+            if command == "am start -a android.settings.WIFI_SETTINGS":
+                from src.device.adb_client import AdbCommandError
+                raise AdbCommandError(command, "intent not supported on this build")
+            return super().shell(command, timeout=timeout)
+
+    client = NoIntentClient(ui_dumps=[WIFI_SETTINGS_NAV_SCREEN_XML] * 30)
+
+    result = configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is False
+    assert not any(c.startswith("input tap") for c in client.shell_calls)
+
+
 def test_configure_apn_labeled_shape_missing_mcc_label_fails_cleanly():
     """MCC/MNC are mandatory for the labeled shape (confirmed on real
     hardware, 2026-09-08) — a profile missing mcc_field_label must fail

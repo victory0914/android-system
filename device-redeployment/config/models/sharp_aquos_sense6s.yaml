@@ -147,15 +147,30 @@ wifi_settings:
 # loudly at the first field/dialog tap rather than silently proceeding —
 # see apn_setup.py's _fill_labeled_field().
 apn_settings:
+  # RESOLVED (real, 2026-09-18): android.settings.APN_SETTINGS (the
+  # original primary navigation) reaches a screen that looks like an APN
+  # editor but isn't the active SIM's real, live context — client testing
+  # showed saves made there never actually appeared on the APN list
+  # reached by manually navigating Settings > Network & internet > SIM >
+  # Rakuten > "アクセス ポイント名" (WITH a space — a genuinely real,
+  # clickable row, confirmed via tests/fixtures/AQUOS sense6s（SHG07）/
+  # mobile_network_SHG07.xml; distinct from "アクセスポイント名" without a
+  # space, the *destination* screen's own title, which is what caused
+  # this step to be mistakenly dropped as untappable below). See
+  # apn_setup.py's _navigate_apn_menu() docstring for the full account.
+  reach_via_wifi_settings_intent: true
+  # menu_path now holds ONLY the steps needed AFTER
+  # android.settings.WIFI_SETTINGS reaches "Wi-Fi とモバイルネットワーク"
+  # (reach_via_wifi_settings_intent above skips the
+  # 設定/ネットワークとインターネット/... text-tap steps that used to
+  # manually re-derive that same screen). The gear icon step was already
+  # real/confirmed; the final "アクセス ポイント名" tap is the new,
+  # previously-missing step.
   menu_path:
-    - type: text
-      value: "設定"
-    - type: text
-      value: "ネットワークとインターネット"
-    - type: text
-      value: "Wi-Fi とモバイルネットワーク"
     - type: resource_id
       value: "com.android.settings:id/settings_button"
+    - type: text
+      value: "アクセス ポイント名"
   field_row_resource_id: "android:id/title"
   name_field_label: "名前"
   apn_field_label: "APN"

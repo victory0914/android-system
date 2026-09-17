@@ -102,6 +102,15 @@ def test_load_shg10_model_file_screen_driven_wizard_and_labeled_apn_fields():
     assert apn["field_row_resource_id"] == "android:id/title"
     assert apn["name_field_label"] == "名前"
     assert apn["apn_field_label"] == "APN"
+    # RESOLVED (real, 2026-09-18): android.settings.APN_SETTINGS turned
+    # out to reach a non-authoritative APN context — see
+    # apn_setup.py's _navigate_apn_menu() docstring. Applied here on the
+    # same lineage-inheritance basis as SHG07's independent confirmation.
+    assert apn["reach_via_wifi_settings_intent"] is True
+    assert apn["menu_path"] == [
+        {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
+        {"type": "text", "value": "アクセス ポイント名"},
+    ]
     # MCC/MNC DO exist on this build (settles docs/record.md's open
     # question) — must not have been deleted from the schema.
     assert apn["mcc_field_label"] == "MCC"
@@ -180,6 +189,15 @@ def test_load_shg07_model_file_inherited_from_shg10():
     assert apn["add_button_content_desc"] == "新しい APN"
     assert apn["overflow_menu_content_desc"] == "その他のオプション"
     assert apn["save_menu_item_text"] == "保存"
+    # RESOLVED — real, directly confirmed ON SHG07 ITSELF (2026-09-18, a
+    # real dump of the carrier mobile-network-settings screen) —
+    # android.settings.APN_SETTINGS reaches a non-authoritative APN
+    # context; see apn_setup.py's _navigate_apn_menu() docstring.
+    assert apn["reach_via_wifi_settings_intent"] is True
+    assert apn["menu_path"] == [
+        {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
+        {"type": "text", "value": "アクセス ポイント名"},
+    ]
     # Briefly real SHG07 data (2026-09-14: found the active IME interferes
     # with plain `input text` for 名前/APN), then reverted 2026-09-15 once
     # round 2 proved per-keyevent typing (the fix this enabled) fails the

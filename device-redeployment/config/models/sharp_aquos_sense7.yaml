@@ -139,35 +139,35 @@ wifi_settings:
   connect_button_text: "接続"
 
 apn_settings:
-  # PRIMARY navigation (real, hand-confirmed 2026-09-08/09):
-  # `adb shell am start -a android.settings.APN_SETTINGS` reaches the APN
-  # list screen in a single step — apn_setup.py tries this before ever
-  # touching menu_path (same pattern as wifi_setup.py's WIFI_SETTINGS
-  # intent). Landing is confirmed by checking for "アクセスポイント名" as a
-  # content-desc (see below) — not hardcoded here since it's the same
-  # constant used for verification, not a navigation step.
-  #
-  # FALLBACK menu_path (only used if the intent fails or doesn't land
-  # correctly): 設定 → ネットワークとインターネット → Wi-Fi とモバイルネットワーク
-  # → (gear icon next to the carrier name). Ends at the gear icon — it does
-  # NOT continue to a tap on "アクセスポイント名", unlike an earlier version
-  # of this file. That was a real, confirmed-on-hardware bug: "アクセスポイ
-  # ント名" is the *destination screen's own title*, rendered via
-  # content-desc on the toolbar (the exact same pattern already confirmed
-  # for the edit form's "アクセスポイントの編集" — see the collapsing_toolbar
-  # node in tests/fixtures/apn_entry_*_SHG10.xml). It was never a `text`
-  # node to tap — there was nothing there to find, which is the actual
-  # reason menu_path navigation kept failing before this fix, not a
-  # resource-id/text mismatch.
+  # SUPERSEDED (real, 2026-09-18 — see apn_setup.py's _navigate_apn_menu()
+  # docstring for the full account): `android.settings.APN_SETTINGS`
+  # (originally hand-confirmed 2026-09-08/09 as the primary navigation)
+  # turned out to reach a screen that looks like an APN editor but isn't
+  # the active SIM's real, live context — saves made there never actually
+  # appeared on the APN list reached by manually navigating Settings >
+  # Network & internet > SIM > (carrier) > "アクセス ポイント名". This was
+  # confirmed on SHG07 (same SHARP AQUOS lineup, same original menu_path
+  # copied verbatim from this file — see sharp_aquos_sense6s.yaml) via a
+  # real dump of that screen, tests/fixtures/AQUOS sense6s（SHG07）/
+  # mobile_network_SHG07.xml; not independently re-confirmed on THIS
+  # exact SHG10 unit, but applied here on the same lineage-inheritance
+  # basis every other SHG07↔SHG10 shared value in this file already uses.
+  reach_via_wifi_settings_intent: true
+  # menu_path now holds ONLY the steps needed AFTER
+  # android.settings.WIFI_SETTINGS reaches "Wi-Fi とモバイルネットワーク"
+  # (reach_via_wifi_settings_intent above skips the
+  # 設定/ネットワークとインターネット/... text-tap steps that used to
+  # manually re-derive that same screen). The gear icon step was already
+  # real/confirmed; the final "アクセス ポイント名" tap (WITH a space —
+  # distinct from "アクセスポイント名" without one, the destination
+  # screen's own title, which is what caused this exact step to be
+  # mistakenly judged untappable and dropped from an earlier version of
+  # this file) is the new, previously-missing step.
   menu_path:
-    - type: text
-      value: "設定"
-    - type: text
-      value: "ネットワークとインターネット"
-    - type: text
-      value: "Wi-Fi とモバイルネットワーク"
     - type: resource_id
       value: "com.android.settings:id/settings_button"
+    - type: text
+      value: "アクセス ポイント名"
 
   # RESOLVED (real: tests/fixtures/apn_entry_{top,middle,bottom}_SHG10.xml).
   # The edit form is a PreferenceScreen list, not a flat set of EditTexts:

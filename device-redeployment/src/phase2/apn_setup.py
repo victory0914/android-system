@@ -529,15 +529,72 @@ def _looks_like_apn_list_screen(ui_xml: str) -> bool:
 def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
     """Reach the APN entry (list) screen.
 
-    Real hand-testing on SHG10 (2026-09-08/09) confirmed
-    `adb shell am start -a android.settings.APN_SETTINGS` reaches the APN
-    list screen in a single step, bypassing the multi-tap Settings ->
-    Network & internet -> Wi-Fi and mobile network -> gear icon path
-    entirely. Tried first; falls back to `apn_settings['menu_path']`
-    (Settings -> ... -> the gear icon; note the destination screen's own
-    title is not itself a tap target — see _looks_like_apn_list_screen)
-    only if the intent isn't available or doesn't land correctly.
+    `apn_settings.reach_via_wifi_settings_intent: true` (SHG07, 2026-09-18)
+    — RESOLVED (real): `android.settings.APN_SETTINGS` (the original
+    primary path, 2026-09-08/09) reaches A screen that looks like an APN
+    editor (content-desc "APN") but turned out NOT to be the actual
+    active SIM's live APN context — real client testing (a 4-device
+    parallel run, then independent manual verification on-device) showed
+    saves made there never actually appeared on the APN list reached by
+    manually navigating Settings > Network & internet > SIM > (carrier
+    name) > "アクセス ポイント名". That screen ALSO showed a real
+    warning, 「このユーザーはアクセスポイント名設定を利用できません」
+    ("this user cannot use APN name settings") — assessed at the time
+    (2026-09-11) as non-blocking since the "+" button still worked
+    mechanically; in hindsight, likely a real signal this was the wrong
+    context all along.
+
+    "アクセス ポイント名" (WITH a space) is a genuinely real, clickable
+    `android:id/title` row on the carrier-specific mobile-network-settings
+    screen (confirmed real, tests/fixtures/AQUOS sense6s（SHG07）/
+    mobile_network_SHG07.xml, 2026-09-18) — distinct from
+    "アクセスポイント名" (no space), the *destination* screen's own title,
+    which is what caused this exact step to be mistakenly judged
+    untappable and dropped from `menu_path` in an earlier version of this
+    file (see that entry's own history below).
+
+    When this flag is set, reaches the SAME "Wi-Fi とモバイルネットワーク"
+    -equivalent screen `wifi_settings`'s own `android.settings.WIFI_SETTINGS`
+    intent already reliably reaches (proven every real run so far,
+    regardless of the device's current foreground screen) — more robust
+    than menu_path's own first "設定" step, which only works starting from
+    the home screen. `apn_settings.menu_path` for a model with this flag
+    set should hold ONLY the steps still needed AFTER that screen (the
+    gear icon, then the real final tap) — not the
+    設定/ネットワークとインターネット/... steps used to manually re-derive
+    it via text taps, which the intent already bypasses.
+
+    Models WITHOUT this flag set (SOG07/SOG08 — not yet independently
+    confirmed to have the same intent-lands-on-the-wrong-screen problem;
+    their own SIM-scoped screen has not been captured) keep the original
+    behavior: `android.settings.APN_SETTINGS` tried first, falling back to
+    the full multi-step `menu_path` only if that fails or doesn't land
+    correctly.
     """
+    if apn.get("reach_via_wifi_settings_intent"):
+        try:
+            client.shell("am start -a android.settings.WIFI_SETTINGS")
+        except AdbCommandError as exc:
+            logger.info(
+                "am start WIFI_SETTINGS intent failed (APN navigation via "
+                "the SIM-scoped path): %s", exc
+            )
+            return False
+        menu_path = apn.get("menu_path")
+        if not menu_path:
+            return False
+        if not navigate_menu_path(client, menu_path):
+            return False
+        ui_xml = dump_ui(client)
+        if _looks_like_apn_list_screen(ui_xml):
+            logger.info("reached APN list via the SIM-scoped menu_path")
+            return True
+        logger.error(
+            "apn: navigated the full SIM-scoped menu_path but didn't land "
+            "on a recognizable APN list screen"
+        )
+        return False
+
     try:
         client.shell("am start -a android.settings.APN_SETTINGS")
     except AdbCommandError as exc:
