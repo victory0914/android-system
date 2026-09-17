@@ -1146,6 +1146,37 @@ this unit.
   with all three fixes in place (numeric toggle coordinate + numeric
   text-entry mechanism + text-keyboard coordinate) — next real-hardware
   milestone.
+- *2026-09-17 (fourth finding, same day):* with `use_text_entry_for_numeric`
+  in place, the client reported the SAME full-width symptom persisting
+  on MCC/MNC, and separately observed (watching the device live) what
+  looked like the toggle key never being tapped at all before typing.
+  Traced the exact shell-command sequence configure_apn() sends for the
+  real SOG07 profile directly (`ModelProfile.load()` +
+  `EchoingFakeAdbClient`, no guessing) — confirmed
+  `input tap 93 2300` / `input tap 93 2300` / `input text "440"` fires
+  exactly as expected; the toggle logic is genuinely present and
+  executing, not missing. The likely explanation for what looked like
+  "nothing happens": `adb shell input tap` produces no visible
+  ripple/indicator at all unless Android's separate "Show taps"
+  developer option is enabled (distinct from "Pointer location", which
+  was already on) — a real, successful synthetic tap can be completely
+  invisible on screen.
+- The underlying full-width symptom, though, is real and still
+  unexplained by anything in the code itself. Hypothesis (not yet
+  confirmed): the toggle taps fire immediately after the field's edit
+  dialog opens, with no pause for the on-screen keyboard's slide-in
+  animation — unlike the manual scripted confirmation, where a human
+  naturally pauses between commands. Added
+  `_KEYBOARD_TOGGLE_TAP_DELAY_SECONDS = 0.5` — a deliberate wait
+  immediately before every pair of toggle taps. Explicitly documented in
+  code as a hypothesis pending real-hardware confirmation, not a proven
+  fix — if a retest still shows the same symptom, this should be treated
+  as ruled out, not kept "just in case."
+- Also requested by the client: since `main_phase2.py` now retries the
+  whole flow up to 3 times by default, and the SOG07 debugging in this
+  session showed how that can hide/repeat an identical failure 3 times
+  before it's visible, they were reminded to use `--max-retries 0` while
+  iterating on a specific, repeatable issue like this one.
 
 ## SOG08 (Sony Xperia Ace III, Android 13)
 

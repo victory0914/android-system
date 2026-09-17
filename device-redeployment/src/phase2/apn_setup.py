@@ -96,6 +96,21 @@ _MNC_PATTERN = re.compile(r"\d{2,3}")
 # refresh — not a real save failure.
 _POST_SAVE_RECHECK_DELAY_SECONDS = 2.0
 
+# Hypothesis-driven fix, NOT yet confirmed on real hardware (2026-09-17):
+# a live SOG07 run kept committing full-width MCC/MNC digits even with
+# both the correct keyboard_mode_toggle_tap_numeric coordinate AND
+# use_text_entry_for_numeric already confirmed correct in isolation (a
+# manual, human-paced scripted test with the same tap+type sequence
+# succeeded). The one concrete difference between the automated path and
+# that manual test: the automated one fires the toggle taps immediately
+# after the field's edit dialog opens, with no pause for the on-screen
+# keyboard's slide-in animation to finish, whereas a human naturally
+# pauses between commands. This adds that pause back before the toggle
+# taps. If a retest still shows the same symptom, this delay is NOT the
+# fix and should be treated as ruled out, not silently kept "just in
+# case" — see docs/record.md for the real-hardware result once known.
+_KEYBOARD_TOGGLE_TAP_DELAY_SECONDS = 0.5
+
 
 def _fill_legacy_field(client: AdbClientProtocol, resource_id: str, value: str) -> bool:
     """Stage A shape: the field itself has a dedicated resource-id — tap it
@@ -237,6 +252,10 @@ def _fill_labeled_field(
     else:
         toggle_coords = apn.get("keyboard_mode_toggle_tap")
     if toggle_coords:
+        # See _KEYBOARD_TOGGLE_TAP_DELAY_SECONDS's module-level comment —
+        # a real, unconfirmed hypothesis for a repeatable SOG07 MCC
+        # failure, not a proven fix.
+        time.sleep(_KEYBOARD_TOGGLE_TAP_DELAY_SECONDS)
         x, y = toggle_coords
         tap_at_coordinates(client, x, y)
         tap_at_coordinates(client, x, y)

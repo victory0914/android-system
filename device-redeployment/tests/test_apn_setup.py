@@ -12,9 +12,21 @@ there to find, not a resource-id/text mismatch to work around."""
 import logging
 import xml.etree.ElementTree as ET
 
+import pytest
+
 from src.device.model_profile import ModelProfile
 from src.phase2.apn_setup import configure_apn
 from tests.fakes import FakeAdbClient
+
+
+@pytest.fixture(autouse=True)
+def _no_real_delays(monkeypatch):
+    """_KEYBOARD_TOGGLE_TAP_DELAY_SECONDS (2026-09-17) and
+    _POST_SAVE_RECHECK_DELAY_SECONDS both add a real time.sleep() in
+    production code — stub it out for every test in this file so the
+    suite stays fast; none of these tests assert on real elapsed time,
+    only on call sequences/counts."""
+    monkeypatch.setattr("src.phase2.apn_setup.time.sleep", lambda _seconds: None)
 
 # Reverse of ui_automator.py's input_digits_direct()/input_ascii_direct()
 # keycode maps — used only by _EchoingEditFieldMixin below to reconstruct
@@ -351,6 +363,25 @@ KEYBOARD_TOGGLE_PROFILE = ModelProfile(
         "apn_settings": {**LABELED_PROFILE.apn_settings(), "keyboard_mode_toggle_tap": [106, 2239]},
     }
 )
+
+
+def test_configure_apn_waits_before_toggle_taps(monkeypatch):
+    """2026-09-17, hypothesis-driven fix for a real, repeatable SOG07 MCC
+    failure that persisted even with the confirmed coordinate and typing
+    mechanism: a short delay must happen immediately before each pair of
+    toggle taps, giving the on-screen keyboard's slide-in animation time
+    to finish. Not yet confirmed as the actual fix on real hardware —
+    see _KEYBOARD_TOGGLE_TAP_DELAY_SECONDS's docstring."""
+    sleep_calls = []
+    monkeypatch.setattr(
+        "src.phase2.apn_setup.time.sleep", lambda seconds: sleep_calls.append(seconds)
+    )
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
+    configure_apn(client, KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
+    from src.phase2.apn_setup import _KEYBOARD_TOGGLE_TAP_DELAY_SECONDS
+
+    # 4 fields, one delay before each field's pair of toggle taps.
+    assert sleep_calls == [_KEYBOARD_TOGGLE_TAP_DELAY_SECONDS] * 4
 
 
 def test_configure_apn_taps_keyboard_toggle_twice_before_every_field():

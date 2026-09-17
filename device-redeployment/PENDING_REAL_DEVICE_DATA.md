@@ -104,9 +104,27 @@ and keyevents were the fix. New opt-in flag
 SOG07's config now sets it. **SOG08 needs the same
 capture-and-confirm treatment for MCC/MNC (both the toggle coordinate
 and possibly this same typing-mechanism issue) before its APN flow can
-be trusted.** Neither device has completed a full end-to-end
-`configure_apn()` run with all fixes in place yet — that's the next
-real-hardware milestone to watch for.
+be trusted.**
+
+**Fourth finding, same day: the symptom persisted even with the
+mechanism fix, and it looked (to the client, watching live) like the
+toggle wasn't being tapped at all.** Traced the real SOG07 profile's
+exact shell-command sequence directly (not a guess) — confirmed the
+toggle taps genuinely fire, correctly, every time; likely explanation
+for the visual "nothing happens": Android's "Show taps" developer
+option (separate from "Pointer location") needs to be on for a
+synthetic `adb shell input tap` to show any visible indicator at all.
+The underlying full-width symptom is still real and unexplained by
+anything wrong in the code, though. Added (2026-09-17), as an explicitly
+**unconfirmed hypothesis**: `_KEYBOARD_TOGGLE_TAP_DELAY_SECONDS = 0.5`,
+a short wait immediately before every pair of toggle taps, on the theory
+that the automated path fires them before the on-screen keyboard's
+slide-in animation finishes (unlike the manual scripted confirmation,
+which was naturally paced by a human). **If a retest still shows the
+same symptom, this delay should be treated as ruled out, not kept.**
+Neither device has completed a full end-to-end `configure_apn()` run
+with all fixes in place yet — that's the next real-hardware milestone to
+watch for.
 
 Also added, same day at the client's request: `--max-retries` CLI flag
 on `main_phase2.py` (default: config's value, 3; `--max-retries 0` = a
