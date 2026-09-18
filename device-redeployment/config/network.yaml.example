@@ -8,3 +8,20 @@ apn:
   apn_name: "<APN value from client>"
   mcc: "<mobile country code>"
   mnc: "<mobile network code>"
+
+# Optional. The apn/wifi blocks above are shared by every device in a
+# batch run — this works as long as every physical unit's actually
+# installed SIM matches those values. Real finding (2026-09-18): that
+# isn't always true. One test unit's SIM (Xperia 10 IV, serial
+# HQ632M1012) had MNC 10 while the rest of the batch's SIMs were MNC 11 —
+# Android silently rejected the new APN entry because its MCC/MNC didn't
+# match the active SIM's own, with no visible dialog and no error in the
+# tool's own log; the automation itself was working correctly the whole
+# time. Use device_overrides, keyed by adb serial, to replace just the
+# specific keys that differ for one unit — every key you don't list here
+# still comes from the shared wifi/apn blocks above.
+#
+# device_overrides:
+#   HQ632M1012:
+#     apn:
+#       mnc: "10"

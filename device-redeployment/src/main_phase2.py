@@ -258,6 +258,43 @@ def _resolve_devices(args: argparse.Namespace, parser: argparse.ArgumentParser) 
     return args.devices if args.devices else [(args.serial, args.model)]
 
 
+def _resolve_device_network_config(base_config: dict, serial: str) -> dict:
+    """Merge `base_config`'s shared `wifi`/`apn` blocks with any
+    per-device override for `serial` under `device_overrides`, and return
+    the resolved config for that one device — `base_config` itself is
+    never mutated, and every other device keeps seeing the unmodified
+    shared config.
+
+    Real finding (2026-09-18): a physical unit's actually-installed SIM
+    can have a different MCC/MNC than the rest of a batch — confirmed on
+    SOG07 unit HQ632M1012, whose real SIM has MNC 10 while every other
+    device in the same run uses the shared config's MNC 11. Android
+    silently rejects a new APN entry whose MCC/MNC doesn't match the
+    active SIM's own, with no visible dialog and no error anywhere in
+    this tool's own log — `configure_apn()` was working correctly the
+    whole time; the config value was simply wrong for this one unit.
+    `config/network.yaml`'s single shared `apn` block can't represent
+    that, hence this override mechanism.
+
+    A shallow merge per top-level section (`wifi`/`apn`), not a deep
+    recursive merge — an override only needs to replace the specific
+    keys it sets (e.g. just `mnc`), leaving every other key in that
+    section (and any other section) exactly as the shared config has it.
+    That's all the schema currently needs; a deeper merge would just be
+    unused complexity.
+    """
+    resolved = {k: v for k, v in base_config.items() if k != "device_overrides"}
+    overrides = base_config.get("device_overrides", {}).get(serial)
+    if not overrides:
+        return resolved
+    for section, section_overrides in overrides.items():
+        if isinstance(section_overrides, dict) and isinstance(resolved.get(section), dict):
+            resolved[section] = {**resolved[section], **section_overrides}
+        else:
+            resolved[section] = section_overrides
+    return resolved
+
+
 def _run_one_device(
     serial: str,
     model_number: str,
@@ -278,6 +315,19 @@ def _run_one_device(
         logger.error("device %s: %s", serial, error)
         return serial, SlotState.ESCALATED, error
 
+    device_network_config = _resolve_device_network_config(network_config, serial)
+    if serial in network_config.get("device_overrides", {}):
+        logger.info(
+            "device %s: applying per-device network config override "
+            "(config/network.yaml's device_overrides)",
+            serial,
+        )
+        try:
+            _check_no_placeholder_values(device_network_config)
+        except NetworkConfigError as exc:
+            logger.error("device %s: %s", serial, exc)
+            return serial, SlotState.ESCALATED, str(exc)
+
     client = AdbClient(serial, adb_path=adb_path)
     slot = Slot(serial, client, max_retry=max_retry)
     logger.info(
@@ -287,7 +337,7 @@ def _run_one_device(
     )
 
     final_state = run_slot_with_retries(
-        slot, profile, network_config, skip_wizard=skip_wizard
+        slot, profile, device_network_config, skip_wizard=skip_wizard
     )
     return serial, final_state, slot.last_error
 

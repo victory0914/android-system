@@ -52,7 +52,13 @@ directory pytest is invoked from.
 
 1. Copy `config/network.yaml.example` to `config/network.yaml` and fill in
    the real Wi-Fi SSID/password and carrier APN/MCC/MNC values.
-   `config/network.yaml` is gitignored — never commit it.
+   `config/network.yaml` is gitignored — never commit it. These values
+   are shared across every device in a batch run by default — if one
+   physical unit's actually-installed SIM needs different values (real
+   finding, 2026-09-18: one unit's SIM had a different MNC than the rest
+   of the batch, and Android silently rejected the APN save with no
+   error), add a `device_overrides` entry for its serial; see the
+   example file for the exact format.
 2. Confirm `config/settings.yaml`'s `adb.platform_tools_path` points at a
    real `platform-tools` install.
 3. **Factory reset the device and complete the setup wizard manually**,

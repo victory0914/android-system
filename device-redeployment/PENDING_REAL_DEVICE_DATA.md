@@ -156,20 +156,24 @@ silently rejecting the whole entry.
 result. Removed, per this project's standing rule not to keep an
 unconfirmed fix once it's been directly disproven.
 
-**New lead, same day: possible SIM/carrier mismatch.** `config/
-network.yaml` supplies ONE shared APN/MCC/MNC value set for all 4
-devices — no per-device carrier config exists. SOG07's APN list already
-shows **OCNモバイルONE** and **docomo** entries, not Rakuten — raising
-the question of whether SOG07's real installed SIM is a different
-carrier than the Rakuten values (`rakuten.jp`, MCC 440, MNC 11) being
-entered for every device. If Android validates a new APN's MCC/MNC
-against the active SIM's own MCC/MNC and they don't match, that alone
-would explain a silent, no-dialog rejection — consistent with every
-other observation so far. Asked the client to check via
-`adb shell getprop gsm.sim.operator.alpha` /
-`getprop gsm.sim.operator.numeric` on SOG07 (ideally compared against a
-working device). Not yet confirmed either way. See docs/record.md's
-SOG07 section for the full account.
+**🎉🎉🎉 RESOLVED, same day: SIM/carrier mismatch, client-confirmed by
+hand.** SOG07 unit HQ632M1012's actual installed SIM has **MNC 10, not
+the shared config's 11**. Client confirmed directly: manually entering
+MNC 10 saves successfully; MNC 11 reproduces the exact same silent
+failure as automation. `configure_apn()` and every UI-automation step
+were correct the whole time — the shared config value was simply wrong
+for this one unit's SIM. **Added proper per-device network config
+support** (client decision, not just a one-off fix, since any real batch
+may have non-uniform SIMs): `config/network.yaml`'s new optional
+`device_overrides` section (keyed by adb serial) + `main_phase2.
+_resolve_device_network_config()`. See docs/record.md's SOG07 section
+for the full account and exact test names.
+
+**⚠️ Action needed on the client PC**: add a `device_overrides` entry
+for `HQ632M1012` with `apn.mnc: "10"` to the real (gitignored)
+`config/network.yaml` — see `config/network.yaml.example` for the exact
+format — then retest SOG07. This can't be done from this side; the real
+file only exists on the client's machine.
 
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:

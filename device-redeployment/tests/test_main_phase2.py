@@ -152,6 +152,96 @@ def test_run_one_device_reports_unknown_model_without_touching_adb():
     assert "NOT_A_REAL_MODEL" in last_error
 
 
+# --- Per-device network config overrides (2026-09-18) -----------------------
+# Real finding: a physical unit's actual, installed SIM can have a
+# different MCC/MNC than the rest of a batch — confirmed on SOG07 unit
+# HQ632M1012, whose real SIM has MNC 10 while every other device in the
+# same run uses config/network.yaml's shared MNC 11. Android silently
+# rejects a new APN entry whose MCC/MNC doesn't match the active SIM's own,
+# with no visible dialog and no error anywhere in this tool's own log —
+# configure_apn() was working correctly the whole time; the shared config
+# value was simply wrong for this one unit.
+
+_BASE_NETWORK_CONFIG_WITH_OVERRIDE = {
+    "wifi": {"ssid": "earth5_1", "password": "s3cret"},
+    "apn": {"carrier": "Rakuten Mobile", "apn_name": "rakuten.jp", "mcc": "440", "mnc": "11"},
+    "device_overrides": {
+        "HQ632M1012": {"apn": {"mnc": "10"}},
+    },
+}
+
+
+def test_resolve_device_network_config_applies_override_for_matching_serial():
+    resolved = main_phase2._resolve_device_network_config(
+        _BASE_NETWORK_CONFIG_WITH_OVERRIDE, "HQ632M1012"
+    )
+    assert resolved["apn"]["mnc"] == "10"
+    # Every other key in `apn`, and the whole `wifi` section, unchanged —
+    # a shallow per-section merge, not a wholesale replacement.
+    assert resolved["apn"]["apn_name"] == "rakuten.jp"
+    assert resolved["apn"]["mcc"] == "440"
+    assert resolved["wifi"] == _BASE_NETWORK_CONFIG_WITH_OVERRIDE["wifi"]
+    assert "device_overrides" not in resolved
+
+
+def test_resolve_device_network_config_leaves_other_devices_unchanged():
+    resolved = main_phase2._resolve_device_network_config(
+        _BASE_NETWORK_CONFIG_WITH_OVERRIDE, "352063910272451"
+    )
+    assert resolved["apn"]["mnc"] == "11"
+    assert "device_overrides" not in resolved
+
+
+def test_resolve_device_network_config_never_mutates_the_base_config():
+    original = {
+        "wifi": {"ssid": "earth5_1", "password": "s3cret"},
+        "apn": {"mnc": "11"},
+        "device_overrides": {"HQ632M1012": {"apn": {"mnc": "10"}}},
+    }
+    snapshot = {k: dict(v) if isinstance(v, dict) else v for k, v in original.items()}
+    main_phase2._resolve_device_network_config(original, "HQ632M1012")
+    assert original == snapshot
+
+
+def test_run_one_device_rejects_a_placeholder_value_introduced_by_an_override():
+    """A per-device override that accidentally sets a placeholder value
+    must be caught the same way the base config already is — real
+    hardware showed silently proceeding with a placeholder leaves a
+    garbage APN entry on the device."""
+    from src.device.model_profile import ModelProfile
+
+    network_config = {
+        "wifi": {"ssid": "earth5_1", "password": "s3cret"},
+        "apn": {"apn_name": "rakuten.jp", "mcc": "440", "mnc": "11"},
+        "device_overrides": {
+            "HQ632M1012": {"apn": {"mnc": "<mobile network code>"}},
+        },
+    }
+    profile = ModelProfile(
+        {
+            "model": "Xperia 10 IV",
+            "model_number": "SOG07",
+            "manufacturer": "Sony",
+            "android_version": 14,
+            "wizard_steps": [],
+            "wifi_settings": {},
+            "apn_settings": {},
+        }
+    )
+    serial, final_state, last_error = main_phase2._run_one_device(
+        "HQ632M1012",
+        "SOG07",
+        profiles={"SOG07": profile},
+        network_config=network_config,
+        max_retry=3,
+        adb_path="adb",
+        skip_wizard=True,
+    )
+    assert serial == "HQ632M1012"
+    assert final_state == SlotState.ESCALATED
+    assert "apn.mnc" in last_error
+
+
 # --- _load_network_config placeholder-value guard (2026-09-11) -------------
 
 _REAL_NETWORK_CONFIG = {

@@ -1301,24 +1301,45 @@ findings.**
    project's standing rule not to keep an unconfirmed fix "just in case"
    once it's been directly disproven.
 
-7. **New lead, same day: a possible SIM/carrier mismatch.** `config/
-   network.yaml` supplies ONE shared `apn`/`mcc`/`mnc` value set, used
-   identically across all 4 devices in a run — there is no per-device
-   carrier config. The client's own screenshot showed SOG07's APN list
-   already contains **OCNモバイルONE** and **docomo** entries — not
-   Rakuten — raising the question of whether SOG07's actual installed
-   SIM is a different carrier than the Rakuten values (`rakuten.jp`, MCC
-   440, MNC 11) the automation is entering for every device. If Android
-   validates a new APN entry's MCC/MNC against the active SIM's own
-   MCC/MNC (a real, documented Android behavior on some builds/carriers)
-   and SOG07's real SIM doesn't match, that alone would explain a
-   silent, no-dialog rejection — consistent with everything observed so
-   far (every UI step succeeds, only the final persisted result is
-   missing) without needing any UI-automation-side explanation at all.
-   Asked the client to check via
-   `adb shell getprop gsm.sim.operator.alpha` /
-   `getprop gsm.sim.operator.numeric` on SOG07, ideally compared against
-   a working device (e.g. SHG10) — not yet confirmed either way.
+7. **🎉🎉🎉 RESOLVED, same day: SIM/carrier mismatch, confirmed by the
+   client directly (not via `getprop` — simpler and more direct: they
+   tried it by hand).** `config/network.yaml` supplies ONE shared
+   `apn`/`mcc`/`mnc` value set, used identically across all 4 devices in
+   a run — there is no per-device carrier config, and SOG07 unit
+   HQ632M1012's actual installed SIM has **MNC 10, not 11**. The client
+   confirmed directly on the device: manually entering MNC 10 saves
+   successfully; manually entering MNC 11 (the shared config's value)
+   reproduces the EXACT same silent failure as the automated run. This
+   is a genuine, real, per-device data mismatch — `configure_apn()` and
+   every UI-automation step were working correctly this entire time; the
+   configured MNC was simply wrong for this one physical unit's SIM. The
+   whole SOG07 investigation (rounds 1-7 above: commit-delay, probe
+   timing, everything) never needed a code fix at all.
+
+   **Client decision: add proper per-device network config support**
+   (not just a one-off manual correction) — SOG07's config-vs-SIM
+   mismatch was a lucky first catch, and any real batch of physical
+   units may have SIMs that don't all match one shared config. Added
+   `config/network.yaml`'s optional `device_overrides` section (keyed by
+   adb serial) and `main_phase2._resolve_device_network_config()`, which
+   merges the shared `wifi`/`apn` blocks with any override for that
+   specific serial (a shallow per-section merge — only the exact keys
+   given are replaced, everything else stays shared) before each
+   device's own `run_slot_with_retries()` call. The placeholder-value
+   guard (`_check_no_placeholder_values`, 2026-09-11) now also runs on
+   each device's *resolved* config, so a placeholder accidentally
+   introduced by an override is caught the same way the base config
+   already is. New tests:
+   `test_resolve_device_network_config_applies_override_for_matching_
+   serial`, `test_resolve_device_network_config_leaves_other_devices_
+   unchanged`, `test_resolve_device_network_config_never_mutates_the_
+   base_config`, `test_run_one_device_rejects_a_placeholder_value_
+   introduced_by_an_override` (`tests/test_main_phase2.py`).
+
+   **Action for the client**: add a `device_overrides` entry for
+   HQ632M1012 with `apn.mnc: "10"` to the real (gitignored)
+   `config/network.yaml` on the client PC — see
+   `config/network.yaml.example` for the exact format — then retest.
 
 ---
 
