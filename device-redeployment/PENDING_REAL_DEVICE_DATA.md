@@ -119,10 +119,34 @@ instead of a second, hardcoded copy of the old intent — can't drift out
 of sync again. See docs/record.md's new dated entry for the full
 account.
 
-**Still not yet re-confirmed on real hardware with THIS specific fix in
-place** — the next real test needs to confirm the device is actually
-left sitting on the correct, real APN list at the very end of a run, on
-all four devices.
+**🎉 Update, same day, next real test: navigation is fully confirmed
+correct on all 4 devices** — the log showed `reached APN list via the
+SIM-scoped menu_path` exactly twice per device (initial + post-save
+recheck) and all 4 reached `LOGIN_INSTALL`. **SHG10, SHG07, and SOG08 all
+genuinely saved the entry correctly** (client confirmed manually) — the
+soft "wasn't spotted" warning on those three was just the original,
+harmless 2026-09-11 list-refresh timing gap, now confirmed real on the
+*correct* screen.
+
+**REMOVED the 3rd-tier force-stop+re-navigate fallback entirely**
+(client feedback): even reaching the correct screen, the visible
+round-trip (leaving the APN list, flashing through intermediate
+navigation screens, landing back on it) wasn't worth the disruption for
+a check that's soft either way. `_save_apn()` is back to the simpler
+2-tier check (immediate + one delay+re-dump retry, no navigation).
+
+**⚠️ SOG07 is the one exception — the entry genuinely does not save,
+confirmed missing by the client's manual check, even though manual
+by-hand entry works fine.** No error anywhere in the log; every field's
+own read-back check passed. SOG07 is the only model using
+`use_text_entry_for_numeric` (a probe-then-rest, two separate
+`input text` calls into the same MCC/MNC field) — every other model
+uses `input_digits_direct()` keyevents there instead. Leading,
+UNCONFIRMED hypothesis: the second `input text` call might still be an
+uncommitted IME composing span when confirm is tapped — looks right at
+read-back time, isn't what actually persists. Needs real evidence before
+touching any code. See docs/record.md's SOG07 section for the current
+state of the investigation.
 
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:

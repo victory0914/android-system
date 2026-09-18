@@ -1260,181 +1260,39 @@ def test_configure_apn_retries_post_save_check_before_warning(monkeypatch, caplo
     assert any("confirmed visible" in m for m in messages)
 
 
-class ApnPostSaveRequiresRenavigationClient(ApnPostSaveClient):
-    """Real-hardware finding (2026-09-15, SHG07): sometimes even the delay
-    + re-dump of the SAME still-open list screen isn't enough — the client
-    confirmed manually that simply waiting doesn't refresh it, but leaving
-    and re-entering Settings does. Models that: every post-save dump on
-    the same screen keeps serving the stale `post_save_xml`; only a fresh
-    `android.settings.APN_SETTINGS` intent issued AFTER save switches to
-    the refreshed `delayed_post_save_xml`."""
-
-    def __init__(self, *, delayed_post_save_xml: str, **kwargs):
-        super().__init__(**kwargs)
-        self.delayed_post_save_xml = delayed_post_save_xml
-        self._renavigated_after_save = False
-
-    def shell(self, command, timeout=30):
-        result = super().shell(command, timeout=timeout)
-        if self._save_tapped and command == "am start -a android.settings.APN_SETTINGS":
-            self._renavigated_after_save = True
-        return result
-
-    def pull(self, remote_path, local_path):
-        if self._save_tapped:
-            xml = self.delayed_post_save_xml if self._renavigated_after_save else self.post_save_xml
-            with open(local_path, "w", encoding="utf-8") as fh:
-                fh.write(xml)
-            self.pulled_files[remote_path] = local_path
-            return self.pull_result
-        return super().pull(remote_path, local_path)
-
-
-def test_configure_apn_falls_back_to_renavigation_when_waiting_alone_is_not_enough(
-    monkeypatch, caplog
-):
-    """When even the delay+re-dump retry still doesn't find the entry, a
-    fresh APN_SETTINGS intent must be tried before giving up — real
-    hardware (2026-09-15, SHG07) showed waiting on the same already-open
-    screen sometimes isn't enough, but a full re-navigation is. Still a
-    soft check either way — must return True and log "confirmed visible",
-    not the "wasn't spotted" warning."""
+def test_configure_apn_gives_up_softly_without_any_renavigation(monkeypatch, caplog):
+    """REMOVED, 2026-09-18 (client feedback): a third tier used to
+    force-stop Settings and fully re-navigate (through
+    _navigate_apn_menu()'s intermediate screens) when the delay+re-dump
+    still didn't find the entry. A client watching the screen saw this as
+    a confusing round-trip — the device visibly left the just-reached
+    APN list, flashed through the intermediate navigation screens, and
+    landed back on it again — whose diagnostic value didn't justify the
+    disruption. This pins down that it's really gone: if the delay+re-dump
+    still doesn't find the entry, configure_apn() must now just log the
+    soft warning and return True, with NO further navigation of any
+    kind — the device stays exactly where it already was, right after
+    保存."""
     monkeypatch.setattr("src.phase2.apn_setup.time.sleep", lambda _seconds: None)
-    client = ApnPostSaveRequiresRenavigationClient(
+    client = ApnPostSaveDelayedVisibilityClient(
         ui_dumps=[SAVE_FLOW_SCREEN_XML] * 30,
         post_save_xml=POST_SAVE_NOT_YET_REFRESHED_XML,
-        delayed_post_save_xml=POST_SAVE_SUCCESS_XML,
+        # Never actually refreshes even after the one delay+re-dump retry
+        # — the entry simply never becomes visible on this same screen.
+        delayed_post_save_xml=POST_SAVE_NOT_YET_REFRESHED_XML,
     )
 
-    with caplog.at_level(logging.INFO, logger="src.phase2.apn_setup"):
+    with caplog.at_level(logging.WARNING, logger="src.phase2.apn_setup"):
         result = configure_apn(client, SAVE_FLOW_PROFILE, "rakuten.jp", "440", "11")
 
     assert result is True
     messages = [r.getMessage() for r in caplog.records]
-    assert not any("wasn't spotted" in m for m in messages)
-    assert any("confirmed visible" in m for m in messages)
-
-
-def test_configure_apn_force_stops_settings_before_renavigating(monkeypatch):
-    """2026-09-18, client hypothesis: re-sending the SAME
-    android.settings.APN_SETTINGS intent while Settings is already
-    running most likely just re-foregrounds the existing (possibly
-    stale/cached) Activity instead of forcing a real reload — a run
-    where this warning hit all 4 devices in a parallel batch, then the
-    client independently confirmed on-device the entry was genuinely
-    still missing, not just a soft-check false negative. Force-stopping
-    com.android.settings first must happen, and it must happen BEFORE
-    the re-navigation intent, not after."""
-    monkeypatch.setattr("src.phase2.apn_setup.time.sleep", lambda _seconds: None)
-    client = ApnPostSaveRequiresRenavigationClient(
-        ui_dumps=[SAVE_FLOW_SCREEN_XML] * 30,
-        post_save_xml=POST_SAVE_NOT_YET_REFRESHED_XML,
-        delayed_post_save_xml=POST_SAVE_SUCCESS_XML,
-    )
-    configure_apn(client, SAVE_FLOW_PROFILE, "rakuten.jp", "440", "11")
-    force_stop = "am force-stop com.android.settings"
-    renavigate = "am start -a android.settings.APN_SETTINGS"
-    assert force_stop in client.shell_calls
-    assert client.shell_calls.index(force_stop) < client.shell_calls.index(
-        renavigate, client.shell_calls.index(force_stop)
-    )
-
-
-# Real bug, 2026-09-18: the post-save recheck's re-navigation fallback used
-# to hardcode `am start -a android.settings.APN_SETTINGS` directly — exactly
-# the non-authoritative screen _navigate_apn_menu() was fixed to stop using.
-# A real 4-device parallel run showed every device ending up back on that
-# wrong, restricted screen at the very end, because this fallback was
-# silently undoing the navigation fix. It must go through _navigate_apn_menu()
-# itself instead, so a model with reach_via_wifi_settings_intent set uses the
-# SAME SIM-scoped path here too.
-WIFI_SETTINGS_SAVE_FLOW_PROFILE = ModelProfile(
-    {
-        "model": "SHG07-like WIFI_SETTINGS Save Test",
-        "model_number": "TST14",
-        "manufacturer": "Test",
-        "android_version": 13,
-        "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
-        "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
-        "apn_settings": {
-            **SAVE_FLOW_PROFILE.apn_settings(),
-            "reach_via_wifi_settings_intent": True,
-            "menu_path": [
-                {"type": "resource_id", "value": "com.android.settings:id/settings_button"},
-                {"type": "text", "value": "アクセス ポイント名"},
-            ],
-        },
-    }
-)
-
-WIFI_SETTINGS_SAVE_FLOW_SCREEN_XML = SAVE_FLOW_SCREEN_XML.replace(
-    '<node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />',
-    '<node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />\n'
-    '  <node resource-id="com.android.settings:id/settings_button" bounds="[0,1200][100,1300]" />\n'
-    '  <node resource-id="android:id/title" text="アクセス ポイント名" bounds="[0,1300][100,1400]" />',
-)
-
-WIFI_SETTINGS_POST_SAVE_STALE_XML = """<hierarchy>
-  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
-  <node resource-id="com.android.settings:id/settings_button" bounds="[0,1200][100,1300]" />
-  <node resource-id="android:id/title" text="アクセス ポイント名" bounds="[0,1300][100,1400]" />
-</hierarchy>"""
-
-WIFI_SETTINGS_POST_SAVE_REFRESHED_XML = """<hierarchy>
-  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
-  <node resource-id="com.android.settings:id/settings_button" bounds="[0,1200][100,1300]" />
-  <node resource-id="android:id/title" text="アクセス ポイント名" bounds="[0,1300][100,1400]" />
-  <node resource-id="android:id/title" text="rakuten.jp" bounds="[0,300][100,400]" />
-</hierarchy>"""
-
-
-class ApnPostSaveRequiresWifiSettingsRenavigationClient(ApnPostSaveClient):
-    """Same real finding as ApnPostSaveRequiresRenavigationClient, but for
-    the reach_via_wifi_settings_intent path: the post-save recheck must
-    re-navigate via android.settings.WIFI_SETTINGS (never the old
-    android.settings.APN_SETTINGS), issued AFTER save."""
-
-    def __init__(self, *, delayed_post_save_xml: str, **kwargs):
-        super().__init__(**kwargs)
-        self.delayed_post_save_xml = delayed_post_save_xml
-        self._renavigated_after_save = False
-
-    def shell(self, command, timeout=30):
-        result = super().shell(command, timeout=timeout)
-        if self._save_tapped and command == "am start -a android.settings.WIFI_SETTINGS":
-            self._renavigated_after_save = True
-        return result
-
-    def pull(self, remote_path, local_path):
-        if self._save_tapped:
-            xml = self.delayed_post_save_xml if self._renavigated_after_save else self.post_save_xml
-            with open(local_path, "w", encoding="utf-8") as fh:
-                fh.write(xml)
-            self.pulled_files[remote_path] = local_path
-            return self.pull_result
-        return super().pull(remote_path, local_path)
-
-
-def test_configure_apn_post_save_recheck_uses_sim_scoped_renavigation_not_old_intent(
-    monkeypatch,
-):
-    """The post-save recheck's fallback must go through
-    _navigate_apn_menu() — never android.settings.APN_SETTINGS directly —
-    so a model using reach_via_wifi_settings_intent gets the same
-    SIM-scoped re-navigation here as everywhere else."""
-    monkeypatch.setattr("src.phase2.apn_setup.time.sleep", lambda _seconds: None)
-    client = ApnPostSaveRequiresWifiSettingsRenavigationClient(
-        ui_dumps=[WIFI_SETTINGS_SAVE_FLOW_SCREEN_XML] * 30,
-        post_save_xml=WIFI_SETTINGS_POST_SAVE_STALE_XML,
-        delayed_post_save_xml=WIFI_SETTINGS_POST_SAVE_REFRESHED_XML,
-    )
-
-    result = configure_apn(client, WIFI_SETTINGS_SAVE_FLOW_PROFILE, "rakuten.jp", "440", "11")
-
-    assert result is True
-    assert "am start -a android.settings.APN_SETTINGS" not in client.shell_calls
-    # Once for the initial navigation, once more for the post-save recheck.
-    assert client.shell_calls.count("am start -a android.settings.WIFI_SETTINGS") == 2
+    assert any("wasn't spotted" in m for m in messages)
+    # No re-navigation of any kind after the save tap — no force-stop, no
+    # second APN_SETTINGS/WIFI_SETTINGS intent.
+    assert "am force-stop com.android.settings" not in client.shell_calls
+    assert client.shell_calls.count("am start -a android.settings.APN_SETTINGS") == 1
+    assert "am start -a android.settings.WIFI_SETTINGS" not in client.shell_calls
 
 
 def test_configure_apn_taps_estimated_add_button_position_when_unresolved():

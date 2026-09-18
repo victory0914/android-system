@@ -1218,10 +1218,59 @@ old_intent`, with a new fake client
 `android.settings.WIFI_SETTINGS` is sent exactly twice (initial
 navigation + post-save recheck).
 
-**Still not yet re-confirmed on real hardware with this specific fix in
-place** — the next real test needs to confirm the device is actually
-left sitting on the correct APN list at the very end of a run, on all
-four devices.
+**Update, same day, next real test: partial success, two more real
+findings.**
+
+1. **Navigation fully confirmed working on all 4 devices**, including the
+   `_save_apn()` fix above: the log showed `reached APN list via the
+   SIM-scoped menu_path` exactly TWICE per device (initial navigation +
+   post-save recheck, as designed), and all 4 reached `LOGIN_INSTALL`.
+
+2. **SHG10, SHG07, and SOG08 all genuinely saved the entry correctly**
+   (client confirmed manually) — the soft "wasn't spotted" warning on
+   those three was, after all, just the original harmless list-refresh
+   timing gap from 2026-09-11, now confirmed for real on the *correct*
+   screen.
+
+3. **REMOVED the 3rd-tier force-stop+re-navigate fallback entirely**
+   (client feedback): even though it was now correctly reaching the real
+   screen, a client watching the device saw it as a confusing,
+   disruptive round-trip — leaving the just-reached APN list, flashing
+   through the intermediate navigation screens (the Wi-Fi/mobile-network
+   screen, the carrier screen), and landing back on the APN list again.
+   Given this check is soft either way (never blocks success) and the
+   simpler delay+re-dump already catches the common case (confirmed by
+   finding #2 above), the round-trip's cost no longer seemed worth it.
+   `_save_apn()` is back to the simpler 2-tier check it had between
+   2026-09-11 and 2026-09-15: immediate check, one delay+re-dump retry,
+   then just log the soft warning if still not visible — no further
+   navigation of any kind. Removed the three tests that existed
+   specifically to verify the 3rd tier
+   (`test_configure_apn_falls_back_to_renavigation_when_waiting_alone_is_
+   not_enough`, `test_configure_apn_force_stops_settings_before_
+   renavigating`, `test_configure_apn_post_save_recheck_uses_sim_scoped_
+   renavigation_not_old_intent`, plus their two now-unused fake client
+   classes), replaced with
+   `test_configure_apn_gives_up_softly_without_any_renavigation` pinning
+   down that NO re-navigation happens anymore.
+
+4. **SOG07 is the one exception: the entry genuinely does not save via
+   the automated flow, confirmed missing by the client's manual check —
+   even though manual, by-hand entry through the same real UI works
+   fine.** No field-level error appeared anywhere in the log; every
+   field's own read-back check passed. The one thing structurally unique
+   to SOG07 among all 4 models: it's the only one using
+   `use_text_entry_for_numeric` + `keyboard_mode_toggle_tap_numeric` for
+   MCC/MNC (a probe-then-rest, TWO separate `input text` calls into the
+   same field) — every other model types MCC/MNC via
+   `input_digits_direct()` keyevents instead. Leading, UNCONFIRMED
+   hypothesis: the second `input text` call's contribution might still
+   be sitting in an uncommitted IME composing span when the confirm
+   button is tapped immediately after — visually correct at read-back
+   time, but not actually what ends up persisted. Needs real evidence
+   (does the entry appear at all after a fresh SOG07-only run, and if
+   so, what do MCC/MNC actually show) before touching any code — not
+   guessing at a fix for this one.
 
 ---
 
