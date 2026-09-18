@@ -149,15 +149,27 @@ SOG07 run.** Log showed no errors, normal timing, `reached LOGIN_INSTALL`
 the two pre-existing carrier entries and **no `rakuten.jp` at all**
 (genuinely absent, not corrupted; neither pre-existing entry was
 overwritten either). Consistent with Android's own save-time validation
-silently rejecting the whole entry. Added (as an explicitly **unconfirmed
-hypothesis**, not a proven fix) `_NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS
-= 1.0` — a delay after a `use_text_entry_for_numeric` field's read-back
-matches but before the confirm button is tapped, targeting the theory
-that the second `input text` call's contribution might still be an
-uncommitted IME composing span at confirm-time. **If a retest still
-shows the same silent-non-save symptom, this should be treated as ruled
-out, not kept.** See docs/record.md's SOG07 section for the full
-account.
+silently rejecting the whole entry.
+
+**RULED OUT, same day**: the commit-delay hypothesis
+(`_NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS`) — client retested, identical
+result. Removed, per this project's standing rule not to keep an
+unconfirmed fix once it's been directly disproven.
+
+**New lead, same day: possible SIM/carrier mismatch.** `config/
+network.yaml` supplies ONE shared APN/MCC/MNC value set for all 4
+devices — no per-device carrier config exists. SOG07's APN list already
+shows **OCNモバイルONE** and **docomo** entries, not Rakuten — raising
+the question of whether SOG07's real installed SIM is a different
+carrier than the Rakuten values (`rakuten.jp`, MCC 440, MNC 11) being
+entered for every device. If Android validates a new APN's MCC/MNC
+against the active SIM's own MCC/MNC and they don't match, that alone
+would explain a silent, no-dialog rejection — consistent with every
+other observation so far. Asked the client to check via
+`adb shell getprop gsm.sim.operator.alpha` /
+`getprop gsm.sim.operator.numeric` on SOG07 (ideally compared against a
+working device). Not yet confirmed either way. See docs/record.md's
+SOG07 section for the full account.
 
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:

@@ -699,42 +699,13 @@ def test_configure_apn_use_text_entry_for_numeric_is_opt_in():
     assert 'input text "440"' not in client.shell_calls
 
 
-def test_configure_apn_waits_after_numeric_text_entry_before_confirming(monkeypatch):
-    """2026-09-18, unconfirmed hypothesis for a real SOG07 finding (the
-    entry silently never saved at all, despite every read-back check
-    passing): a delay must happen after a use_text_entry_for_numeric
-    field's read-back matches but BEFORE the dialog's confirm button is
-    tapped — giving the IME time to actually commit the second
-    (probe-then-rest) `input text` call before Android's save-time
-    validation runs. Must NOT happen for fields that don't use this
-    mechanism (the digit-keyevent path, or non-numeric fields)."""
-    sleep_calls = []
-    monkeypatch.setattr(
-        "src.phase2.apn_setup.time.sleep", lambda seconds: sleep_calls.append(seconds)
-    )
-    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
-    configure_apn(client, TEXT_ENTRY_NUMERIC_PROFILE, "rakuten.jp", "440", "11")
-    from src.phase2.apn_setup import _NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS
-
-    # Once for MCC, once for MNC — never for 名前/APN (no toggle
-    # configured on this profile, so they skip the retry loop's
-    # read-back path entirely).
-    assert sleep_calls.count(_NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS) == 2
-
-
-def test_configure_apn_no_commit_delay_without_use_text_entry_for_numeric(monkeypatch):
-    """The new delay must not fire at all for a model that doesn't set
-    use_text_entry_for_numeric — this profile's MCC/MNC use the original
-    per-digit keyevent mechanism instead."""
-    sleep_calls = []
-    monkeypatch.setattr(
-        "src.phase2.apn_setup.time.sleep", lambda seconds: sleep_calls.append(seconds)
-    )
-    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 30)
-    configure_apn(client, NUMERIC_KEYBOARD_TOGGLE_PROFILE, "rakuten.jp", "440", "11")
-    from src.phase2.apn_setup import _NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS
-
-    assert _NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS not in sleep_calls
+# A test pinning down a post-read-back, pre-confirm delay for
+# use_text_entry_for_numeric fields lived here briefly (2026-09-18) —
+# removed the same day once the client retested on real SOG07 hardware
+# and the hypothesis it was checking (an uncommitted IME composing span
+# at confirm-time) turned out not to be the actual cause. See
+# docs/record.md's SOG07 section for what's actually being investigated
+# now.
 
 
 def test_configure_apn_missing_save_button_never_taps_anything_claiming_save():

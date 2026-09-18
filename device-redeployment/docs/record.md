@@ -1295,6 +1295,31 @@ findings.**
    `test_configure_apn_waits_after_numeric_text_entry_before_confirming`,
    `test_configure_apn_no_commit_delay_without_use_text_entry_for_numeric`.
 
+6. **RULED OUT, same day: the commit-delay hypothesis.** Client retested
+   on real SOG07 hardware — identical result, entry still completely
+   absent. Removed the delay and both tests that verified it, per this
+   project's standing rule not to keep an unconfirmed fix "just in case"
+   once it's been directly disproven.
+
+7. **New lead, same day: a possible SIM/carrier mismatch.** `config/
+   network.yaml` supplies ONE shared `apn`/`mcc`/`mnc` value set, used
+   identically across all 4 devices in a run — there is no per-device
+   carrier config. The client's own screenshot showed SOG07's APN list
+   already contains **OCNモバイルONE** and **docomo** entries — not
+   Rakuten — raising the question of whether SOG07's actual installed
+   SIM is a different carrier than the Rakuten values (`rakuten.jp`, MCC
+   440, MNC 11) the automation is entering for every device. If Android
+   validates a new APN entry's MCC/MNC against the active SIM's own
+   MCC/MNC (a real, documented Android behavior on some builds/carriers)
+   and SOG07's real SIM doesn't match, that alone would explain a
+   silent, no-dialog rejection — consistent with everything observed so
+   far (every UI step succeeds, only the final persisted result is
+   missing) without needing any UI-automation-side explanation at all.
+   Asked the client to check via
+   `adb shell getprop gsm.sim.operator.alpha` /
+   `getprop gsm.sim.operator.numeric` on SOG07, ideally compared against
+   a working device (e.g. SHG10) — not yet confirmed either way.
+
 ---
 
 ## SOG07 (Sony Xperia 10 IV, Android 14)
