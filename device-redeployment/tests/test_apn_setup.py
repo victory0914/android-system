@@ -560,6 +560,72 @@ def test_fill_labeled_field_numeric_probe_only_retypes_first_digit_on_wrong_atte
     assert client.shell_calls.count("input keyevent KEYCODE_0") == 1
 
 
+# Real finding (2026-09-18, client observation): Android auto-populates
+# MCC/MNC from the SIM's own info when a new APN entry is created — very
+# likely the actual root cause behind the whole SOG07 investigation (a
+# hardcoded "11" from config/network.yaml was overwriting an
+# already-correct, SIM-derived "10"). If the field already shows a real
+# value, _fill_labeled_field() must trust it and skip typing entirely.
+MCC_ALREADY_POPULATED_SCREEN_XML = LABELED_SCREEN_XML.replace(
+    '<node resource-id="android:id/edit" bounds="[0,700][100,800]" />',
+    '<node resource-id="android:id/edit" text="10" bounds="[0,700][100,800]" />',
+)
+
+
+def test_fill_labeled_field_skips_typing_when_numeric_field_already_populated():
+    """If the device already shows a non-empty MCC/MNC value (auto-filled
+    from the SIM), don't type over it — trust it, tap confirm, and
+    return True with no toggle taps, no typing, no read-back retry of
+    any kind."""
+    client = EchoingFakeAdbClient(ui_dumps=[MCC_ALREADY_POPULATED_SCREEN_XML] * 20)
+    apn = {**LABELED_PROFILE.apn_settings(), "keyboard_mode_toggle_tap": [106, 2239]}
+
+    result = _fill_labeled_field(client, apn, "MCC", "440", numeric_only=True)
+
+    assert result is True
+    assert not any(c.startswith("input tap 106 2239") for c in client.shell_calls)
+    assert not any(
+        c.startswith("input text") or c.startswith("input keyevent KEYCODE_4")
+        for c in client.shell_calls
+    )
+    # The confirm button (android:id/button1) must still be tapped.
+    confirm_tap = "input tap {} {}".format((0 + 100) // 2, (800 + 900) // 2)
+    assert confirm_tap in client.shell_calls
+
+
+def test_fill_labeled_field_still_types_when_numeric_field_is_blank():
+    """The skip only applies when the device shows a real value — a
+    genuinely blank/未設定 field (real capture, SOG08, 2026-09-16) must
+    still go through the normal type-and-verify path, since these fields
+    are confirmed mandatory (real on-device validation, 2026-09-08)."""
+    client = EchoingFakeAdbClient(ui_dumps=[LABELED_SCREEN_XML] * 20)
+    apn = {**LABELED_PROFILE.apn_settings(), "keyboard_mode_toggle_tap": [106, 2239]}
+
+    result = _fill_labeled_field(client, apn, "MCC", "440", numeric_only=True)
+
+    assert result is True
+    assert "input tap 106 2239" in client.shell_calls
+    assert "input keyevent KEYCODE_4" in client.shell_calls
+
+
+def test_fill_labeled_field_non_numeric_field_ignores_pre_existing_text():
+    """The auto-populate skip is scoped to numeric_only fields only —
+    Android doesn't auto-fill 名前/APN from anything, so a non-empty
+    edit_field there (e.g. leftover text from a previous attempt) must
+    NOT be trusted; 名前/APN always go through the normal path."""
+    screen = LABELED_SCREEN_XML.replace(
+        '<node resource-id="android:id/edit" bounds="[0,700][100,800]" />',
+        '<node resource-id="android:id/edit" text="leftover" bounds="[0,700][100,800]" />',
+    )
+    client = EchoingFakeAdbClient(ui_dumps=[screen] * 20)
+    apn = {**LABELED_PROFILE.apn_settings(), "keyboard_mode_toggle_tap": [106, 2239]}
+
+    result = _fill_labeled_field(client, apn, "名前", "rakuten.jp", numeric_only=False)
+
+    assert result is True
+    assert "input tap 106 2239" in client.shell_calls
+
+
 def test_fill_labeled_field_text_probe_only_retypes_first_character_on_wrong_attempt():
     """Extended, same day (client feedback from watching real SOG07
     hardware): 名前/APN were observed retyping the WHOLE value on a wrong

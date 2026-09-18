@@ -175,6 +175,20 @@ for `HQ632M1012` with `apn.mnc: "10"` to the real (gitignored)
 format — then retest SOG07. This can't be done from this side; the real
 file only exists on the client's machine.
 
+**🎉 Update, same day: simpler fix found, the override above is likely
+no longer even needed.** Client observed that MCC/MNC are ALREADY
+populated (by Android, from the SIM) the moment "新しい APN" is tapped —
+the real bug was our own code overwriting an already-correct default,
+not filling a blank field. `_fill_labeled_field()` now trusts a
+non-empty MCC/MNC value and skips typing entirely for `numeric_only`
+fields; only a genuinely blank field still gets typed into. The
+`device_overrides` mechanism stays (still useful for anything that
+really does need a per-device value, like `apn_name`), but SOG07 itself
+should now work correctly even without adding that override, since the
+field will simply be left alone. See docs/record.md's SOG07 section,
+finding #8, for the full account. **Not yet confirmed on real
+hardware.**
+
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:
 `SUCCESS: device 352063910272451 reached LOGIN_INSTALL` — Wi-Fi (already

@@ -265,6 +265,18 @@ def _fill_labeled_field(
     retyping the whole value on every correction attempt was needlessly
     slow, then extended from numeric-only to every field after the same
     full-value retyping was observed on 名前/APN on real SOG07 hardware).
+
+    For `numeric_only` fields specifically (MCC/MNC), if the dialog's
+    edit_field already shows a non-empty value the moment it's opened,
+    that value is trusted as-is and NOTHING is typed — the confirm
+    button is tapped directly (client observation, 2026-09-18: Android
+    auto-populates MCC/MNC from the SIM's own info when a new APN entry
+    is created; this is very likely the real root cause behind the
+    SOG07 finding elsewhere in this file, where a hardcoded config value
+    was overwriting an already-correct, SIM-derived default). Not
+    applied to non-numeric fields — Android doesn't auto-fill 名前/APN
+    from anything, so any pre-existing text there is untrusted leftover
+    state, not a legitimate default.
     """
     row_resource_id = apn["field_row_resource_id"]
     if not tap_resource_id(client, row_resource_id, text=label):
@@ -288,6 +300,48 @@ def _fill_labeled_field(
             label, edit_field,
         )
         return False
+
+    def _tap_confirm() -> bool:
+        confirm_button = apn.get("dialog_confirm_button_resource_id")
+        if confirm_button and not tap_resource_id(client, confirm_button):
+            logger.error(
+                "apn field %r: dialog confirm button %r not found (real, "
+                "confirmed id — see tests/fixtures/apn_accesshost_okbtn_SHG10.xml) "
+                "— the value was typed but NOT committed, and the dialog is "
+                "likely still open. Failing here rather than continuing: every "
+                "later tap (next field, save) would otherwise land on this "
+                "stuck dialog instead of its intended target.",
+                label, confirm_button,
+            )
+            return False
+        return True
+
+    if numeric_only and edit_field:
+        # Real finding (2026-09-18, client observation): Android
+        # auto-populates MCC/MNC from the SIM's own info when a new APN
+        # entry is created. This is very likely the actual, deeper root
+        # cause behind the SOG07 finding elsewhere in this file
+        # (docs/record.md): our own typed value ("11", from
+        # config/network.yaml) was overwriting an already-correct,
+        # SIM-derived default ("10") with a WRONG one — not filling in a
+        # blank field. If the field already shows a real (non-empty)
+        # value, trust it and skip typing entirely: safer AND simpler
+        # than needing to know the correct MCC/MNC for every possible
+        # SIM ourselves. Real on-device validation already confirmed
+        # these fields are MANDATORY (2026-09-08, docs/record.md) — if
+        # this ever shows genuinely empty (a real capture, SOG08,
+        # 2026-09-16, showed "未設定"/not-set at least once), the normal
+        # type-and-verify logic below still runs exactly as before.
+        ui_xml = dump_ui(client)
+        current = get_node_text(ui_xml, edit_field)
+        if current:
+            logger.info(
+                "apn field %r: already shows %r (auto-populated by the "
+                "device, presumably from the SIM) — leaving it as-is, "
+                "not typing %r over it",
+                label, current, value,
+            )
+            return _tap_confirm()
 
     # Real, directly-confirmed fix (client, 2026-09-15, SHG07): the
     # on-screen keyboard's かな/英数 mode-toggle key — invisible to
@@ -481,19 +535,7 @@ def _fill_labeled_field(
             _fail_mismatch(value, actual, _KEYBOARD_TOGGLE_MAX_ATTEMPTS if toggle_coords else 1)
             return False
 
-    confirm_button = apn.get("dialog_confirm_button_resource_id")
-    if confirm_button and not tap_resource_id(client, confirm_button):
-        logger.error(
-            "apn field %r: dialog confirm button %r not found (real, "
-            "confirmed id — see tests/fixtures/apn_accesshost_okbtn_SHG10.xml) "
-            "— the value was typed but NOT committed, and the dialog is "
-            "likely still open. Failing here rather than continuing: every "
-            "later tap (next field, save) would otherwise land on this "
-            "stuck dialog instead of its intended target.",
-            label, confirm_button,
-        )
-        return False
-    return True
+    return _tap_confirm()
 
 
 _APN_LIST_SCREEN_TITLE_CONTENT_DESC = "アクセスポイント名"

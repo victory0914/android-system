@@ -1341,6 +1341,50 @@ findings.**
    `config/network.yaml` on the client PC — see
    `config/network.yaml.example` for the exact format — then retest.
 
+8. **🎉 Same day, one more real finding: the deeper root cause, and a
+   simpler fix than per-device overrides.** Client observed directly:
+   when "新しい APN" (add new) is tapped, MCC/MNC are ALREADY populated
+   with default values — Android fills them in from the SIM's own info
+   when a new entry is created. This means finding #7's typed "11"
+   wasn't filling in a blank field; it was **overwriting an
+   already-correct, SIM-derived "10" with a wrong value**. Client asked
+   for the fields to simply not be entered at all when this happens.
+
+   Fixed in `_fill_labeled_field()`: for `numeric_only` fields, the
+   dialog's edit_field is read immediately after opening, BEFORE any
+   toggle/typing logic runs. If it already shows a non-empty value, that
+   value is trusted as-is — no toggle taps, no typing, no read-back
+   retry — and the confirm button is tapped directly. Only genuinely
+   blank fields (a real capture, SOG08, 2026-09-16, showed "未設定" at
+   least once, and these fields are confirmed mandatory — 2026-09-08 —
+   so a blank one still needs a real value) fall through to the
+   unchanged, existing type-and-verify path. Scoped to `numeric_only`
+   only: Android doesn't auto-fill 名前/APN from anything, so
+   pre-existing text there is never trusted.
+
+   This makes finding #7's per-device MNC override for HQ632M1012
+   unnecessary in practice (the field will simply be skipped and the
+   SIM's own correct value left alone) — but the `device_overrides`
+   mechanism itself stays, since it's still useful for anything that
+   genuinely does need a per-device value (e.g. `apn_name`, which is
+   never auto-populated). Refactored the confirm-button tap into a
+   small `_tap_confirm()` closure shared by both the new skip-path and
+   the existing end-of-function path, rather than duplicating the same
+   error-handling logic twice.
+
+   New tests:
+   `test_fill_labeled_field_skips_typing_when_numeric_field_already_
+   populated`,
+   `test_fill_labeled_field_still_types_when_numeric_field_is_blank`,
+   `test_fill_labeled_field_non_numeric_field_ignores_pre_existing_
+   text`.
+
+   **Not yet confirmed end-to-end on real hardware with this fix in
+   place** — the next real test is the one that actually matters: does
+   SOG07 now succeed WITHOUT needing the `device_overrides` entry at
+   all (client can add it anyway as a safety net, or leave it out and
+   confirm the skip-logic alone is sufficient).
+
 ---
 
 ## SOG07 (Sony Xperia 10 IV, Android 14)
