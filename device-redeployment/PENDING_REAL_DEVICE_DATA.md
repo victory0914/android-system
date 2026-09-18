@@ -141,12 +141,23 @@ by-hand entry works fine.** No error anywhere in the log; every field's
 own read-back check passed. SOG07 is the only model using
 `use_text_entry_for_numeric` (a probe-then-rest, two separate
 `input text` calls into the same MCC/MNC field) — every other model
-uses `input_digits_direct()` keyevents there instead. Leading,
-UNCONFIRMED hypothesis: the second `input text` call might still be an
-uncommitted IME composing span when confirm is tapped — looks right at
-read-back time, isn't what actually persists. Needs real evidence before
-touching any code. See docs/record.md's SOG07 section for the current
-state of the investigation.
+uses `input_digits_direct()` keyevents there instead.
+
+**Update, same day: real evidence obtained from an isolated single-device
+SOG07 run.** Log showed no errors, normal timing, `reached LOGIN_INSTALL`
+— but the client's screenshot afterward showed the APN list with only
+the two pre-existing carrier entries and **no `rakuten.jp` at all**
+(genuinely absent, not corrupted; neither pre-existing entry was
+overwritten either). Consistent with Android's own save-time validation
+silently rejecting the whole entry. Added (as an explicitly **unconfirmed
+hypothesis**, not a proven fix) `_NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS
+= 1.0` — a delay after a `use_text_entry_for_numeric` field's read-back
+matches but before the confirm button is tapped, targeting the theory
+that the second `input text` call's contribution might still be an
+uncommitted IME composing span at confirm-time. **If a retest still
+shows the same silent-non-save symptom, this should be treated as ruled
+out, not kept.** See docs/record.md's SOG07 section for the full
+account.
 
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:

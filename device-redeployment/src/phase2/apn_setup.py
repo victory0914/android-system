@@ -104,6 +104,30 @@ _POST_SAVE_RECHECK_DELAY_SECONDS = 2.0
 # time to settle, costs nothing and might still help on some device.
 _KEYBOARD_TOGGLE_TAP_DELAY_SECONDS = 0.5
 
+# Hypothesis-driven fix, NOT yet confirmed (2026-09-18, SOG07): a real run
+# showed the client-confirmed real, concrete failure this project's
+# philosophy most wants to avoid — no error anywhere in the log, every
+# field's own read-back check passed, `configure_apn()` reported success,
+# yet the entry was completely absent afterward (client screenshot: the
+# APN list showed only the two pre-existing carrier entries, no
+# "rakuten.jp" at all — not even a version with wrong MCC/MNC). SOG07 is
+# the only model using `use_text_entry_for_numeric` for MCC/MNC — a
+# probe-then-rest sequence that types the SAME field via TWO separate
+# `input text` calls. Leading, unconfirmed theory: the second call's
+# contribution may still be an uncommitted IME composing span at the
+# moment the dialog's confirm button is tapped — correct in our own
+# read-back (which reads the dump's rendered `text` attribute, not
+# necessarily the same thing Android's save-time validation reads) but
+# not actually what ends up persisted, silently rejected with no visible
+# dialog (a failure mode this file's comments have anticipated since
+# 2026-09-11 but never confirmed until now). This delay, after a
+# use_text_entry_for_numeric field's read-back has already matched but
+# before the confirm button is tapped, is a direct, minimal attempt to
+# close that gap — NOT proven to be the actual fix. If a retest still
+# shows the same silent-non-save symptom, this should be treated as
+# ruled out, not kept "just in case".
+_NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS = 1.0
+
 # Real root cause identified by the client (2026-09-17, SOG07), directly
 # from watching a live run: the on-screen keyboard's mode-toggle key does
 # NOT reset to a known state for each new field's dialog — it carries over
@@ -460,6 +484,11 @@ def _fill_labeled_field(
                 # is wrong — fail loudly rather than guess why.
                 _fail_mismatch(value, actual, 1)
                 return False
+            if numeric_only and apn.get("use_text_entry_for_numeric"):
+                # See _NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS's
+                # module-level comment — unconfirmed hypothesis for a
+                # real SOG07 silent-non-save finding, not a proven fix.
+                time.sleep(_NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS)
     else:
         matched, actual = _toggle_and_type_with_retry(_type_fn(value), value)
         if matched is None:

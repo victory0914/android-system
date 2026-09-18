@@ -1272,6 +1272,29 @@ findings.**
    so, what do MCC/MNC actually show) before touching any code — not
    guessing at a fix for this one.
 
+5. **Real evidence obtained (2026-09-18, same day, isolated single-device
+   SOG07 run, `--max-retries 0`).** Log showed no errors anywhere, timing
+   matched every other successful run, `reached LOGIN_INSTALL` — but the
+   client's screenshot afterward showed the APN list with only the two
+   pre-existing carrier entries (OCNモバイルONE, docomo) and **no
+   `rakuten.jp` at all** — not a version with wrong MCC/MNC, genuinely
+   absent, and neither pre-existing entry was overwritten either. This
+   confirms the entry isn't silently corrupted — it's not created at
+   all, consistent with Android's own save-time APN validation silently
+   rejecting the whole entry with no visible dialog (a failure mode
+   this file predicted as far back as 2026-09-11, for a different
+   reason, never actually observed until now).
+   Added `_NUMERIC_TEXT_ENTRY_COMMIT_DELAY_SECONDS = 1.0` — a delay
+   after a `use_text_entry_for_numeric` field's read-back has already
+   matched but BEFORE the dialog's confirm button is tapped, directly
+   targeting the "displayed text vs. actually-committed text" gap the
+   hypothesis above describes. Explicitly labeled in code as an
+   unconfirmed hypothesis, not a proven fix — if a retest still shows
+   the same silent-non-save symptom, this should be treated as ruled
+   out, not kept "just in case". New tests:
+   `test_configure_apn_waits_after_numeric_text_entry_before_confirming`,
+   `test_configure_apn_no_commit_delay_without_use_text_entry_for_numeric`.
+
 ---
 
 ## SOG07 (Sony Xperia 10 IV, Android 14)
