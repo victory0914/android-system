@@ -1385,6 +1385,11 @@ findings.**
    all (client can add it anyway as a safety net, or leave it out and
    confirm the skip-logic alone is sufficient).
 
+9. **🎉🎉🎉 CONFIRMED on real hardware, 2026-09-22.** Client confirmed
+   finding #8's fix resolves SOG07's issue end-to-end. All 4 models are
+   now directly confirmed working with the current code — this was the
+   last one outstanding.
+
 ---
 
 ## SOG07 (Sony Xperia 10 IV, Android 14)
@@ -1782,6 +1787,78 @@ python src\main_phase2.py --skip-wizard \
   --device 352063910272451:SHG10 --device 353681650397052:SHG07 \
   --device HQ632M1012:SOG07 --device HQ63460161:SOG08
 ```
+
+---
+
+## Device auto-detection (2026-09-22)
+
+Client feedback, right after confirming all 4 models work: specifying
+each device's serial by hand (`--serial`/`--model`, or `--device
+SERIAL:MODEL` per device) means that every time a client connects a
+*different* physical unit, someone has to look up its serial and edit
+the command — not acceptable for an ongoing redeployment operation where
+units get swapped constantly.
+
+`python src/main_phase2.py --skip-wizard`, with no `--device`/`--serial`/
+`--model` at all, now auto-detects every currently-connected, authorized
+device and runs all of them in parallel, matching the existing
+multi-device dispatch machinery (`ThreadPoolExecutor`, one thread per
+device — no new dispatch logic needed, just a new way to build the
+`devices` list that feeds it).
+
+**Mechanism**: `main_phase2._list_adb_devices()` runs `adb devices`
+(global, no serial yet) and returns every `(serial, state)` pair. Only
+serials in the `device` state (authorized/ready) are considered — a
+serial reported `unauthorized`/`offline`/anything else is logged as a
+clear warning and excluded (most likely cause: the device's own "Allow
+USB debugging?" prompt hasn't been accepted yet). For each remaining
+serial, `main_phase2._detect_model_number()` runs `adb shell getprop
+ro.product.model` and matches the (trimmed, lower-cased) result against
+every loaded profile's `model_number` — this is the exact same command
+the client has already been running by hand to identify units all along
+(see the SOG07/SOG08 sections above: "client identified [it] via `adb
+devices` + `getprop ro.product.model`"), just automated instead of
+read-and-typed manually.
+
+**Never guesses**, per this project's core rule: a `getprop` value that
+doesn't cleanly match exactly one profile (zero matches, or — should it
+ever happen — more than one) is logged as a clear error and that device
+is excluded from the run, never silently run against a "closest" or
+default profile. `ModelProfile.adb_identifiers()` is a new, currently
+unused optional YAML field (`adb_identifiers: [...]`) as an escape
+hatch, in case a real unit's `ro.product.model` ever turns out to differ
+from its own `model_number` once that's actually confirmed on real
+hardware (same "add the real confirmed value once it's known" pattern as
+`keyboard_mode_toggle_tap` and friends) — none of the 4 real profiles set
+it yet, since `getprop ro.product.model` is expected (not yet directly
+observed by this tooling, though the client's manual identification
+process relies on it) to already report the plain model_number directly.
+
+`--serial`/`--model` and `--device SERIAL:MODEL` both keep working
+exactly as before — now as an explicit override for one or more specific
+devices (e.g. forcing a device auto-detection can't identify) rather
+than the only way to specify devices.
+
+New tests: `test_list_adb_devices_parses_serial_and_state_pairs`,
+`test_list_adb_devices_raises_auto_detect_error_when_adb_missing`,
+`test_list_adb_devices_raises_auto_detect_error_on_timeout`,
+`test_detect_model_number_matches_model_number_case_insensitively`,
+`test_detect_model_number_matches_via_adb_identifiers_escape_hatch`,
+`test_detect_model_number_returns_none_for_unknown_device`,
+`test_detect_model_number_returns_none_on_getprop_failure`,
+`test_detect_model_number_never_guesses_on_ambiguous_match`,
+`test_auto_detect_devices_matches_ready_devices_and_skips_others`,
+`test_auto_detect_devices_excludes_devices_matching_no_profile`,
+`test_auto_detect_devices_returns_empty_list_when_nothing_connected`,
+plus `ModelProfile.adb_identifiers()`'s own tests in
+`tests/test_model_profile.py`.
+
+**Not yet confirmed on real hardware** — the next real run should be the
+plain `python src/main_phase2.py --skip-wizard` form (no device flags at
+all) against however many of the 4 devices happen to be connected, to
+confirm `getprop ro.product.model` really does report each real unit's
+plain `model_number` (e.g. `SOG07`, not some other internal codename) as
+expected.
 
 ---
 

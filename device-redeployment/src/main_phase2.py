@@ -1,8 +1,17 @@
 """Small CLI entry point for manually running the Phase 2 flow (wizard,
-Wi-Fi, APN) against one real, connected device.
+Wi-Fi, APN) against one or more real, connected devices.
 
 Usage:
-    python src/main_phase2.py --serial <adb_serial> --model <model_number>
+    python src/main_phase2.py --skip-wizard
+
+With no --device/--serial/--model at all (the normal way to run this now,
+2026-09-22 client decision), it auto-detects every currently-connected,
+authorized device via `adb devices` + `getprop ro.product.model` and runs
+all of them in parallel — no need to look up or type a serial by hand, and
+a client swapping in a different physical unit doesn't require touching
+this code or command at all. --serial/--model (one device) and --device
+(repeatable, explicit SERIAL:MODEL pairs) both still work, for a manual
+override or for a device auto-detection can't identify.
 
 This is what gets run manually against real hardware, once real config
 values and real resource-ids are available (see PENDING_REAL_DEVICE_DATA.md
@@ -16,6 +25,7 @@ import argparse
 import concurrent.futures
 import logging
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -25,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import yaml
 
-from src.device.adb_client import AdbClient
+from src.device.adb_client import AdbClient, AdbCommandError
 from src.device.model_profile import ModelProfile, ModelProfileError
 from src.orchestration.scheduler import run_slot_with_retries
 from src.orchestration.slot import Slot, SlotState
@@ -48,6 +58,15 @@ class NetworkConfigError(RuntimeError):
     """config/network.yaml is missing, or still contains a placeholder value
     copied verbatim from config/network.yaml.example, in one of the fields
     the automation actually reads."""
+
+
+class AutoDetectError(RuntimeError):
+    """Raised when device auto-detection fails outright — `adb` itself
+    couldn't be invoked at all (bad adb_path, timeout). Distinct from a
+    single connected device not matching a known model profile, which is
+    logged and excluded per-device instead (see _auto_detect_devices())
+    so it can't block the rest of a batch, matching this file's existing
+    "one device's problem never takes down the others" philosophy."""
 
 
 # Every placeholder string in config/network.yaml.example, verbatim — real
@@ -182,12 +201,16 @@ def _parse_device_spec(spec: str) -> tuple[str, str]:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the Phase 2 device-redeployment flow (wizard, Wi-Fi, "
-        "APN) against one or more real, connected Android devices."
+        "APN) against one or more real, connected Android devices. With none "
+        "of --device/--serial/--model given, every connected, authorized "
+        "device is auto-detected (adb devices + getprop ro.product.model) "
+        "and run in parallel — this is the normal way to invoke a batch run."
     )
     parser.add_argument(
         "--serial",
-        help="adb device serial (see `adb devices`) — single-device mode. "
-        "Mutually exclusive with --device.",
+        help="adb device serial (see `adb devices`) — single-device mode, "
+        "overriding auto-detection for that one device. Mutually exclusive "
+        "with --device; used together with --model.",
     )
     parser.add_argument(
         "--model",
@@ -200,11 +223,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         dest="devices",
         metavar="SERIAL:MODEL",
         type=_parse_device_spec,
-        help="Run multiple devices IN PARALLEL, at the same time, against "
-        "the same config/network.yaml — repeat for each device: "
+        help="Run multiple SPECIFIC devices IN PARALLEL, at the same time, "
+        "against the same config/network.yaml — repeat for each device: "
         "--device 352063910272451:SHG10 --device <serial2>:SHG07. Each "
         "device gets its own retry loop; one device's failure never blocks "
-        "or delays the others. Mutually exclusive with --serial/--model.",
+        "or delays the others. Mutually exclusive with --serial/--model. "
+        "Only needed to override auto-detection for specific devices — "
+        "with no --device/--serial/--model at all, every connected device "
+        "is auto-detected and run instead.",
     )
     parser.add_argument(
         "--models-dir",
@@ -243,19 +269,159 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_devices(args: argparse.Namespace, parser: argparse.ArgumentParser) -> list[tuple[str, str]]:
+def _resolve_devices(
+    args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> list[tuple[str, str]] | None:
     """Reconcile --device (repeatable, multi-device) against --serial/--model
     (single-device convenience) into one list of (serial, model_number)
-    pairs. Exactly one of the two forms must be used — calls parser.error()
-    (prints usage, exits 2) otherwise, matching argparse's own convention
-    for CLI-usage mistakes."""
+    pairs, or None if neither was given at all — the signal for
+    main() to auto-detect every connected device instead (see
+    _auto_detect_devices()). --device and --serial/--model are mutually
+    exclusive, and --serial/--model must be given together (a lone one is
+    a likely typo, not "please auto-detect the other half") — both call
+    parser.error() (prints usage, exits 2), matching argparse's own
+    convention for CLI-usage mistakes."""
     if args.devices and (args.serial or args.model):
         parser.error("--device cannot be combined with --serial/--model")
-    if not args.devices and not (args.serial and args.model):
-        parser.error(
-            "either --device (one or more) or both --serial and --model are required"
+    if args.devices:
+        return args.devices
+    if args.serial or args.model:
+        if not (args.serial and args.model):
+            parser.error("--serial and --model must be given together")
+        return [(args.serial, args.model)]
+    return None
+
+
+def _list_adb_devices(adb_path: str) -> list[tuple[str, str]]:
+    """Run `adb devices` (global — no -s <serial>, there isn't one yet) and
+    return every (serial, state) pair it reports, in the order given.
+    Raises AutoDetectError if adb itself can't be invoked at all (bad
+    adb_path, timeout) — mirrors AdbClient._run_raw()'s own OSError/
+    TimeoutExpired handling for the same reason: silently swallowing this
+    into "no devices found" would look identical to "nothing is plugged
+    in" when the real problem is a misconfigured adb_path."""
+    try:
+        result = subprocess.run(
+            [adb_path, "devices"],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            check=False,
         )
-    return args.devices if args.devices else [(args.serial, args.model)]
+    except subprocess.TimeoutExpired as exc:
+        raise AutoDetectError(f"'{adb_path} devices' timed out after 10s") from exc
+    except OSError as exc:
+        raise AutoDetectError(
+            f"could not execute adb at {adb_path!r}: {exc}. Is adb_path "
+            "correct? (see config/settings.yaml's adb.platform_tools_path)"
+        ) from exc
+
+    pairs: list[tuple[str, str]] = []
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue  # e.g. the "List of devices attached" header, or a blank line
+        pairs.append((parts[0], parts[1]))
+    return pairs
+
+
+def _detect_model_number(
+    client: AdbClient, profiles: dict[str, ModelProfile]
+) -> tuple[str | None, str]:
+    """Identify which loaded model profile matches this connected device,
+    via `adb shell getprop ro.product.model` — the same command the client
+    has already been running by hand to identify units (see
+    docs/record.md's SOG07/SOG08 sections: "client identified [it] via
+    `adb devices` + `getprop ro.product.model`"). Returns
+    (model_number_or_None, raw_getprop_value_for_logging).
+
+    Matches case-insensitively against each profile's own `model_number`
+    (e.g. "SOG08") or, if set, its optional `adb_identifiers` list (see
+    ModelProfile.adb_identifiers()) — an escape hatch for a model whose
+    real `ro.product.model` string turns out to differ from its carrier
+    model number once that's actually confirmed on real hardware. Never
+    guesses: returns None (no match) rather than picking a "closest"
+    profile, and logs a clear error if the value matches more than one
+    profile (ambiguous) rather than picking either one."""
+    try:
+        raw = client.shell("getprop ro.product.model").strip()
+    except AdbCommandError as exc:
+        return None, f"<getprop ro.product.model failed: {exc}>"
+
+    raw_lower = raw.lower()
+    matches = [
+        model_number
+        for model_number, profile in profiles.items()
+        if raw_lower
+        in {model_number.lower(), *(s.lower() for s in profile.adb_identifiers())}
+    ]
+
+    if len(matches) == 1:
+        return matches[0], raw
+    if len(matches) > 1:
+        logger.error(
+            "device %s: ambiguous model match — getprop ro.product.model "
+            "= %r matches more than one profile: %s. Refusing to guess; "
+            "disambiguate via each profile's adb_identifiers, or pass "
+            "--serial/--model explicitly for this device.",
+            client.serial, raw, matches,
+        )
+        return None, raw
+    return None, raw
+
+
+def _auto_detect_devices(
+    adb_path: str, profiles: dict[str, ModelProfile]
+) -> list[tuple[str, str]]:
+    """Auto-detect every currently-connected, authorized device and match
+    it to a known model profile — this runs when the CLI is invoked with
+    no --device/--serial/--model at all, so a client can just plug in
+    whatever devices they have and run one simple command, instead of
+    looking up and typing each serial/model by hand every time a
+    different physical unit gets connected.
+
+    Never guesses: a device that isn't in the 'device' (ready/authorized)
+    state, or doesn't cleanly match exactly one known profile, is logged
+    as a clear error/warning and excluded — never silently skipped
+    without explanation, and never run against a "closest" or default
+    profile."""
+    pairs = _list_adb_devices(adb_path)
+
+    serials: list[str] = []
+    for serial, state in pairs:
+        if state == "device":
+            serials.append(serial)
+        else:
+            logger.warning(
+                "device %s: adb reports state %r (not 'device'/ready) — "
+                "skipping. A common cause is an unaccepted USB debugging "
+                "authorization prompt on the device itself.",
+                serial, state,
+            )
+
+    devices: list[tuple[str, str]] = []
+    for serial in serials:
+        client = AdbClient(serial, adb_path=adb_path)
+        model_number, raw = _detect_model_number(client, profiles)
+        if model_number is None:
+            logger.error(
+                "device %s: could not match to a known model profile "
+                "(getprop ro.product.model = %r). Known model_numbers: "
+                "%s. Run it explicitly with --serial %s --model <MODEL> "
+                "once you know which profile it is — and if %r is that "
+                "model's real identity string, add it to that model's "
+                "config/models/*.yaml under adb_identifiers so "
+                "auto-detection recognizes it next time.",
+                serial, raw, sorted(profiles.keys()), serial, raw,
+            )
+            continue
+        logger.info(
+            "device %s: auto-detected as %s (getprop ro.product.model = %r)",
+            serial, model_number, raw,
+        )
+        devices.append((serial, model_number))
+    return devices
 
 
 def _resolve_device_network_config(base_config: dict, serial: str) -> dict:
@@ -374,6 +540,30 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     adb_path = _resolve_adb_path(adb_cfg)
+
+    if devices is None:
+        logger.info(
+            "no --device/--serial given — auto-detecting connected "
+            "devices via '%s devices' + getprop ro.product.model",
+            adb_path,
+        )
+        try:
+            devices = _auto_detect_devices(adb_path, profiles)
+        except AutoDetectError as exc:
+            logger.error("%s", exc)
+            return 1
+        if not devices:
+            logger.error(
+                "auto-detection found no connected device that matches a "
+                "known model profile — nothing to run. Connect a device "
+                "(and accept its USB debugging prompt), or pass "
+                "--serial/--model explicitly."
+            )
+            return 1
+        logger.info(
+            "auto-detected %d device(s): %s",
+            len(devices), ", ".join(f"{serial}:{model}" for serial, model in devices),
+        )
 
     # Single device: run inline, exactly as before (no thread pool overhead
     # or interleaved logging from a second thread for the common case).

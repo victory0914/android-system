@@ -118,6 +118,26 @@ class ModelProfile:
     def android_version(self) -> int:
         return self._data["android_version"]
 
+    def adb_identifiers(self) -> list[str]:
+        """Optional extra strings (besides `model_number` itself) that
+        identify this model via `adb shell getprop ro.product.model`, for
+        auto-detection (see main_phase2._auto_detect_devices()). Not
+        required — most models' `getprop ro.product.model` is expected to
+        already match `model_number` directly (that's the string the
+        client has been reading by hand via `adb devices` + `getprop
+        ro.product.model` to identify units all along; see
+        docs/record.md's SOG07/SOG08 sections). This is only an escape
+        hatch for a model whose real device reports something else once
+        that's actually confirmed on real hardware — never guessed or
+        pre-filled here."""
+        value = self._data.get("adb_identifiers", [])
+        if not isinstance(value, list):
+            raise ModelProfileError(
+                f"model {self.model_number!r}: adb_identifiers must be a "
+                f"list of strings, got {value!r}"
+            )
+        return value
+
     def has_screen_driven_wizard(self) -> bool:
         """True if this profile uses the Stage B screen-driven wizard schema
         (`wizard.screens`, matched by visible text — see

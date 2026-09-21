@@ -33,6 +33,10 @@ python src\main_phase2.py --skip-wizard \
   --device 352063910272451:SHG10 --device 353681650397052:SHG07 \
   --device HQ632M1012:SOG07 --device HQ63460161:SOG08
 ```
+**Superseded, 2026-09-22: this is no longer the recommended form.**
+`python src\main_phase2.py --skip-wizard` alone now auto-detects and runs
+every connected device — see the auto-detection entry further down this
+file. `--device` still works, for an explicit override.
 
 **🎉 Update, same day (2026-09-17): running that exact 4-device parallel
 command surfaced a real finding — SHG10 was never actually immune to
@@ -186,8 +190,37 @@ fields; only a genuinely blank field still gets typed into. The
 really does need a per-device value, like `apn_name`), but SOG07 itself
 should now work correctly even without adding that override, since the
 field will simply be left alone. See docs/record.md's SOG07 section,
-finding #8, for the full account. **Not yet confirmed on real
-hardware.**
+finding #8, for the full account.
+
+**🎉🎉🎉 CONFIRMED on real hardware, 2026-09-22: SOG07's issue is
+resolved.** Client confirmed the fix above works end-to-end on real
+hardware. **All 4 models (SHG10, SHG07, SOG07, SOG08) are now genuinely,
+directly confirmed end-to-end, with the current code, on real
+hardware — Phase 2's core flow (Wi-Fi + APN) is complete.**
+
+**New, same day: device auto-detection — no more specifying serials by
+hand.** Client feedback: having to look up and type each device's adb
+serial meant every time a different physical unit got connected, the
+command had to change. `python src/main_phase2.py --skip-wizard` (no
+`--device`/`--serial`/`--model` at all) now auto-detects every
+connected, authorized device via `adb devices` +
+`getprop ro.product.model`, matches each one against
+`config/models/*.yaml`'s `model_number`s, and runs all of them in
+parallel — see `main_phase2._auto_detect_devices()` /
+`_detect_model_number()`. `--serial`/`--model`/`--device` still work,
+now as an explicit override rather than the required form. Never
+guesses: a device not in `adb devices`' `device` state, or whose
+`getprop ro.product.model` doesn't cleanly match exactly one known
+model, is logged clearly and excluded, never silently run against a
+"closest" profile. Each profile also gained an optional
+`adb_identifiers` list (`ModelProfile.adb_identifiers()`) as an escape
+hatch, in case a real device's `ro.product.model` string ever turns out
+to differ from its `model_number` once that's confirmed on real
+hardware — none of the 4 real profiles set it yet, since no mismatch has
+been observed. **Not yet confirmed on real hardware** — next step is a
+real run with no `--device`/`--serial`/`--model` at all, to confirm
+`getprop ro.product.model` really does report each unit's plain
+`model_number` (e.g. `SOG07`) as expected, for all 4 models.
 
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:

@@ -342,6 +342,27 @@ def test_android_versions_match_expected():
     assert profiles["SHG10"].android_version == 14
 
 
+def test_adb_identifiers_defaults_to_empty_list_when_unset():
+    """None of the 4 real model YAML files set adb_identifiers yet — every
+    real device's `getprop ro.product.model` is expected to already match
+    its own model_number directly (see main_phase2._detect_model_number()'s
+    docstring), so this is purely an as-yet-unused escape hatch."""
+    profiles = ModelProfile.load_all(str(MODELS_DIR))
+    for profile in profiles.values():
+        assert profile.adb_identifiers() == []
+
+
+def test_adb_identifiers_returns_configured_list():
+    profile = ModelProfile({"model_number": "SOG08", "adb_identifiers": ["Ace III", "XQ-DC44"]})
+    assert profile.adb_identifiers() == ["Ace III", "XQ-DC44"]
+
+
+def test_adb_identifiers_rejects_non_list_value():
+    profile = ModelProfile({"model_number": "SOG08", "adb_identifiers": "not-a-list"})
+    with pytest.raises(ModelProfileError):
+        profile.adb_identifiers()
+
+
 def test_missing_required_field_raises(tmp_path):
     bad_yaml = tmp_path / "broken.yaml"
     bad_yaml.write_text(

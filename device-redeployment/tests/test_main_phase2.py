@@ -13,20 +13,27 @@ unsafe: this always runs against real hardware, there is no dry-run mode)."""
 import argparse
 import logging
 import os
+import subprocess
 
 import pytest
 import yaml
 
 import src.main_phase2 as main_phase2
 from src.main_phase2 import (
+    AutoDetectError,
     NetworkConfigError,
+    _auto_detect_devices,
+    _detect_model_number,
+    _list_adb_devices,
     _load_network_config,
     _parse_device_spec,
     _resolve_adb_path,
     _resolve_devices,
     build_arg_parser,
 )
+from src.device.model_profile import ModelProfile
 from src.orchestration.slot import SlotState
+from tests.fakes import FakeAdbClient
 
 
 def test_resolve_adb_path_joins_directory_with_executable_name(tmp_path):
@@ -126,8 +133,23 @@ def test_resolve_devices_rejects_device_combined_with_serial():
         _resolve_devices(args, build_arg_parser())
 
 
-def test_resolve_devices_rejects_neither_form_given():
+def test_resolve_devices_returns_none_for_auto_detect_mode():
+    """No --device/--serial/--model at all is no longer a usage error — it
+    signals main() to auto-detect every connected device instead (2026-09-22,
+    client decision: no more looking up/typing a serial by hand for each
+    physical unit)."""
     args = build_arg_parser().parse_args([])
+    assert _resolve_devices(args, build_arg_parser()) is None
+
+
+def test_resolve_devices_rejects_serial_without_model():
+    args = build_arg_parser().parse_args(["--serial", "ABC123"])
+    with pytest.raises(SystemExit):
+        _resolve_devices(args, build_arg_parser())
+
+
+def test_resolve_devices_rejects_model_without_serial():
+    args = build_arg_parser().parse_args(["--model", "SHG10"])
     with pytest.raises(SystemExit):
         _resolve_devices(args, build_arg_parser())
 
@@ -323,3 +345,137 @@ def test_load_network_config_ignores_placeholder_in_unread_field(tmp_path, monke
     result = _load_network_config(logging.getLogger("test"))
 
     assert result == config
+
+
+# --- Device auto-detection (2026-09-22) -------------------------------------
+# Client feedback: specifying each device's serial by hand meant every time
+# a different physical unit got connected, someone had to look up its serial
+# and edit the command. Auto-detects every connected, authorized device via
+# `adb devices` + `getprop ro.product.model` instead, so `--skip-wizard`
+# alone (no --device/--serial/--model) runs whatever's currently plugged in.
+
+_SHG10_PROFILE = ModelProfile({"model_number": "SHG10"})
+_SOG07_PROFILE = ModelProfile({"model_number": "SOG07"})
+_AUTO_DETECT_PROFILES = {"SHG10": _SHG10_PROFILE, "SOG07": _SOG07_PROFILE}
+
+
+def test_list_adb_devices_parses_serial_and_state_pairs(monkeypatch):
+    def fake_run(args, **kwargs):
+        assert args == ["adb", "devices"]
+        return subprocess.CompletedProcess(
+            args, 0,
+            stdout="List of devices attached\nABC123\tdevice\nDEF456\tunauthorized\n\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert _list_adb_devices("adb") == [("ABC123", "device"), ("DEF456", "unauthorized")]
+
+
+def test_list_adb_devices_raises_auto_detect_error_when_adb_missing(monkeypatch):
+    def fake_run(args, **kwargs):
+        raise OSError("no such file")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(AutoDetectError):
+        _list_adb_devices("adb")
+
+
+def test_list_adb_devices_raises_auto_detect_error_on_timeout(monkeypatch):
+    def fake_run(args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args, timeout=10)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(AutoDetectError):
+        _list_adb_devices("adb")
+
+
+def test_detect_model_number_matches_model_number_case_insensitively():
+    client = FakeAdbClient(
+        "ABC123", shell_responses={"getprop ro.product.model": "shg10\n"}
+    )
+    model_number, raw = _detect_model_number(client, _AUTO_DETECT_PROFILES)
+    assert model_number == "SHG10"
+    assert raw == "shg10"
+
+
+def test_detect_model_number_matches_via_adb_identifiers_escape_hatch():
+    profile = ModelProfile({"model_number": "SOG08", "adb_identifiers": ["Ace III"]})
+    client = FakeAdbClient(
+        "ABC123", shell_responses={"getprop ro.product.model": "Ace III"}
+    )
+    model_number, raw = _detect_model_number(client, {"SOG08": profile})
+    assert model_number == "SOG08"
+
+
+def test_detect_model_number_returns_none_for_unknown_device():
+    client = FakeAdbClient(
+        "ABC123", shell_responses={"getprop ro.product.model": "totally unknown"}
+    )
+    model_number, raw = _detect_model_number(client, _AUTO_DETECT_PROFILES)
+    assert model_number is None
+    assert raw == "totally unknown"
+
+
+def test_detect_model_number_returns_none_on_getprop_failure():
+    client = FakeAdbClient(
+        "ABC123", shell_failures={"getprop ro.product.model"}
+    )
+    model_number, raw = _detect_model_number(client, _AUTO_DETECT_PROFILES)
+    assert model_number is None
+    assert "failed" in raw
+
+
+def test_detect_model_number_never_guesses_on_ambiguous_match():
+    """Two profiles both claiming the same getprop string must never be
+    resolved by picking either one — that's exactly the kind of silent,
+    uncertain match this whole project's philosophy refuses to make."""
+    dup_a = ModelProfile({"model_number": "SHG10", "adb_identifiers": ["dup"]})
+    dup_b = ModelProfile({"model_number": "SOG07", "adb_identifiers": ["dup"]})
+    client = FakeAdbClient("ABC123", shell_responses={"getprop ro.product.model": "dup"})
+    model_number, raw = _detect_model_number(client, {"SHG10": dup_a, "SOG07": dup_b})
+    assert model_number is None
+
+
+def test_auto_detect_devices_matches_ready_devices_and_skips_others(monkeypatch):
+    def fake_list_adb_devices(adb_path):
+        return [("ABC123", "device"), ("DEF456", "unauthorized"), ("GHI789", "device")]
+
+    def fake_shell_by_serial(serial):
+        return {"ABC123": "SHG10", "GHI789": "SOG07"}[serial]
+
+    class _StubAdbClient:
+        def __init__(self, serial, adb_path):
+            self.serial = serial
+
+        def shell(self, command, timeout=30):
+            return fake_shell_by_serial(self.serial)
+
+    monkeypatch.setattr(main_phase2, "_list_adb_devices", fake_list_adb_devices)
+    monkeypatch.setattr(main_phase2, "AdbClient", _StubAdbClient)
+
+    devices = _auto_detect_devices("adb", _AUTO_DETECT_PROFILES)
+
+    assert devices == [("ABC123", "SHG10"), ("GHI789", "SOG07")]
+
+
+def test_auto_detect_devices_excludes_devices_matching_no_profile(monkeypatch):
+    def fake_list_adb_devices(adb_path):
+        return [("ABC123", "device")]
+
+    class _StubAdbClient:
+        def __init__(self, serial, adb_path):
+            self.serial = serial
+
+        def shell(self, command, timeout=30):
+            return "totally unrecognized model string"
+
+    monkeypatch.setattr(main_phase2, "_list_adb_devices", fake_list_adb_devices)
+    monkeypatch.setattr(main_phase2, "AdbClient", _StubAdbClient)
+
+    assert _auto_detect_devices("adb", _AUTO_DETECT_PROFILES) == []
+
+
+def test_auto_detect_devices_returns_empty_list_when_nothing_connected(monkeypatch):
+    monkeypatch.setattr(main_phase2, "_list_adb_devices", lambda adb_path: [])
+    assert _auto_detect_devices("adb", _AUTO_DETECT_PROFILES) == []

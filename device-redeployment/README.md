@@ -66,32 +66,44 @@ directory pytest is invoked from.
    touches the wizard (see `## Status` above for why). Confirm it shows up
    in `adb devices` before proceeding.
 4. Run, with `--skip-wizard` (the standard flag for a real run — see
-   `## Status` above):
+   `## Status` above). **The normal way to invoke this (2026-09-22): no
+   `--device`/`--serial`/`--model` at all** — every connected, authorized
+   device is auto-detected (`adb devices` + `getprop ro.product.model`,
+   matched against `config/models/*.yaml`'s `model_number`s) and run in
+   parallel automatically:
+
+   ```bash
+   python src/main_phase2.py --skip-wizard
+   ```
+
+   Connect whatever devices the client has plugged in (any mix of the 4
+   known models) and run this one command — no need to look up or type a
+   serial, and swapping in a different physical unit needs no command or
+   code change. A device that isn't in `adb devices`' `device`
+   (authorized/ready) state, or whose `getprop ro.product.model` doesn't
+   match a known `model_number`, is logged clearly and skipped rather than
+   guessed — see the log for `could not match to a known model profile`.
+
+   `--serial`/`--model` (one specific device) and `--device SERIAL:MODEL`
+   (repeatable, several specific devices) still work exactly as before, to
+   override auto-detection for one or more devices — e.g. to force a
+   device whose model auto-detection can't identify:
 
    ```bash
    python src/main_phase2.py --serial <adb_serial> --model <model_number> --skip-wizard
+   # e.g.
+   python src/main_phase2.py --serial HQ632M1012 --model SOG07 --skip-wizard
    ```
 
-   e.g. `python src/main_phase2.py --serial HQ632M1012 --model SOG07 --skip-wizard`.
    Model numbers: `SOG08` (Xperia Ace III), `SOG07` (Xperia 10 IV), `SHG07`
    (AQUOS sense6s), `SHG10` (AQUOS sense7).
 
-   To run **multiple devices at the same time**, use `--device
-   SERIAL:MODEL` instead, once per device, in place of `--serial`/`--model`:
-
-   ```bash
-   python src/main_phase2.py --skip-wizard \
-     --device 352063910272451:SHG10 \
-     --device 353681650397052:SHG07 \
-     --device HQ632M1012:SOG07 \
-     --device HQ63460161:SOG08
-   ```
-
-   All devices in the list start at the same time (a thread per device) and
-   run independently against the same `config/network.yaml` — one device's
-   failure or retry never delays or blocks the others. Exit code is `1` if
-   *any* device failed; check the per-device `SUCCESS`/`FAILED` log lines
-   for which one(s).
+   Whether auto-detected or explicitly listed, all devices start at the
+   same time (a thread per device) and run independently against the same
+   `config/network.yaml` — one device's failure or retry never delays or
+   blocks the others. Exit code is `1` if *any* device failed (including
+   one auto-detection couldn't match); check the per-device
+   `SUCCESS`/`FAILED` log lines for which one(s).
 
    `--max-retries N` overrides `config/settings.yaml`'s default (3) for
    this run only — e.g. `--max-retries 0` for a single attempt with no
