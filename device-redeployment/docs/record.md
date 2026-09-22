@@ -1390,6 +1390,13 @@ findings.**
    now directly confirmed working with the current code — this was the
    last one outstanding.
 
+10. **🎉 Same day, reconfirmed via the new auto-detected 4-device run**
+    (see "Device auto-detection" section below): `SUCCESS: device
+    HQ632M1012 reached LOGIN_INSTALL`, MCC/MNC correctly showed `'440'`/
+    `'10'` (this unit's real SIM values, left untouched rather than
+    overwritten with the shared config's `'11'`) — the exact behavior
+    finding #8's fix was meant to produce, now seen twice.
+
 ---
 
 ## SOG07 (Sony Xperia 10 IV, Android 14)
@@ -1853,12 +1860,21 @@ New tests: `test_list_adb_devices_parses_serial_and_state_pairs`,
 plus `ModelProfile.adb_identifiers()`'s own tests in
 `tests/test_model_profile.py`.
 
-**Not yet confirmed on real hardware** — the next real run should be the
-plain `python src/main_phase2.py --skip-wizard` form (no device flags at
-all) against however many of the 4 devices happen to be connected, to
-confirm `getprop ro.product.model` really does report each real unit's
-plain `model_number` (e.g. `SOG07`, not some other internal codename) as
-expected.
+**🎉🎉🎉 CONFIRMED on real hardware, 2026-09-22.** Client ran the plain
+`python src\main_phase2.py --skip-wizard` form (no device flags at all)
+with all 4 real units connected. Log:
+```
+device 352063910272451: auto-detected as SHG10 (getprop ro.product.model = 'SHG10')
+device 353681650397052: auto-detected as SHG07 (getprop ro.product.model = 'SHG07')
+device HQ632M1012: auto-detected as SOG07 (getprop ro.product.model = 'SOG07')
+device HQ63460161: auto-detected as SOG08 (getprop ro.product.model = 'SOG08')
+```
+Confirms the assumption behind the whole feature: `getprop
+ro.product.model` reports each real unit's plain `model_number` exactly
+— no internal codename mismatch on any of the 4 models, so
+`adb_identifiers` stays unused (not because it's untested, but because
+no model has needed it). All 4 devices went on to reach `SUCCESS: ...
+reached LOGIN_INSTALL` in the same run.
 
 ---
 

@@ -6,6 +6,21 @@ outstanding. See `docs/record.md` for the full session notes (test logs,
 navigation paths, capture methodology, judgment calls) behind every entry
 here — this file is the checklist; that one is the evidence.
 
+**🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
+run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached
+`SUCCESS: ... reached LOGIN_INSTALL`, invoked with nothing but
+`python src\main_phase2.py --skip-wizard` (no serials typed by hand).**
+This closes out both open items at once: SOG07's fix (see its section's
+finding #9) and device auto-detection (see the entry further down this
+file) are now both directly confirmed on real hardware, not just
+unit-tested. `getprop ro.product.model` reported exactly `'SHG10'`,
+`'SHG07'`, `'SOG07'`, `'SOG08'` for the 4 real units — the plain
+`model_number`, exactly as assumed — so `adb_identifiers` remains unused
+by design, not because it's untested. SOG07's MCC/MNC fields correctly
+showed `'440'`/`'10'` (its own real SIM values) and were left alone
+rather than overwritten. **Phase 2's core Wi-Fi+APN flow, plus
+auto-detection, is now complete and confirmed for all 4 models.**
+
 **🎉🎉🎉 Status as of 2026-09-17: ALL FOUR MODELS (SHG10, SHG07, SOG07,
 SOG08) are CONFIRMED WORKING end-to-end on real hardware.** SOG08's first
 live run succeeded on the very first attempt, no field-mismatch errors —
@@ -217,10 +232,16 @@ model, is logged clearly and excluded, never silently run against a
 hatch, in case a real device's `ro.product.model` string ever turns out
 to differ from its `model_number` once that's confirmed on real
 hardware — none of the 4 real profiles set it yet, since no mismatch has
-been observed. **Not yet confirmed on real hardware** — next step is a
-real run with no `--device`/`--serial`/`--model` at all, to confirm
-`getprop ro.product.model` really does report each unit's plain
-`model_number` (e.g. `SOG07`) as expected, for all 4 models.
+been observed.
+
+**🎉🎉🎉 CONFIRMED on real hardware, 2026-09-22.** A real run of
+`python src\main_phase2.py --skip-wizard` (no `--device`/`--serial`/
+`--model` at all) auto-detected all 4 connected devices correctly —
+`getprop ro.product.model` returned exactly `'SHG10'`, `'SHG07'`,
+`'SOG07'`, `'SOG08'`, matching each `model_number` directly, no
+`adb_identifiers` needed — and every device went on to reach
+`SUCCESS: ... reached LOGIN_INSTALL`. Auto-detection is genuinely done,
+not just unit-tested.
 
 **Status as of 2026-09-11 (Stage B): 🎉 SHG10's Phase 2 flow (Wi-Fi + APN)
 is CONFIRMED WORKING end-to-end on real hardware.** Client run:
