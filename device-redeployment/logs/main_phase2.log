@@ -5121,3 +5121,494 @@ java.lang.SecurityException: Uid 2000 does not have access to connect-network wi
 2026-10-01 18:07:49,498 INFO     main_phase2: SUCCESS: device HQ632M1012 reached LOGIN_INSTALL
 2026-10-01 18:07:49,499 INFO     main_phase2: SUCCESS: device 352063910283409 reached LOGIN_INSTALL
 2026-10-01 18:07:49,499 INFO     main_phase2: SUCCESS: device 353681650397052 reached LOGIN_INSTALL
+2026-10-01 18:27:58,003 INFO     main_phase2: loading model profiles from C:\code\android-system\device-redeployment\config\models
+2026-10-01 18:27:58,046 INFO     main_phase2: no --device/--serial given — auto-detecting connected devices via 'C:\platform-tools\adb.exe devices' + getprop ro.product.model
+2026-10-01 18:27:58,208 INFO     main_phase2: device 352063910272451: auto-detected as SHG10 (getprop ro.product.model = 'SHG10')
+2026-10-01 18:27:58,302 INFO     main_phase2: device 352063910283409: auto-detected as SHG10 (getprop ro.product.model = 'SHG10')
+2026-10-01 18:27:58,398 INFO     main_phase2: device 353681650242175: auto-detected as SHG07 (getprop ro.product.model = 'SHG07')
+2026-10-01 18:27:58,503 INFO     main_phase2: device 353681650397052: auto-detected as SHG07 (getprop ro.product.model = 'SHG07')
+2026-10-01 18:27:58,597 INFO     main_phase2: device 353681653208520: auto-detected as SHG07 (getprop ro.product.model = 'SHG07')
+2026-10-01 18:27:58,680 ERROR    main_phase2: device 356659111963982: could not match to a known model profile (getprop ro.product.model = 'SHG05'). Known model_numbers: ['SHG07', 'SHG10', 'SOG07', 'SOG08']. Run it explicitly with --serial 356659111963982 --model <MODEL> once you know which profile it is — and if 'SHG05' is that model's real identity string, add it to that model's config/models/*.yaml under adb_identifiers so auto-detection recognizes it next time.
+2026-10-01 18:27:58,770 ERROR    main_phase2: device 357015386489626: could not match to a known model profile (getprop ro.product.model = 'SH-53C'). Known model_numbers: ['SHG07', 'SHG10', 'SOG07', 'SOG08']. Run it explicitly with --serial 357015386489626 --model <MODEL> once you know which profile it is — and if 'SH-53C' is that model's real identity string, add it to that model's config/models/*.yaml under adb_identifiers so auto-detection recognizes it next time.
+2026-10-01 18:27:58,861 INFO     main_phase2: device HQ62540758: auto-detected as SOG08 (getprop ro.product.model = 'SOG08')
+2026-10-01 18:27:58,942 INFO     main_phase2: device HQ627C0472: auto-detected as SOG08 (getprop ro.product.model = 'SOG08')
+2026-10-01 18:27:59,038 INFO     main_phase2: device HQ627F2149: auto-detected as SOG07 (getprop ro.product.model = 'SOG07')
+2026-10-01 18:27:59,130 INFO     main_phase2: device HQ632M1012: auto-detected as SOG07 (getprop ro.product.model = 'SOG07')
+2026-10-01 18:27:59,239 INFO     main_phase2: device HQ63460161: auto-detected as SOG08 (getprop ro.product.model = 'SOG08')
+2026-10-01 18:27:59,318 INFO     main_phase2: device HQ634A0C5D: auto-detected as SOG08 (getprop ro.product.model = 'SOG08')
+2026-10-01 18:27:59,415 ERROR    main_phase2: device HQ63622931: could not match to a known model profile (getprop ro.product.model = 'XQ-DC44'). Known model_numbers: ['SHG07', 'SHG10', 'SOG07', 'SOG08']. Run it explicitly with --serial HQ63622931 --model <MODEL> once you know which profile it is — and if 'XQ-DC44' is that model's real identity string, add it to that model's config/models/*.yaml under adb_identifiers so auto-detection recognizes it next time.
+2026-10-01 18:27:59,416 INFO     main_phase2: auto-detected 11 device(s): 352063910272451:SHG10, 352063910283409:SHG10, 353681650242175:SHG07, 353681650397052:SHG07, 353681653208520:SHG07, HQ62540758:SOG08, HQ627C0472:SOG08, HQ627F2149:SOG07, HQ632M1012:SOG07, HQ63460161:SOG08, HQ634A0C5D:SOG08
+2026-10-01 18:27:59,416 INFO     main_phase2: running 11 devices in parallel: 352063910272451:SHG10, 352063910283409:SHG10, 353681650242175:SHG07, 353681650397052:SHG07, 353681653208520:SHG07, HQ62540758:SOG08, HQ627C0472:SOG08, HQ627F2149:SOG07, HQ632M1012:SOG07, HQ63460161:SOG08, HQ634A0C5D:SOG08
+2026-10-01 18:27:59,418 INFO     main_phase2: starting Phase 2 run: serial=352063910272451 model=SHG10 (AQUOS sense7) [skip_wizard]
+2026-10-01 18:27:59,419 INFO     main_phase2: starting Phase 2 run: serial=352063910283409 model=SHG10 (AQUOS sense7) [skip_wizard]
+2026-10-01 18:27:59,419 INFO     main_phase2: starting Phase 2 run: serial=353681650242175 model=SHG07 (AQUOS sense6s) [skip_wizard]
+2026-10-01 18:27:59,419 INFO     main_phase2: starting Phase 2 run: serial=353681650397052 model=SHG07 (AQUOS sense6s) [skip_wizard]
+2026-10-01 18:27:59,419 INFO     main_phase2: starting Phase 2 run: serial=353681653208520 model=SHG07 (AQUOS sense6s) [skip_wizard]
+2026-10-01 18:27:59,421 INFO     main_phase2: starting Phase 2 run: serial=HQ62540758 model=SOG08 (Xperia Ace III) [skip_wizard]
+2026-10-01 18:27:59,424 INFO     main_phase2: starting Phase 2 run: serial=HQ627C0472 model=SOG08 (Xperia Ace III) [skip_wizard]
+2026-10-01 18:27:59,427 INFO     main_phase2: starting Phase 2 run: serial=HQ627F2149 model=SOG07 (Xperia 10 IV) [skip_wizard]
+2026-10-01 18:27:59,429 INFO     main_phase2: starting Phase 2 run: serial=HQ632M1012 model=SOG07 (Xperia 10 IV) [skip_wizard]
+2026-10-01 18:27:59,451 INFO     main_phase2: starting Phase 2 run: serial=HQ63460161 model=SOG08 (Xperia Ace III) [skip_wizard]
+2026-10-01 18:27:59,454 INFO     main_phase2: starting Phase 2 run: serial=HQ634A0C5D model=SOG08 (Xperia Ace III) [skip_wizard]
+2026-10-01 18:28:00,647 WARNING  src.orchestration.slot: slot 353681653208520: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,647 INFO     src.orchestration.slot: slot 353681653208520: connecting wifi
+2026-10-01 18:28:00,657 WARNING  src.orchestration.slot: slot 352063910283409: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,659 INFO     src.orchestration.slot: slot 352063910283409: connecting wifi
+2026-10-01 18:28:00,701 WARNING  src.orchestration.slot: slot HQ627C0472: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,702 INFO     src.orchestration.slot: slot HQ627C0472: connecting wifi
+2026-10-01 18:28:00,702 WARNING  src.orchestration.slot: slot 353681650242175: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,710 INFO     src.orchestration.slot: slot 353681650242175: connecting wifi
+2026-10-01 18:28:00,701 WARNING  src.orchestration.slot: slot 353681650397052: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,718 INFO     src.orchestration.slot: slot 353681650397052: connecting wifi
+2026-10-01 18:28:00,727 WARNING  src.orchestration.slot: slot HQ62540758: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,727 INFO     src.orchestration.slot: slot HQ62540758: connecting wifi
+2026-10-01 18:28:00,733 WARNING  src.orchestration.slot: slot HQ634A0C5D: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,734 INFO     src.orchestration.slot: slot HQ634A0C5D: connecting wifi
+2026-10-01 18:28:00,813 WARNING  src.orchestration.slot: slot 352063910272451: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,813 INFO     src.orchestration.slot: slot 352063910272451: connecting wifi
+2026-10-01 18:28:00,873 WARNING  src.orchestration.slot: slot HQ63460161: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,874 INFO     src.orchestration.slot: slot HQ63460161: connecting wifi
+2026-10-01 18:28:00,983 WARNING  src.orchestration.slot: slot HQ632M1012: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:00,983 INFO     src.orchestration.slot: slot HQ632M1012: connecting wifi
+2026-10-01 18:28:01,056 WARNING  src.orchestration.slot: slot HQ627F2149: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:01,056 INFO     src.orchestration.slot: slot HQ627F2149: connecting wifi
+2026-10-01 18:28:01,106 INFO     src.phase2.wifi_setup: device HQ627C0472: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,107 INFO     src.orchestration.slot: slot HQ627C0472: configuring apn
+2026-10-01 18:28:01,117 INFO     src.phase2.wifi_setup: device 353681653208520: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,117 INFO     src.orchestration.slot: slot 353681653208520: configuring apn
+2026-10-01 18:28:01,186 INFO     src.phase2.wifi_setup: device 353681650242175: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,187 INFO     src.phase2.wifi_setup: device 352063910283409: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,187 INFO     src.orchestration.slot: slot 353681650242175: configuring apn
+2026-10-01 18:28:01,188 INFO     src.orchestration.slot: slot 352063910283409: configuring apn
+2026-10-01 18:28:01,192 INFO     src.phase2.wifi_setup: device HQ634A0C5D: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,194 INFO     src.orchestration.slot: slot HQ634A0C5D: configuring apn
+2026-10-01 18:28:01,253 INFO     src.phase2.wifi_setup: device 353681650397052: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,253 INFO     src.orchestration.slot: slot 353681650397052: configuring apn
+2026-10-01 18:28:01,338 INFO     src.phase2.wifi_setup: device HQ62540758: shell wifi connect-network unavailable/failed: adb command failed: 'shell cmd wifi connect-network "earth5_1" wpa2 "earth5_1"' - Exception occurred while executing 'connect-network':
+java.lang.SecurityException: Uid 2000 does not have access to connect-network wifi command (or such command doesn't exist)
+	at com.android.server.wifi.WifiShellCommand.onCommand(WifiShellCommand.java:483)
+	at com.android.wifi.x.com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at com.android.server.wifi.WifiServiceImpl.handleShellCommand(WifiServiceImpl.java:5318)
+	at android.os.Binder.onShellCommand(Binder.java:1121)
+	at android.os.Binder.shellCommand(Binder.java:1068)
+	at android.os.Binder.onTransact(Binder.java:888)
+	at android.net.wifi.IWifiManager$Stub.onTransact(IWifiManager.java:3247)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+2026-10-01 18:28:01,353 INFO     src.phase2.wifi_setup: device HQ63460161: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,354 INFO     src.orchestration.slot: slot HQ63460161: configuring apn
+2026-10-01 18:28:01,362 INFO     src.phase2.apn_setup: device HQ627C0472: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:01,404 INFO     src.phase2.wifi_setup: device 352063910272451: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,405 INFO     src.orchestration.slot: slot 352063910272451: configuring apn
+2026-10-01 18:28:01,436 INFO     src.phase2.wifi_setup: device HQ632M1012: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,437 INFO     src.orchestration.slot: slot HQ632M1012: configuring apn
+2026-10-01 18:28:01,469 INFO     src.phase2.apn_setup: device HQ634A0C5D: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:01,481 INFO     src.phase2.wifi_setup: device HQ627F2149: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:01,481 INFO     src.orchestration.slot: slot HQ627F2149: configuring apn
+2026-10-01 18:28:01,507 WARNING  src.phase2.apn_setup: device HQ627C0472: apn: device is in Airplane Mode (settings get global airplane_mode_on == '1') — the mobile-network settings menu (and its gear icon) isn't shown in Wi-Fi settings while airplane mode is on. Disabling it now (client decision, 2026-10-02) before continuing navigation.
+2026-10-01 18:28:01,598 INFO     src.phase2.apn_setup: device 352063910283409: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:01,614 WARNING  src.phase2.apn_setup: device HQ634A0C5D: apn: device is in Airplane Mode (settings get global airplane_mode_on == '1') — the mobile-network settings menu (and its gear icon) isn't shown in Wi-Fi settings while airplane mode is on. Disabling it now (client decision, 2026-10-02) before continuing navigation.
+2026-10-01 18:28:01,655 INFO     src.phase2.apn_setup: device 352063910272451: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:01,695 INFO     src.phase2.apn_setup: device 353681650397052: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:01,726 INFO     src.phase2.apn_setup: device HQ632M1012: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:01,738 INFO     src.phase2.apn_setup: device HQ63460161: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:01,771 WARNING  src.phase2.apn_setup: device 352063910283409: apn: device is in Airplane Mode (settings get global airplane_mode_on == '1') — the mobile-network settings menu (and its gear icon) isn't shown in Wi-Fi settings while airplane mode is on. Disabling it now (client decision, 2026-10-02) before continuing navigation.
+2026-10-01 18:28:01,789 WARNING  src.phase2.apn_setup: device 352063910272451: apn: device is in Airplane Mode (settings get global airplane_mode_on == '1') — the mobile-network settings menu (and its gear icon) isn't shown in Wi-Fi settings while airplane mode is on. Disabling it now (client decision, 2026-10-02) before continuing navigation.
+2026-10-01 18:28:01,799 ERROR    src.phase2.apn_setup: device HQ627C0472: apn: failed to disable Airplane Mode via adb: adb command failed: 'shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false' - Exception occurred while executing 'broadcast':
+java.lang.SecurityException: Permission Denial: not allowed to send broadcast android.intent.action.AIRPLANE_MODE from pid=28789, uid=2000
+	at com.android.server.am.ActivityManagerService.broadcastIntentLockedTraced(ActivityManagerService.java:14962)
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:14755)
+	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(ActivityManagerService.java:15725)
+	at com.android.server.am.ActivityManagerShellCommand.runSendBroadcast(ActivityManagerShellCommand.java:928)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(ActivityManagerShellCommand.java:246)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(ActivityManagerService.java:10061)
+	at android.os.Binder.shellCommand(Binder.java:1068)
+	at android.os.Binder.onTransact(Binder.java:888)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:5267)
+	at com.android.server.am.ActivityManagerService.onTransact(ActivityManagerService.java:2770)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+2026-10-01 18:28:01,799 ERROR    src.phase2.apn_setup: device HQ627C0472: apn: could not confirm Airplane Mode was turned off via adb (still '1' after 10s of polling) — turn it off manually on the device before retrying
+2026-10-01 18:28:01,799 ERROR    src.phase2.apn_setup: device HQ627C0472: apn menu navigation failed
+2026-10-01 18:28:01,799 ERROR    src.orchestration.slot: slot HQ627C0472: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:01,801 WARNING  src.orchestration.scheduler: slot HQ627C0472: attempt failed (retry 1/3): apn configuration failed
+2026-10-01 18:28:01,856 WARNING  src.phase2.apn_setup: device 353681650397052: apn: device is in Airplane Mode (settings get global airplane_mode_on == '1') — the mobile-network settings menu (and its gear icon) isn't shown in Wi-Fi settings while airplane mode is on. Disabling it now (client decision, 2026-10-02) before continuing navigation.
+2026-10-01 18:28:01,893 WARNING  src.phase2.apn_setup: device HQ632M1012: apn: device is in Airplane Mode (settings get global airplane_mode_on == '1') — the mobile-network settings menu (and its gear icon) isn't shown in Wi-Fi settings while airplane mode is on. Disabling it now (client decision, 2026-10-02) before continuing navigation.
+2026-10-01 18:28:01,929 INFO     src.phase2.apn_setup: device 353681653208520: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:01,940 ERROR    src.phase2.apn_setup: device HQ634A0C5D: apn: failed to disable Airplane Mode via adb: adb command failed: 'shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false' - Exception occurred while executing 'broadcast':
+java.lang.SecurityException: Permission Denial: not allowed to send broadcast android.intent.action.AIRPLANE_MODE from pid=28615, uid=2000
+	at com.android.server.am.ActivityManagerService.broadcastIntentLockedTraced(ActivityManagerService.java:14962)
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:14755)
+	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(ActivityManagerService.java:15725)
+	at com.android.server.am.ActivityManagerShellCommand.runSendBroadcast(ActivityManagerShellCommand.java:928)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(ActivityManagerShellCommand.java:246)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(ActivityManagerService.java:10061)
+	at android.os.Binder.shellCommand(Binder.java:1068)
+	at android.os.Binder.onTransact(Binder.java:888)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:5267)
+	at com.android.server.am.ActivityManagerService.onTransact(ActivityManagerService.java:2770)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+2026-10-01 18:28:01,940 ERROR    src.phase2.apn_setup: device HQ634A0C5D: apn: could not confirm Airplane Mode was turned off via adb (still '1' after 10s of polling) — turn it off manually on the device before retrying
+2026-10-01 18:28:01,940 ERROR    src.phase2.apn_setup: device HQ634A0C5D: apn menu navigation failed
+2026-10-01 18:28:01,940 ERROR    src.orchestration.slot: slot HQ634A0C5D: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:01,940 WARNING  src.orchestration.scheduler: slot HQ634A0C5D: attempt failed (retry 1/3): apn configuration failed
+2026-10-01 18:28:02,054 INFO     src.phase2.apn_setup: device HQ627F2149: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:02,061 WARNING  src.phase2.apn_setup: device 353681653208520: apn: device is in Airplane Mode (settings get global airplane_mode_on == '1') — the mobile-network settings menu (and its gear icon) isn't shown in Wi-Fi settings while airplane mode is on. Disabling it now (client decision, 2026-10-02) before continuing navigation.
+2026-10-01 18:28:02,103 INFO     src.phase2.apn_setup: device 353681650242175: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:02,116 ERROR    src.phase2.apn_setup: device 352063910283409: apn: failed to disable Airplane Mode via adb: adb command failed: 'shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false' - Exception occurred while executing 'broadcast':
+java.lang.SecurityException: Permission Denial: not allowed to send broadcast android.intent.action.AIRPLANE_MODE from pid=27618, uid=2000
+	at com.android.server.am.ActivityManagerService.broadcastIntentLockedTraced(ActivityManagerService.java:14773)
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:14570)
+	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(ActivityManagerService.java:15536)
+	at com.android.server.am.ActivityManagerShellCommand.runSendBroadcast(ActivityManagerShellCommand.java:932)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(ActivityManagerShellCommand.java:246)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(ActivityManagerService.java:9898)
+	at android.os.Binder.shellCommand(Binder.java:1068)
+	at android.os.Binder.onTransact(Binder.java:888)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:5281)
+	at com.android.server.am.ActivityManagerService.onTransact(ActivityManagerService.java:2798)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+2026-10-01 18:28:02,117 ERROR    src.phase2.apn_setup: device 352063910283409: apn: could not confirm Airplane Mode was turned off via adb (still '1' after 10s of polling) — turn it off manually on the device before retrying
+2026-10-01 18:28:02,117 ERROR    src.phase2.apn_setup: device 352063910283409: apn menu navigation failed
+2026-10-01 18:28:02,117 ERROR    src.orchestration.slot: slot 352063910283409: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:02,117 WARNING  src.orchestration.scheduler: slot 352063910283409: attempt failed (retry 1/3): apn configuration failed
+2026-10-01 18:28:02,153 WARNING  src.phase2.apn_setup: device HQ627F2149: apn: device is in Airplane Mode (settings get global airplane_mode_on == '1') — the mobile-network settings menu (and its gear icon) isn't shown in Wi-Fi settings while airplane mode is on. Disabling it now (client decision, 2026-10-02) before continuing navigation.
+2026-10-01 18:28:02,182 ERROR    src.phase2.apn_setup: device 352063910272451: apn: failed to disable Airplane Mode via adb: adb command failed: 'shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false' - Exception occurred while executing 'broadcast':
+java.lang.SecurityException: Permission Denial: not allowed to send broadcast android.intent.action.AIRPLANE_MODE from pid=15554, uid=2000
+	at com.android.server.am.ActivityManagerService.broadcastIntentLockedTraced(ActivityManagerService.java:14773)
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:14570)
+	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(ActivityManagerService.java:15536)
+	at com.android.server.am.ActivityManagerShellCommand.runSendBroadcast(ActivityManagerShellCommand.java:932)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(ActivityManagerShellCommand.java:246)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(ActivityManagerService.java:9898)
+	at android.os.Binder.shellCommand(Binder.java:1068)
+	at android.os.Binder.onTransact(Binder.java:888)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:5281)
+	at com.android.server.am.ActivityManagerService.onTransact(ActivityManagerService.java:2798)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+2026-10-01 18:28:02,182 ERROR    src.phase2.apn_setup: device 352063910272451: apn: could not confirm Airplane Mode was turned off via adb (still '1' after 10s of polling) — turn it off manually on the device before retrying
+2026-10-01 18:28:02,182 ERROR    src.phase2.apn_setup: device 352063910272451: apn menu navigation failed
+2026-10-01 18:28:02,182 ERROR    src.orchestration.slot: slot 352063910272451: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:02,183 WARNING  src.orchestration.scheduler: slot 352063910272451: attempt failed (retry 1/3): apn configuration failed
+2026-10-01 18:28:02,238 ERROR    src.phase2.apn_setup: device 353681650397052: apn: failed to disable Airplane Mode via adb: adb command failed: 'shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false' - Exception occurred while executing 'broadcast':
+java.lang.SecurityException: Permission Denial: not allowed to send broadcast android.intent.action.AIRPLANE_MODE from pid=10119, uid=2000
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:13977)
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:13817)
+	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(ActivityManagerService.java:14680)
+	at com.android.server.am.ActivityManagerShellCommand.runSendBroadcast(ActivityManagerShellCommand.java:810)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(ActivityManagerShellCommand.java:221)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(ActivityManagerService.java:9444)
+	at android.os.Binder.shellCommand(Binder.java:1049)
+	at android.os.Binder.onTransact(Binder.java:877)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:4763)
+	at com.android.server.am.ActivityManagerService.onTransact(ActivityManagerService.java:2722)
+	at android.os.Binder.execTransactInternal(Binder.java:1285)
+	at android.os.Binder.execTransact(Binder.java:1244)
+2026-10-01 18:28:02,239 ERROR    src.phase2.apn_setup: device 353681650397052: apn: could not confirm Airplane Mode was turned off via adb (still '1' after 10s of polling) — turn it off manually on the device before retrying
+2026-10-01 18:28:02,239 ERROR    src.phase2.apn_setup: device 353681650397052: apn menu navigation failed
+2026-10-01 18:28:02,239 ERROR    src.orchestration.slot: slot 353681650397052: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:02,239 WARNING  src.orchestration.scheduler: slot 353681650397052: attempt failed (retry 1/3): apn configuration failed
+2026-10-01 18:28:02,248 ERROR    src.phase2.apn_setup: device HQ632M1012: apn: failed to disable Airplane Mode via adb: adb command failed: 'shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false' - Exception occurred while executing 'broadcast':
+java.lang.SecurityException: Permission Denial: not allowed to send broadcast android.intent.action.AIRPLANE_MODE from pid=20225, uid=2000
+	at com.android.server.am.ActivityManagerService.broadcastIntentLockedTraced(ActivityManagerService.java:14970)
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:14767)
+	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(ActivityManagerService.java:15753)
+	at com.android.server.am.ActivityManagerShellCommand.runSendBroadcast(ActivityManagerShellCommand.java:928)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(ActivityManagerShellCommand.java:246)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(ActivityManagerService.java:10055)
+	at android.os.Binder.shellCommand(Binder.java:1068)
+	at android.os.Binder.onTransact(Binder.java:888)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:5267)
+	at com.android.server.am.ActivityManagerService.onTransact(ActivityManagerService.java:2772)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+2026-10-01 18:28:02,248 ERROR    src.phase2.apn_setup: device HQ632M1012: apn: could not confirm Airplane Mode was turned off via adb (still '1' after 10s of polling) — turn it off manually on the device before retrying
+2026-10-01 18:28:02,248 ERROR    src.phase2.apn_setup: device HQ632M1012: apn menu navigation failed
+2026-10-01 18:28:02,249 ERROR    src.orchestration.slot: slot HQ632M1012: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:02,249 WARNING  src.orchestration.scheduler: slot HQ632M1012: attempt failed (retry 1/3): apn configuration failed
+2026-10-01 18:28:02,287 WARNING  src.phase2.apn_setup: device 353681650242175: apn: device is in Airplane Mode (settings get global airplane_mode_on == '1') — the mobile-network settings menu (and its gear icon) isn't shown in Wi-Fi settings while airplane mode is on. Disabling it now (client decision, 2026-10-02) before continuing navigation.
+2026-10-01 18:28:02,378 ERROR    src.phase2.apn_setup: device 353681653208520: apn: failed to disable Airplane Mode via adb: adb command failed: 'shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false' - Exception occurred while executing 'broadcast':
+java.lang.SecurityException: Permission Denial: not allowed to send broadcast android.intent.action.AIRPLANE_MODE from pid=6120, uid=2000
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:13977)
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:13817)
+	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(ActivityManagerService.java:14680)
+	at com.android.server.am.ActivityManagerShellCommand.runSendBroadcast(ActivityManagerShellCommand.java:810)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(ActivityManagerShellCommand.java:221)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(ActivityManagerService.java:9444)
+	at android.os.Binder.shellCommand(Binder.java:1049)
+	at android.os.Binder.onTransact(Binder.java:877)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:4763)
+	at com.android.server.am.ActivityManagerService.onTransact(ActivityManagerService.java:2722)
+	at android.os.Binder.execTransactInternal(Binder.java:1285)
+	at android.os.Binder.execTransact(Binder.java:1244)
+2026-10-01 18:28:02,378 ERROR    src.phase2.apn_setup: device 353681653208520: apn: could not confirm Airplane Mode was turned off via adb (still '1' after 10s of polling) — turn it off manually on the device before retrying
+2026-10-01 18:28:02,378 ERROR    src.phase2.apn_setup: device 353681653208520: apn menu navigation failed
+2026-10-01 18:28:02,378 ERROR    src.orchestration.slot: slot 353681653208520: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:02,379 WARNING  src.orchestration.scheduler: slot 353681653208520: attempt failed (retry 1/3): apn configuration failed
+2026-10-01 18:28:02,470 ERROR    src.phase2.apn_setup: device HQ627F2149: apn: failed to disable Airplane Mode via adb: adb command failed: 'shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false' - Exception occurred while executing 'broadcast':
+java.lang.SecurityException: Permission Denial: not allowed to send broadcast android.intent.action.AIRPLANE_MODE from pid=13952, uid=2000
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:14191)
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:14031)
+	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(ActivityManagerService.java:14907)
+	at com.android.server.am.ActivityManagerShellCommand.runSendBroadcast(ActivityManagerShellCommand.java:806)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(ActivityManagerShellCommand.java:221)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(ActivityManagerService.java:9640)
+	at android.os.Binder.shellCommand(Binder.java:1049)
+	at android.os.Binder.onTransact(Binder.java:877)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:4731)
+	at com.android.server.am.ActivityManagerService.onTransact(ActivityManagerService.java:2694)
+	at android.os.Binder.execTransactInternal(Binder.java:1285)
+	at android.os.Binder.execTransact(Binder.java:1244)
+2026-10-01 18:28:02,470 ERROR    src.phase2.apn_setup: device HQ627F2149: apn: could not confirm Airplane Mode was turned off via adb (still '1' after 10s of polling) — turn it off manually on the device before retrying
+2026-10-01 18:28:02,471 ERROR    src.phase2.apn_setup: device HQ627F2149: apn menu navigation failed
+2026-10-01 18:28:02,471 ERROR    src.orchestration.slot: slot HQ627F2149: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:02,472 WARNING  src.orchestration.scheduler: slot HQ627F2149: attempt failed (retry 1/3): apn configuration failed
+2026-10-01 18:28:02,573 ERROR    src.phase2.apn_setup: device 353681650242175: apn: failed to disable Airplane Mode via adb: adb command failed: 'shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false' - Exception occurred while executing 'broadcast':
+java.lang.SecurityException: Permission Denial: not allowed to send broadcast android.intent.action.AIRPLANE_MODE from pid=6026, uid=2000
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:13977)
+	at com.android.server.am.ActivityManagerService.broadcastIntentLocked(ActivityManagerService.java:13817)
+	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(ActivityManagerService.java:14680)
+	at com.android.server.am.ActivityManagerShellCommand.runSendBroadcast(ActivityManagerShellCommand.java:810)
+	at com.android.server.am.ActivityManagerShellCommand.onCommand(ActivityManagerShellCommand.java:221)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.am.ActivityManagerService.onShellCommand(ActivityManagerService.java:9444)
+	at android.os.Binder.shellCommand(Binder.java:1049)
+	at android.os.Binder.onTransact(Binder.java:877)
+	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:4763)
+	at com.android.server.am.ActivityManagerService.onTransact(ActivityManagerService.java:2722)
+	at android.os.Binder.execTransactInternal(Binder.java:1285)
+	at android.os.Binder.execTransact(Binder.java:1244)
+2026-10-01 18:28:02,574 ERROR    src.phase2.apn_setup: device 353681650242175: apn: could not confirm Airplane Mode was turned off via adb (still '1' after 10s of polling) — turn it off manually on the device before retrying
+2026-10-01 18:28:02,574 ERROR    src.phase2.apn_setup: device 353681650242175: apn menu navigation failed
+2026-10-01 18:28:02,574 ERROR    src.orchestration.slot: slot 353681650242175: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:02,574 WARNING  src.orchestration.scheduler: slot 353681650242175: attempt failed (retry 1/3): apn configuration failed
+2026-10-01 18:28:03,002 WARNING  src.orchestration.slot: slot HQ627C0472: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:03,003 INFO     src.orchestration.slot: slot HQ627C0472: connecting wifi
+2026-10-01 18:28:03,167 WARNING  src.orchestration.slot: slot HQ634A0C5D: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:03,167 INFO     src.orchestration.slot: slot HQ634A0C5D: connecting wifi
+2026-10-01 18:28:03,319 WARNING  src.orchestration.slot: slot 352063910283409: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:03,319 INFO     src.orchestration.slot: slot 352063910283409: connecting wifi
+2026-10-01 18:28:03,388 WARNING  src.orchestration.slot: slot 352063910272451: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:03,388 INFO     src.orchestration.slot: slot 352063910272451: connecting wifi
+2026-10-01 18:28:03,395 INFO     src.phase2.wifi_setup: device HQ627C0472: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:03,395 INFO     src.orchestration.slot: slot HQ627C0472: configuring apn
+2026-10-01 18:28:03,459 WARNING  src.orchestration.slot: slot 353681650397052: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:03,468 INFO     src.orchestration.slot: slot 353681650397052: connecting wifi
+2026-10-01 18:28:03,495 WARNING  src.orchestration.slot: slot HQ632M1012: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:03,495 INFO     src.orchestration.slot: slot HQ632M1012: connecting wifi
+2026-10-01 18:28:03,534 WARNING  src.orchestration.slot: slot 353681653208520: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:03,534 INFO     src.orchestration.slot: slot 353681653208520: connecting wifi
+2026-10-01 18:28:03,555 INFO     src.phase2.wifi_setup: device HQ634A0C5D: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:03,558 INFO     src.orchestration.slot: slot HQ634A0C5D: configuring apn
+2026-10-01 18:28:03,602 WARNING  src.orchestration.slot: slot HQ627F2149: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:03,609 INFO     src.orchestration.slot: slot HQ627F2149: connecting wifi
+2026-10-01 18:28:03,609 INFO     src.phase2.apn_setup: device HQ627C0472: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:03,742 WARNING  src.orchestration.slot: slot 353681650242175: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:03,743 INFO     src.orchestration.slot: slot 353681650242175: connecting wifi
+2026-10-01 18:28:03,763 INFO     src.phase2.apn_setup: device HQ634A0C5D: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:03,775 INFO     src.phase2.wifi_setup: device 352063910283409: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:03,775 INFO     src.orchestration.slot: slot 352063910283409: configuring apn
+2026-10-01 18:28:03,831 INFO     src.phase2.wifi_setup: device 352063910272451: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:03,831 INFO     src.orchestration.slot: slot 352063910272451: configuring apn
+2026-10-01 18:28:03,911 INFO     src.phase2.wifi_setup: device HQ632M1012: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:03,912 INFO     src.orchestration.slot: slot HQ632M1012: configuring apn
+2026-10-01 18:28:03,945 INFO     src.phase2.wifi_setup: device 353681653208520: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:03,945 INFO     src.orchestration.slot: slot 353681653208520: configuring apn
+2026-10-01 18:28:03,956 INFO     src.phase2.wifi_setup: device 353681650397052: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:03,957 INFO     src.orchestration.slot: slot 353681650397052: configuring apn
+2026-10-01 18:28:04,014 INFO     src.phase2.wifi_setup: device HQ627F2149: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:04,015 INFO     src.orchestration.slot: slot HQ627F2149: configuring apn
+2026-10-01 18:28:04,071 INFO     src.phase2.apn_setup: device 352063910272451: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:04,096 INFO     src.phase2.apn_setup: device 352063910283409: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:04,149 INFO     src.phase2.apn_setup: device HQ632M1012: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:04,152 INFO     src.phase2.wifi_setup: device 353681650242175: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:04,153 INFO     src.orchestration.slot: slot 353681650242175: configuring apn
+2026-10-01 18:28:04,207 INFO     src.phase2.wifi_setup: device HQ62540758: WIFI_SETTINGS intent didn't land on a recognizable Wi-Fi screen; falling back to menu_path navigation
+2026-10-01 18:28:04,292 INFO     src.phase2.apn_setup: device 353681650397052: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:04,431 INFO     src.phase2.apn_setup: device HQ627F2149: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:04,684 INFO     src.phase2.apn_setup: device 353681653208520: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:04,913 INFO     src.phase2.apn_setup: device 353681650242175: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:06,972 ERROR    src.orchestration.slot: slot HQ62540758: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:06,972 WARNING  src.orchestration.scheduler: slot HQ62540758: attempt failed (retry 1/3): refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:07,873 ERROR    src.orchestration.slot: slot HQ63460161: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:07,873 WARNING  src.orchestration.scheduler: slot HQ63460161: attempt failed (retry 1/3): refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:08,171 WARNING  src.orchestration.slot: slot HQ62540758: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:08,171 INFO     src.orchestration.slot: slot HQ62540758: connecting wifi
+2026-10-01 18:28:08,754 INFO     src.phase2.wifi_setup: device HQ62540758: shell wifi connect-network unavailable/failed: adb command failed: 'shell cmd wifi connect-network "earth5_1" wpa2 "earth5_1"' - Exception occurred while executing 'connect-network':
+java.lang.SecurityException: Uid 2000 does not have access to connect-network wifi command (or such command doesn't exist)
+	at com.android.server.wifi.WifiShellCommand.onCommand(WifiShellCommand.java:483)
+	at com.android.wifi.x.com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at com.android.server.wifi.WifiServiceImpl.handleShellCommand(WifiServiceImpl.java:5318)
+	at android.os.Binder.onShellCommand(Binder.java:1121)
+	at android.os.Binder.shellCommand(Binder.java:1068)
+	at android.os.Binder.onTransact(Binder.java:888)
+	at android.net.wifi.IWifiManager$Stub.onTransact(IWifiManager.java:3247)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+2026-10-01 18:28:09,077 WARNING  src.orchestration.slot: slot HQ63460161: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:09,077 INFO     src.orchestration.slot: slot HQ63460161: connecting wifi
+2026-10-01 18:28:09,370 ERROR    src.orchestration.slot: slot 352063910272451: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:09,371 WARNING  src.orchestration.scheduler: slot 352063910272451: attempt failed (retry 2/3): refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:09,553 INFO     src.phase2.wifi_setup: device HQ63460161: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:09,554 INFO     src.orchestration.slot: slot HQ63460161: configuring apn
+2026-10-01 18:28:09,856 INFO     src.phase2.apn_setup: device HQ63460161: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:10,587 WARNING  src.orchestration.slot: slot 352063910272451: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:10,593 INFO     src.orchestration.slot: slot 352063910272451: connecting wifi
+2026-10-01 18:28:11,056 INFO     src.phase2.wifi_setup: device 352063910272451: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:11,057 INFO     src.orchestration.slot: slot 352063910272451: configuring apn
+2026-10-01 18:28:11,318 INFO     src.phase2.apn_setup: device 352063910272451: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:12,096 INFO     src.phase2.wifi_setup: device HQ62540758: WIFI_SETTINGS intent didn't land on a recognizable Wi-Fi screen; falling back to menu_path navigation
+2026-10-01 18:28:12,638 ERROR    src.phase2.apn_setup: device HQ627F2149: apn: could not navigate the SIM-scoped menu_path's leading step(s) (everything before the final tap) — a step's resource_id/text/content_desc wasn't found on the post-WIFI_SETTINGS screen. menu_path (leading steps): [{'type': 'resource_id', 'value': 'com.android.settings:id/settings_button'}]. Visible text on the screen it actually landed on: ['18:28', '10月1日木曜日', '機内モード', '100%', '充電が完了しました']
+2026-10-01 18:28:12,638 ERROR    src.phase2.apn_setup: device HQ627F2149: apn menu navigation failed
+2026-10-01 18:28:12,638 ERROR    src.orchestration.slot: slot HQ627F2149: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:12,638 WARNING  src.orchestration.scheduler: slot HQ627F2149: attempt failed (retry 2/3): apn configuration failed
+2026-10-01 18:28:14,240 WARNING  src.orchestration.slot: slot HQ627F2149: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:14,240 INFO     src.orchestration.slot: slot HQ627F2149: connecting wifi
+2026-10-01 18:28:14,661 INFO     src.phase2.wifi_setup: device HQ627F2149: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:14,661 INFO     src.orchestration.slot: slot HQ627F2149: configuring apn
+2026-10-01 18:28:14,727 ERROR    src.orchestration.slot: slot HQ62540758: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:14,728 WARNING  src.orchestration.scheduler: slot HQ62540758: attempt failed (retry 2/3): refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:15,140 INFO     src.phase2.apn_setup: device HQ627F2149: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:15,563 ERROR    src.orchestration.slot: slot HQ63460161: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:15,564 WARNING  src.orchestration.scheduler: slot HQ63460161: attempt failed (retry 2/3): refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:15,984 WARNING  src.orchestration.slot: slot HQ62540758: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:15,984 INFO     src.orchestration.slot: slot HQ62540758: connecting wifi
+2026-10-01 18:28:16,821 WARNING  src.orchestration.slot: slot HQ63460161: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:16,823 INFO     src.orchestration.slot: slot HQ63460161: connecting wifi
+2026-10-01 18:28:16,830 INFO     src.phase2.wifi_setup: device HQ62540758: shell wifi connect-network unavailable/failed: adb command failed: 'shell cmd wifi connect-network "earth5_1" wpa2 "earth5_1"' - Exception occurred while executing 'connect-network':
+java.lang.SecurityException: Uid 2000 does not have access to connect-network wifi command (or such command doesn't exist)
+	at com.android.server.wifi.WifiShellCommand.onCommand(WifiShellCommand.java:483)
+	at com.android.wifi.x.com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at com.android.server.wifi.WifiServiceImpl.handleShellCommand(WifiServiceImpl.java:5318)
+	at android.os.Binder.onShellCommand(Binder.java:1121)
+	at android.os.Binder.shellCommand(Binder.java:1068)
+	at android.os.Binder.onTransact(Binder.java:888)
+	at android.net.wifi.IWifiManager$Stub.onTransact(IWifiManager.java:3247)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+2026-10-01 18:28:17,325 INFO     src.phase2.wifi_setup: device HQ63460161: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:17,325 INFO     src.orchestration.slot: slot HQ63460161: configuring apn
+2026-10-01 18:28:17,548 INFO     src.phase2.apn_setup: device HQ63460161: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:18,187 INFO     src.phase2.apn_setup: device HQ627C0472: reached APN list via the SIM-scoped menu_path
+2026-10-01 18:28:18,304 INFO     src.phase2.apn_setup: device 353681650397052: reached APN list via the SIM-scoped menu_path
+2026-10-01 18:28:18,328 INFO     src.phase2.apn_setup: device HQ634A0C5D: reached APN list via the SIM-scoped menu_path
+2026-10-01 18:28:18,382 ERROR    src.orchestration.slot: slot 352063910272451: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:18,382 WARNING  src.orchestration.scheduler: slot 352063910272451: attempt failed (retry 3/3): refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:18,512 INFO     src.phase2.apn_setup: device HQ632M1012: reached APN list via the SIM-scoped menu_path
+2026-10-01 18:28:19,329 INFO     src.phase2.apn_setup: device 353681653208520: reached APN list via the SIM-scoped menu_path
+2026-10-01 18:28:19,351 INFO     src.phase2.apn_setup: device 353681650242175: reached APN list via the SIM-scoped menu_path
+2026-10-01 18:28:19,471 INFO     src.phase2.apn_setup: device 352063910283409: reached APN list via the SIM-scoped menu_path
+2026-10-01 18:28:19,552 INFO     src.phase2.wifi_setup: device HQ62540758: WIFI_SETTINGS intent didn't land on a recognizable Wi-Fi screen; falling back to menu_path navigation
+2026-10-01 18:28:19,602 WARNING  src.orchestration.slot: slot 352063910272451: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:19,602 INFO     src.orchestration.slot: slot 352063910272451: connecting wifi
+2026-10-01 18:28:20,019 INFO     src.phase2.wifi_setup: device 352063910272451: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:20,019 INFO     src.orchestration.slot: slot 352063910272451: configuring apn
+2026-10-01 18:28:20,242 INFO     src.phase2.apn_setup: device 352063910272451: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:22,133 ERROR    src.orchestration.slot: slot HQ62540758: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:22,134 WARNING  src.orchestration.scheduler: slot HQ62540758: attempt failed (retry 3/3): refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:23,303 WARNING  src.orchestration.slot: slot HQ62540758: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:23,303 INFO     src.orchestration.slot: slot HQ62540758: connecting wifi
+2026-10-01 18:28:23,337 ERROR    src.phase2.apn_setup: device HQ627F2149: apn: could not navigate the SIM-scoped menu_path's leading step(s) (everything before the final tap) — a step's resource_id/text/content_desc wasn't found on the post-WIFI_SETTINGS screen. menu_path (leading steps): [{'type': 'resource_id', 'value': 'com.android.settings:id/settings_button'}]. Visible text on the screen it actually landed on: ['18:28', '10月1日木曜日', '機内モード', '100%', '充電が完了しました']
+2026-10-01 18:28:23,338 ERROR    src.phase2.apn_setup: device HQ627F2149: apn menu navigation failed
+2026-10-01 18:28:23,338 ERROR    src.orchestration.slot: slot HQ627F2149: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:23,338 WARNING  src.orchestration.scheduler: slot HQ627F2149: attempt failed (retry 3/3): apn configuration failed
+2026-10-01 18:28:23,782 ERROR    src.orchestration.slot: slot HQ63460161: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:23,782 WARNING  src.orchestration.scheduler: slot HQ63460161: attempt failed (retry 3/3): refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:23,925 INFO     src.phase2.wifi_setup: device HQ62540758: shell wifi connect-network unavailable/failed: adb command failed: 'shell cmd wifi connect-network "earth5_1" wpa2 "earth5_1"' - Exception occurred while executing 'connect-network':
+java.lang.SecurityException: Uid 2000 does not have access to connect-network wifi command (or such command doesn't exist)
+	at com.android.server.wifi.WifiShellCommand.onCommand(WifiShellCommand.java:483)
+	at com.android.wifi.x.com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at com.android.server.wifi.WifiServiceImpl.handleShellCommand(WifiServiceImpl.java:5318)
+	at android.os.Binder.onShellCommand(Binder.java:1121)
+	at android.os.Binder.shellCommand(Binder.java:1068)
+	at android.os.Binder.onTransact(Binder.java:888)
+	at android.net.wifi.IWifiManager$Stub.onTransact(IWifiManager.java:3247)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+2026-10-01 18:28:24,538 WARNING  src.orchestration.slot: slot HQ627F2149: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:24,538 INFO     src.orchestration.slot: slot HQ627F2149: connecting wifi
+2026-10-01 18:28:24,965 INFO     src.phase2.wifi_setup: device HQ627F2149: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:24,966 INFO     src.orchestration.slot: slot HQ627F2149: configuring apn
+2026-10-01 18:28:25,020 WARNING  src.orchestration.slot: slot HQ63460161: skip_wizard=True - assuming factory reset + the setup wizard were already completed manually (client-decided workflow, 2026-09-17 - the wizard cannot be automated via ADB at all). This skips the check that the device actually finished setup, so a device still mid-wizard when this runs will fail in confusing ways downstream rather than here.
+2026-10-01 18:28:25,020 INFO     src.orchestration.slot: slot HQ63460161: connecting wifi
+2026-10-01 18:28:25,381 INFO     src.phase2.apn_setup: device HQ627F2149: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:25,471 INFO     src.phase2.wifi_setup: device HQ63460161: already connected to 'earth5_1'; nothing to do
+2026-10-01 18:28:25,471 INFO     src.orchestration.slot: slot HQ63460161: configuring apn
+2026-10-01 18:28:25,503 ERROR    src.orchestration.slot: slot 352063910272451: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:25,504 ERROR    src.orchestration.scheduler: slot 352063910272451: exceeded max_retry (3); escalating. last_error=refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:25,738 INFO     src.phase2.apn_setup: device HQ63460161: apn: current input method is 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME'
+2026-10-01 18:28:27,395 INFO     src.phase2.wifi_setup: device HQ62540758: WIFI_SETTINGS intent didn't land on a recognizable Wi-Fi screen; falling back to menu_path navigation
+2026-10-01 18:28:30,013 ERROR    src.orchestration.slot: slot HQ62540758: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:30,014 ERROR    src.orchestration.scheduler: slot HQ62540758: exceeded max_retry (3); escalating. last_error=refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:32,121 ERROR    src.orchestration.slot: slot HQ63460161: run_init_apn failed: refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:32,122 ERROR    src.orchestration.scheduler: slot HQ63460161: exceeded max_retry (3); escalating. last_error=refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.
+2026-10-01 18:28:33,311 ERROR    src.phase2.apn_setup: device HQ627F2149: apn: could not navigate the SIM-scoped menu_path's leading step(s) (everything before the final tap) — a step's resource_id/text/content_desc wasn't found on the post-WIFI_SETTINGS screen. menu_path (leading steps): [{'type': 'resource_id', 'value': 'com.android.settings:id/settings_button'}]. Visible text on the screen it actually landed on: ['18:28', '10月1日木曜日', '機内モード', '100%', '充電が完了しました']
+2026-10-01 18:28:33,311 ERROR    src.phase2.apn_setup: device HQ627F2149: apn menu navigation failed
+2026-10-01 18:28:33,312 ERROR    src.orchestration.slot: slot HQ627F2149: run_init_apn failed: apn configuration failed
+2026-10-01 18:28:33,312 ERROR    src.orchestration.scheduler: slot HQ627F2149: exceeded max_retry (3); escalating. last_error=apn configuration failed
+2026-10-01 18:29:03,629 INFO     src.phase2.apn_setup: device 353681653208520: apn field 'MCC': already shows '440' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '440' over it
+2026-10-01 18:29:03,671 INFO     src.phase2.apn_setup: device 353681650242175: apn field 'MCC': already shows '440' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '440' over it
+2026-10-01 18:29:07,391 INFO     src.phase2.apn_setup: device HQ632M1012: apn field 'MCC': already shows '440' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '440' over it
+2026-10-01 18:29:08,532 INFO     src.phase2.apn_setup: device HQ634A0C5D: apn field 'MCC': already shows '440' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '440' over it
+2026-10-01 18:29:08,566 INFO     src.phase2.apn_setup: device 353681650397052: apn field 'MCC': already shows '440' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '440' over it
+2026-10-01 18:29:08,989 INFO     src.phase2.apn_setup: device HQ627C0472: apn field 'MCC': already shows '440' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '440' over it
+2026-10-01 18:29:10,152 INFO     src.phase2.apn_setup: device 352063910283409: apn field 'MCC': already shows '440' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '440' over it
+2026-10-01 18:29:13,834 INFO     src.phase2.apn_setup: device 353681653208520: apn field 'MNC': already shows '10' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '11' over it
+2026-10-01 18:29:13,943 INFO     src.phase2.apn_setup: device 353681650242175: apn field 'MNC': already shows '10' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '11' over it
+2026-10-01 18:29:17,375 INFO     src.phase2.apn_setup: device HQ632M1012: apn field 'MNC': already shows '10' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '11' over it
+2026-10-01 18:29:18,666 INFO     src.phase2.apn_setup: device 353681650397052: apn field 'MNC': already shows '11' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '11' over it
+2026-10-01 18:29:18,675 INFO     src.phase2.apn_setup: device HQ634A0C5D: apn field 'MNC': already shows '10' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '11' over it
+2026-10-01 18:29:19,176 INFO     src.phase2.apn_setup: device HQ627C0472: apn field 'MNC': already shows '10' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '11' over it
+2026-10-01 18:29:20,412 INFO     src.phase2.apn_setup: device 352063910283409: apn field 'MNC': already shows '10' (auto-populated by the device, presumably from the SIM) — leaving it as-is, not typing '11' over it
+2026-10-01 18:29:28,769 WARNING  src.phase2.apn_setup: device 353681653208520: apn: save reported no validation error, but 'rakuten.jp' wasn't spotted back on the APN list (soft check only — not treated as a failure; could be scroll position or list truncation)
+2026-10-01 18:29:28,769 INFO     src.phase2.apn_setup: device 353681653208520: apn 'rakuten.jp' configured successfully
+2026-10-01 18:29:28,771 INFO     src.orchestration.slot: slot 353681653208520: reached LOGIN_INSTALL (Phase 2 success condition)
+2026-10-01 18:29:28,827 WARNING  src.phase2.apn_setup: device 353681650242175: apn: save reported no validation error, but 'rakuten.jp' wasn't spotted back on the APN list (soft check only — not treated as a failure; could be scroll position or list truncation)
+2026-10-01 18:29:28,828 INFO     src.phase2.apn_setup: device 353681650242175: apn 'rakuten.jp' configured successfully
+2026-10-01 18:29:28,829 INFO     src.orchestration.slot: slot 353681650242175: reached LOGIN_INSTALL (Phase 2 success condition)
+2026-10-01 18:29:31,804 WARNING  src.phase2.apn_setup: device HQ632M1012: apn: save reported no validation error, but 'rakuten.jp' wasn't spotted back on the APN list (soft check only — not treated as a failure; could be scroll position or list truncation)
+2026-10-01 18:29:31,804 INFO     src.phase2.apn_setup: device HQ632M1012: apn 'rakuten.jp' configured successfully
+2026-10-01 18:29:31,804 INFO     src.orchestration.slot: slot HQ632M1012: reached LOGIN_INSTALL (Phase 2 success condition)
+2026-10-01 18:29:33,281 WARNING  src.phase2.apn_setup: device HQ634A0C5D: apn: save reported no validation error, but 'rakuten.jp' wasn't spotted back on the APN list (soft check only — not treated as a failure; could be scroll position or list truncation)
+2026-10-01 18:29:33,281 INFO     src.phase2.apn_setup: device HQ634A0C5D: apn 'rakuten.jp' configured successfully
+2026-10-01 18:29:33,281 INFO     src.orchestration.slot: slot HQ634A0C5D: reached LOGIN_INSTALL (Phase 2 success condition)
+2026-10-01 18:29:33,370 WARNING  src.phase2.apn_setup: device 353681650397052: apn: save reported no validation error, but 'rakuten.jp' wasn't spotted back on the APN list (soft check only — not treated as a failure; could be scroll position or list truncation)
+2026-10-01 18:29:33,370 INFO     src.phase2.apn_setup: device 353681650397052: apn 'rakuten.jp' configured successfully
+2026-10-01 18:29:33,370 INFO     src.orchestration.slot: slot 353681650397052: reached LOGIN_INSTALL (Phase 2 success condition)
+2026-10-01 18:29:33,786 WARNING  src.phase2.apn_setup: device HQ627C0472: apn: save reported no validation error, but 'rakuten.jp' wasn't spotted back on the APN list (soft check only — not treated as a failure; could be scroll position or list truncation)
+2026-10-01 18:29:33,787 INFO     src.phase2.apn_setup: device HQ627C0472: apn 'rakuten.jp' configured successfully
+2026-10-01 18:29:33,787 INFO     src.orchestration.slot: slot HQ627C0472: reached LOGIN_INSTALL (Phase 2 success condition)
+2026-10-01 18:29:35,229 WARNING  src.phase2.apn_setup: device 352063910283409: apn: save reported no validation error, but 'rakuten.jp' wasn't spotted back on the APN list (soft check only — not treated as a failure; could be scroll position or list truncation)
+2026-10-01 18:29:35,229 INFO     src.phase2.apn_setup: device 352063910283409: apn 'rakuten.jp' configured successfully
+2026-10-01 18:29:35,229 INFO     src.orchestration.slot: slot 352063910283409: reached LOGIN_INSTALL (Phase 2 success condition)
+2026-10-01 18:29:35,229 ERROR    main_phase2: FAILED: device 352063910272451 ended in state ESCALATED (last_error=refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.)
+2026-10-01 18:29:35,229 ERROR    main_phase2: FAILED: device HQ62540758 ended in state ESCALATED (last_error=refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.)
+2026-10-01 18:29:35,229 ERROR    main_phase2: FAILED: device HQ63460161 ended in state ESCALATED (last_error=refusing to tap: current screen contains the USB-debugging disable notification (matched '無効にするにはここをタップ' in the dump). A mistargeted tap here would disable ADB and strand the device. Clear the notification shade before retrying — see docs/record.md, 'UI hazard' section.)
+2026-10-01 18:29:35,229 ERROR    main_phase2: FAILED: device HQ627F2149 ended in state ESCALATED (last_error=apn configuration failed)
+2026-10-01 18:29:35,231 INFO     main_phase2: SUCCESS: device 353681653208520 reached LOGIN_INSTALL
+2026-10-01 18:29:35,231 INFO     main_phase2: SUCCESS: device 353681650242175 reached LOGIN_INSTALL
+2026-10-01 18:29:35,231 INFO     main_phase2: SUCCESS: device HQ632M1012 reached LOGIN_INSTALL
+2026-10-01 18:29:35,231 INFO     main_phase2: SUCCESS: device HQ634A0C5D reached LOGIN_INSTALL
+2026-10-01 18:29:35,231 INFO     main_phase2: SUCCESS: device 353681650397052 reached LOGIN_INSTALL
+2026-10-01 18:29:35,231 INFO     main_phase2: SUCCESS: device HQ627C0472 reached LOGIN_INSTALL
+2026-10-01 18:29:35,231 INFO     main_phase2: SUCCESS: device 352063910283409 reached LOGIN_INSTALL
