@@ -148,6 +148,27 @@ on-device toggle to resync, or a code change to stop trusting the stored
 value and check the screen content instead — not implemented yet, see
 `docs/record.md` for the full account.
 
+**Update, same day — client-confirmed ground truth: `settings get
+global airplane_mode_on` is unreliable fleet-wide, not just on one
+device.** The client manually set Airplane Mode on for all 11 devices
+before the run above, then manually confirmed afterward it was *still
+on for every single one* — yet the precondition check never fired for
+any of them, and 6 devices even reached `LOGIN_INSTALL` normally (which
+requires the gear icon Airplane Mode is supposed to hide). This also
+**corrects `HQ627F2149`'s diagnosis above**: its recurring screen
+(clock/date/`機内モード`/battery, no "ON" wording, no Wi-Fi content) does
+*not* match the real confirmed Airplane Mode banner screens (which
+include `'機内モードが ON です'` plus actual Wi-Fi network names) — it
+looks like a lock screen, not Airplane Mode, so its real cause is
+reopened as a separate, still fully open mystery, not the stale-setting
+explanation above. **Fixed**: switched both detection and confirmation
+away from `settings get global airplane_mode_on` entirely, to reading
+the Wi-Fi settings screen's own banner text instead
+(`_airplane_mode_banner_present()`) — the one signal actually confirmed
+against real screens all session. 279 tests passing. **Not yet confirmed
+against real hardware** — needs its own retest. See `docs/record.md` for
+the full account.
+
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached
 `SUCCESS: ... reached LOGIN_INSTALL`, invoked with nothing but

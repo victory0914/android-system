@@ -594,6 +594,28 @@ def _looks_like_apn_list_screen(ui_xml: str) -> bool:
         return False
 
 
+def _airplane_mode_banner_present(ui_xml: str) -> bool:
+    """True if the Wi-Fi settings screen shows its own "Airplane Mode is
+    on" banner — real, literal text confirmed across many real devices
+    (2026-10-01 diagnostic): '機内モードが ON です' / '機内モードは ON
+    です', always alongside the screen's normal Wi-Fi content (the
+    'Wi-Fi' header, network names) — not to be confused with the
+    completely different, sparse quick-settings/status-view text some
+    devices have shown (clock, date, a bare '機内モード' with no 'ON'
+    wording, battery%) which does NOT reliably mean the same thing (see
+    docs/record.md, HQ627F2149).
+
+    Checked here instead of `settings get global airplane_mode_on`
+    because that stored value has been directly shown (2026-10-02
+    retest, all 11 devices) to not reliably track the real device
+    state — the banner is the one signal in this whole mechanism that's
+    actually been confirmed against real screens, repeatedly."""
+    return any(
+        "機内モード" in text and "ON" in text
+        for text in all_visible_texts(ui_xml)
+    )
+
+
 # Settle time after telling the device to disable Airplane Mode before
 # re-checking whether it actually took effect. `settings put` alone only
 # updates the stored value — it's the AIRPLANE_MODE broadcast afterward
@@ -649,13 +671,20 @@ def _disable_airplane_mode(
     timeout_seconds: float = _AIRPLANE_MODE_DISABLE_POLL_TIMEOUT_SECONDS,
     interval_seconds: float = _AIRPLANE_MODE_DISABLE_POLL_INTERVAL_SECONDS,
 ) -> bool:
-    """Turn Airplane Mode off via adb and poll `settings get global
-    airplane_mode_on` until it confirms '0', up to `timeout_seconds`
-    (overridable so tests don't need a real multi-wait — same pattern as
-    wifi_setup.py's connect_wifi() poll parameters). Returns True once
-    confirmed off, False if it's still on when the poll times out — never
+    """Turn Airplane Mode off via adb and poll the Wi-Fi settings screen
+    (re-opened via the WIFI_SETTINGS intent each time — not assumed to
+    live-refresh on its own, since that's never been confirmed) until its
+    Airplane Mode banner is gone, up to `timeout_seconds` (overridable so
+    tests don't need a real multi-wait — same pattern as wifi_setup.py's
+    connect_wifi() poll parameters). Returns True once confirmed off,
+    False if the banner is still showing when the poll times out — never
     raises, so the caller can treat either outcome as a normal failure
     rather than a crash.
+
+    Polls the screen (`_airplane_mode_banner_present()`) rather than
+    `settings get global airplane_mode_on` — see that function's own
+    comment for why the stored setting turned out not to be trustworthy
+    here.
 
     The disable commands themselves are best-effort: a failure is logged
     but doesn't short-circuit this function, because the poll below is
@@ -675,7 +704,8 @@ def _disable_airplane_mode(
     deadline = time.monotonic() + timeout_seconds
     while True:
         try:
-            if client.shell("settings get global airplane_mode_on").strip() == "0":
+            client.shell("am start -a android.settings.WIFI_SETTINGS")
+            if not _airplane_mode_banner_present(dump_ui(client)):
                 return True
         except AdbCommandError:
             pass
@@ -729,47 +759,6 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
     the full multi-step `menu_path` only if that fails or doesn't land
     correctly.
     """
-    # Real finding (2026-10-01, 11-device batch retest): with the new
-    # all_visible_texts() diagnostics below, 5 of 8 devices that failed
-    # with the generic "apn menu navigation failed" turned out to be
-    # showing "機内モードは/が ON です" (Airplane Mode is ON) on the
-    # post-WIFI_SETTINGS-intent screen — Android hides the mobile-network
-    # gear icon from Wi-Fi settings entirely while airplane mode is on
-    # (Wi-Fi itself can still be manually re-enabled independently, which
-    # is consistent with these same devices' Wi-Fi step succeeding
-    # normally just before this). Checked explicitly here rather than
-    # letting it surface 2-3 log lines later as a generic, misleading
-    # navigation failure.
-    #
-    # Client decision (2026-10-02): rather than just failing loudly and
-    # requiring the operator to fix this by hand on every affected device,
-    # this tool now turns Airplane Mode off itself (`_disable_airplane_mode()`
-    # below) and continues navigation in the same call once confirmed off
-    # — only failing loudly if the disable itself can't be confirmed.
-    try:
-        airplane_mode = client.shell("settings get global airplane_mode_on").strip()
-    except AdbCommandError as exc:
-        airplane_mode = None
-        _log(client).info("could not check airplane_mode_on setting: %s", exc)
-    if airplane_mode == "1":
-        _log(client).warning(
-            "apn: device is in Airplane Mode (settings get global "
-            "airplane_mode_on == '1') — the mobile-network settings menu "
-            "(and its gear icon) isn't shown in Wi-Fi settings while "
-            "airplane mode is on. Disabling it now (client decision, "
-            "2026-10-02) before continuing navigation."
-        )
-        if not _disable_airplane_mode(client):
-            _log(client).error(
-                "apn: still in Airplane Mode after %.0fs of trying to "
-                "disable it via adb (settings put + cmd connectivity "
-                "airplane-mode disable) — turn it off manually on the "
-                "device before retrying",
-                _AIRPLANE_MODE_DISABLE_POLL_TIMEOUT_SECONDS,
-            )
-            return False
-        _log(client).info("apn: Airplane Mode confirmed off; continuing navigation")
-
     if apn.get("reach_via_wifi_settings_intent"):
         try:
             client.shell("am start -a android.settings.WIFI_SETTINGS")
@@ -798,6 +787,65 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
                 "previous run) — treating navigation as already complete"
             )
             return True
+
+        # Real finding (2026-10-01, 11-device batch retest): with the new
+        # all_visible_texts() diagnostics, 5 of 8 devices that failed with
+        # the generic "apn menu navigation failed" turned out to be
+        # showing "機内モードは/が ON です" (Airplane Mode is ON) right on
+        # this Wi-Fi settings screen — Android hides the mobile-network
+        # gear icon entirely while airplane mode is on (Wi-Fi itself can
+        # still be used independently, consistent with these same
+        # devices' Wi-Fi step succeeding normally just before this).
+        #
+        # Client decision (2026-10-02): rather than just failing loudly,
+        # this tool turns Airplane Mode off itself (_disable_airplane_
+        # mode()) and continues navigation once confirmed off.
+        #
+        # Real finding (2026-10-02, later the same day): this used to be
+        # gated on `settings get global airplane_mode_on == '1'`, checked
+        # once up front. A retest where the client had manually confirmed
+        # Airplane Mode was on for all 11 devices, then manually confirmed
+        # it was STILL on for all 11 after the run, showed the precondition
+        # never fired for a single one of them — the stored setting had
+        # gone stale and stopped reflecting the real device state across
+        # the whole fleet, not just one device as first suspected. The
+        # screen's own banner text, by contrast, has been directly,
+        # repeatedly confirmed against real device screens all session —
+        # it's the one signal in this mechanism actually trustworthy, so
+        # detection (and _disable_airplane_mode()'s own confirmation,
+        # below) now both read the screen instead of the stored setting.
+        # Not yet confirmed against real hardware.
+        if _airplane_mode_banner_present(ui_xml_after_intent):
+            _log(client).warning(
+                "apn: Wi-Fi settings screen shows the Airplane Mode "
+                "banner (%s) — the mobile-network settings menu (and its "
+                "gear icon) isn't shown while airplane mode is on. "
+                "Disabling it now (client decision, 2026-10-02) before "
+                "continuing navigation.",
+                [t for t in all_visible_texts(ui_xml_after_intent) if "機内モード" in t],
+            )
+            if not _disable_airplane_mode(client):
+                _log(client).error(
+                    "apn: Wi-Fi settings still shows the Airplane Mode "
+                    "banner after %.0fs of trying to disable it via adb "
+                    "(settings put + cmd connectivity airplane-mode "
+                    "disable) — turn it off manually on the device "
+                    "before retrying",
+                    _AIRPLANE_MODE_DISABLE_POLL_TIMEOUT_SECONDS,
+                )
+                return False
+            _log(client).info(
+                "apn: Airplane Mode banner gone; continuing navigation"
+            )
+            ui_xml_after_intent = dump_ui(client)
+            if _looks_like_apn_list_screen(ui_xml_after_intent):
+                _log(client).info(
+                    "apn: WIFI_SETTINGS intent (re-checked after "
+                    "disabling Airplane Mode) resumed directly on the "
+                    "APN list screen — treating navigation as already "
+                    "complete"
+                )
+                return True
 
         menu_path = apn.get("menu_path")
         if not menu_path:

@@ -2427,6 +2427,59 @@ cause found and fixed, and one genuinely new open problem found on
   riskier change than today's other two fixes and deserves its own
   confirmation cycle rather than being bundled in speculatively.
 
+**Update, same day — client-confirmed ground truth makes the real
+problem much bigger than one device, and corrects a wrong conclusion
+above.** The client manually set Airplane Mode on for *all 11 devices*
+themselves before the `19:55-19:57` run, then manually checked all 11
+devices again afterward and confirmed Airplane Mode was *still on for
+every single one* — none had been deactivated. That's real, direct,
+first-hand ground truth, and it directly contradicts the log: the
+precondition check (`settings get global airplane_mode_on == '1'`)
+never fired for a single one of the 11 devices that run, and 6 of them
+even reached `LOGIN_INSTALL` normally (requires the mobile-network gear
+icon, which Airplane Mode is supposed to hide). **Conclusion: `settings
+get global airplane_mode_on` does not reliably reflect the real device
+state on this fleet at all — not just on `HQ627F2149`, as first
+suspected, but fleet-wide.**
+
+This also **corrects the `HQ627F2149` conclusion just above**: comparing
+its recurring screen side-by-side with the *actual* confirmed Airplane
+Mode banner screens from earlier today shows they're not the same
+screen at all —
+
+- Confirmed real Airplane-Mode-on screens (e.g. `352063910283409`,
+  17:39:53): `['機内モードが ON です', 'Wi-Fi', 'earth5_1', '接続済み',
+  'earth2.4_6', ...]` — the explicit banner, plus normal Wi-Fi settings
+  content (network names).
+- `HQ627F2149`'s recurring screen: `['19:55', '10月1日木曜日',
+  '機内モード', '100%', '充電が完了しました']` — no "ON" wording, no
+  Wi-Fi content at all, just clock/date/battery/charging status.
+
+That's a lock-screen/status-view signature, not the Airplane Mode
+banner — `HQ627F2149`'s repeated failure was likely never really about
+Airplane Mode; its actual cause (why Settings doesn't come to the
+foreground on this device) remains genuinely unexplained and is now
+reopened as its own separate mystery, not conflated with the fleet-wide
+finding below.
+
+**Fixed** (`src/phase2/apn_setup.py`): stopped trusting `settings get
+global airplane_mode_on` for Airplane Mode detection and confirmation
+entirely — both now read the Wi-Fi settings screen's own banner text
+instead (`_airplane_mode_banner_present()`, checking for `'機内モード'`
++ `'ON'` together in the dump's visible text), which is the one signal
+in this whole mechanism that's been directly, repeatedly confirmed
+against real device screens all session. The upfront precondition check
+is gone; detection now happens right after the `WIFI_SETTINGS` intent
+(reusing the dump already taken for the already-on-APN-list check).
+`_disable_airplane_mode()`'s confirmation poll now re-opens
+`WIFI_SETTINGS` and re-dumps each iteration (not assumed to live-refresh
+on its own) and checks for the banner's absence instead of polling
+`settings get`. All affected tests rewritten to drive this via UI dumps
+instead of scripted `settings get` responses. **Not yet confirmed
+against real hardware** — this is the first real retest's evidence that
+motivated the change, but the fix itself still needs its own retest. 279
+tests passing.
+
 ---
 
 ## Dump capture status (all models)

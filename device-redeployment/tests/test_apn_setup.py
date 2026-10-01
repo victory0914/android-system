@@ -1200,33 +1200,25 @@ def test_navigate_apn_menu_logs_when_menu_path_is_empty(caplog):
 # continues navigation once confirmed off.
 
 
-class _AirplaneModeTransitionClient(FakeAdbClient):
-    """Starts with airplane_mode_on == '1'; once `cmd connectivity
-    airplane-mode disable` is issued, subsequent `settings get` calls
-    report '0' — simulates the real device actually applying the change,
-    which FakeAdbClient's static shell_responses can't express on its
-    own."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._airplane_mode_disabled = False
-
-    def shell(self, command, timeout=30):
-        if command == "settings put global airplane_mode_on 0":
-            self.shell_calls.append(command)
-            return ""
-        if command == "cmd connectivity airplane-mode disable":
-            self.shell_calls.append(command)
-            self._airplane_mode_disabled = True
-            return ""
-        if command == "settings get global airplane_mode_on":
-            self.shell_calls.append(command)
-            return "0" if self._airplane_mode_disabled else "1"
-        return super().shell(command, timeout=timeout)  # appends to shell_calls itself
+# The Wi-Fi settings screen with its own real, confirmed "Airplane Mode
+# is on" banner — '機内モードが ON です', alongside the screen's normal
+# Wi-Fi content (see _airplane_mode_banner_present()'s own comment for
+# why this, not `settings get global airplane_mode_on`, is what's
+# checked now).
+AIRPLANE_MODE_BANNER_XML = """<hierarchy>
+  <node resource-id="android:id/title" text="機内モードが ON です" bounds="[0,0][100,50]" />
+  <node resource-id="android:id/title" text="Wi-Fi" bounds="[0,50][100,100]" />
+</hierarchy>"""
 
 
 def test_disable_airplane_mode_confirms_success_after_it_takes_effect():
-    client = _AirplaneModeTransitionClient()
+    """The banner takes a moment to actually clear after the disable
+    commands — the poll must keep re-checking (re-opening WIFI_SETTINGS
+    each time, not assuming a live refresh) rather than giving up after
+    one look."""
+    client = FakeAdbClient(
+        ui_dumps=[AIRPLANE_MODE_BANNER_XML, WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML]
+    )
 
     result = _disable_airplane_mode(client, timeout_seconds=1, interval_seconds=0)
 
@@ -1236,7 +1228,7 @@ def test_disable_airplane_mode_confirms_success_after_it_takes_effect():
 
 
 def test_disable_airplane_mode_returns_false_if_still_on_after_timeout():
-    client = FakeAdbClient(shell_responses={"settings get global airplane_mode_on": "1"})
+    client = FakeAdbClient(ui_dumps=[AIRPLANE_MODE_BANNER_XML])
 
     result = _disable_airplane_mode(client, timeout_seconds=0, interval_seconds=0)
 
@@ -1255,7 +1247,7 @@ def test_disable_airplane_mode_logs_but_does_not_abort_on_command_failure(caplog
     the poll result decides the outcome."""
     client = FakeAdbClient(
         shell_failures={"cmd connectivity airplane-mode disable"},
-        shell_responses={"settings get global airplane_mode_on": "0"},
+        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML],
     )
 
     with caplog.at_level(logging.WARNING, logger="src.phase2.apn_setup"):
@@ -1273,7 +1265,7 @@ def test_disable_airplane_mode_logs_but_does_not_abort_on_command_failure(caplog
 def test_disable_airplane_mode_returns_false_when_commands_fail_and_it_never_applies():
     client = FakeAdbClient(
         shell_failures={"cmd connectivity airplane-mode disable"},
-        shell_responses={"settings get global airplane_mode_on": "1"},
+        ui_dumps=[AIRPLANE_MODE_BANNER_XML],
     )
 
     result = _disable_airplane_mode(client, timeout_seconds=0, interval_seconds=0)
@@ -1286,8 +1278,8 @@ def test_navigate_apn_menu_disables_airplane_mode_and_continues_navigation(monke
     same call — not just report success and stop."""
     monkeypatch.setattr(apn_setup, "_disable_airplane_mode", lambda client, **kw: True)
     client = FakeAdbClient(
-        shell_responses={"settings get global airplane_mode_on": "1"},
-        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30,
+        ui_dumps=[AIRPLANE_MODE_BANNER_XML, WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML]
+        + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30,
     )
 
     result = _navigate_apn_menu(client, WIFI_SETTINGS_NAV_PROFILE.apn_settings())
@@ -1300,28 +1292,26 @@ def test_navigate_apn_menu_disables_airplane_mode_and_continues_navigation(monke
 
 def test_navigate_apn_menu_fails_loudly_when_disable_cannot_be_confirmed(monkeypatch, caplog):
     monkeypatch.setattr(apn_setup, "_disable_airplane_mode", lambda client, **kw: False)
-    client = FakeAdbClient(
-        shell_responses={"settings get global airplane_mode_on": "1"},
-        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 10,
-    )
+    client = FakeAdbClient(ui_dumps=[AIRPLANE_MODE_BANNER_XML] * 10)
 
     with caplog.at_level(logging.ERROR, logger="src.phase2.apn_setup"):
         result = configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
 
     assert result is False
     messages = [r.getMessage() for r in caplog.records]
-    assert any("still in Airplane Mode after" in m for m in messages)
-    # Never even attempted navigation once the precondition couldn't be fixed.
-    assert "am start -a android.settings.WIFI_SETTINGS" not in client.shell_calls
+    assert any("still shows the Airplane Mode banner after" in m for m in messages)
+    # The intent itself IS attempted (that's how the banner is discovered
+    # in the first place) — but navigation never proceeds past it once
+    # the banner couldn't be cleared.
+    gear_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    assert gear_tap not in client.shell_calls
 
 
 def test_navigate_apn_menu_proceeds_normally_when_airplane_mode_is_off():
-    """airplane_mode_on == '0' (the real, confirmed value on every device
-    tested so far) must not be treated as "on" — only the literal '1'
-    string is, and _disable_airplane_mode() must never even be called.
-    Full real navigation should proceed exactly as before."""
+    """No Airplane Mode banner on the post-intent screen must not trigger
+    _disable_airplane_mode() at all. Full real navigation should proceed
+    exactly as before."""
     client = FakeAdbClient(
-        shell_responses={"settings get global airplane_mode_on": "0"},
         ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30,
     )
 
