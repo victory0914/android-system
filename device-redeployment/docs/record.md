@@ -2313,6 +2313,65 @@ the one fully open item — see the operational recommendation (USB
 port/cable swap test) above, now backed by a third consecutive
 confirmation of the same 3 devices.
 
+**Update, same day (2026-10-02): re-examined that same `18:27:58` run's
+full airplane-mode trace (not just `HQ627F2149`) and found the broadcast
+retry above treats the wrong kind of failure.** Grepping the whole run
+showed `am broadcast -a android.intent.action.AIRPLANE_MODE --ez state
+false` didn't just fail once for `HQ627F2149` — it failed with the exact
+same `AdbCommandError` ("Exception occurred while executing
+'broadcast':") on **every single device that needed it that run (9/9)**:
+`HQ627C0472`, `HQ634A0C5D`, `352063910283409`, `352063910272451`,
+`353681650397052`, `HQ632M1012`, `353681653208520`, `HQ627F2149`,
+`353681650242175`, all within the same ~1s window. A 100% failure rate
+across every affected device is not what a transient-contention
+explanation predicts (that would show up as occasional, scattered
+failures, not every single occurrence) — it's what a **structurally
+blocked** command predicts. `android.intent.action.AIRPLANE_MODE` is
+declared a *protected broadcast* in the AOSP platform manifest
+(`<protected-broadcast android:name="android.intent.action.
+AIRPLANE_MODE"/>`) — only privileged, system-signed senders can normally
+send it, which plausibly blocks a plain `am broadcast` spoofed from an
+adb shell on Android 13/14. If that's right, retrying the same broadcast
+(the `b0014ef` fix above) doesn't help — retrying a structurally blocked
+command just fails the same way 3 times instead of 1.
+
+This also reframes why 8 of those 9 devices still succeeded despite the
+broadcast failing every time: `settings put global airplane_mode_on 0`
+(the preceding command) *did* succeed every time, and apparently that
+alone was eventually enough — given time, without the broadcast ever
+landing — for most devices to actually leave Airplane Mode. Only
+`HQ627F2149` didn't catch up in time across its 3 retries.
+
+**Fixed** (`src/phase2/apn_setup.py`): replaced the broadcast-retry
+approach with `cmd connectivity airplane-mode disable` — the documented,
+standard AOSP shell command for this exact operation (added Android 12,
+goes through `ConnectivityService`'s own privileged path instead of
+faking the broadcast from shell) — issued alongside `settings put`. Both
+commands are now best-effort: a failure is logged as a warning but no
+longer aborts the function, since the real data shows a command
+reporting failure doesn't reliably mean the setting never applies.
+Success is decided solely by the confirmation poll (`settings get`
+until `'0'`, unchanged 10s/1s timing). This is **not yet confirmed
+against real hardware** — `cmd connectivity airplane-mode` is a
+standard platform command (not a guessed UI element), but its actual
+behavior on these specific SHARP/Sony Android 13/14 builds has not been
+directly observed yet. New tests:
+`test_disable_airplane_mode_logs_but_does_not_abort_on_command_failure`,
+`test_disable_airplane_mode_returns_false_when_commands_fail_and_it_never_applies`
+(replacing the two retry-specific tests above, which tested a mechanism
+this removes). 278 tests passing total.
+
+**Next retest should confirm (or disprove) that `cmd connectivity
+airplane-mode disable` actually succeeds where the broadcast was
+blocked** — if the airplane-mode-affected devices' logs show it failing
+too, that would rule out the protected-broadcast theory and point to
+something else (e.g. this adb user genuinely lacking the permission for
+*both* paths, which would call for `settings put` alone plus a longer
+poll timeout instead). The `HazardousScreenError` cluster remains the
+one fully open item — see the operational recommendation (USB
+port/cable swap test) above, now backed by a third consecutive
+confirmation of the same 3 devices.
+
 ---
 
 ## Dump capture status (all models)

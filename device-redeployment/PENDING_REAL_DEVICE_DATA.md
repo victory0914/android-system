@@ -108,6 +108,23 @@ this silent, self-masking half-applied state behind. 278 tests
 passing. See `docs/record.md` for the full account, including the
 exact log evidence.
 
+**Update, same day: the "transient" framing above was wrong — re-reading
+the full run showed `am broadcast` failed on 9/9 devices, every time,
+not just `HQ627F2149`.** A 100% failure rate across every affected
+device, not scattered occasional ones, points to the broadcast being
+*structurally* blocked rather than transiently flaky —
+`android.intent.action.AIRPLANE_MODE` is a protected system broadcast in
+AOSP, which a plain `am broadcast` from adb shell likely can't send on
+Android 13/14. Retrying the same blocked command (the fix above) doesn't
+help. **Fixed**: switched to `cmd connectivity airplane-mode disable`,
+the standard AOSP shell command for this exact operation, issued
+alongside `settings put` — both now best-effort (logged, not fatal),
+with success decided only by the confirmation poll. **Not yet confirmed
+against real hardware** — the next retest is what tells us whether this
+new command actually succeeds where the broadcast was blocked. 278
+tests passing. See `docs/record.md` for the full account, including the
+exact device list and timestamps.
+
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached
 `SUCCESS: ... reached LOGIN_INSTALL`, invoked with nothing but
