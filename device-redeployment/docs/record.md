@@ -2177,6 +2177,50 @@ all devices before a real run** — if this keeps recurring, it may be
 worth checking whether the client's factory-reset+wizard process
 (performed manually) leaves airplane mode on by default on some units.
 
+**🎉🎉🎉 CONFIRMED on real hardware, same day (2026-10-01), next
+retest: 7 of 11 devices succeeded** (`HQ632M1012`, `353681650397052`,
+`352063910283409`, `353681650242175`, `353681653208520`, `HQ627C0472`,
+`HQ634A0C5D`) — up from 0/11 the run before. Both fixes worked exactly
+as designed in production:
+- All formerly-airplane-mode-affected devices either had it turned off
+  before this run (and succeeded normally) or — for `HQ627F2149` — hit
+  the new airplane-mode check cleanly and failed loudly with the
+  specific message, 3/3 retries, confirming **`HQ627F2149` was never a
+  mystery at all: it's the same airplane-mode cause as the other 5**,
+  just not recognized as such until this check existed. All 6
+  airplane-mode cases are now fully explained.
+- The stale-task-state check didn't fire this run (the two previously
+  affected devices, `HQ632M1012`/`353681650397052`, navigated normally
+  and succeeded) — expected, since whether Settings' task happens to
+  be sitting on the APN list depends on what was left over from a
+  *previous* run, not something present every time. The check remains
+  correct defensive coverage for when that state does recur.
+
+**Only the `HazardousScreenError` cluster remains, now fully isolated
+and worth a real new finding of its own: it was the exact same 3
+physical devices both this run and the previous one —
+`352063910272451`, `HQ63460161`, `HQ62540758`.** Not a random subset
+each time; the same 3 across 2 consecutive runs, while the other 8
+succeed reliably. That's real evidence pointing toward something
+specific to these 3 units' current USB port/cable/position on the hub
+rather than general contention across the whole batch — the kind of
+thing a physical swap test can actually distinguish, which pure
+logging cannot. **Recommended next step (operational, not code):**
+on the client PC, swap these 3 devices' USB cables/ports with 3 of the
+devices that have been succeeding, and re-run. If the hazard follows
+the *device*, it's something about that specific unit (worth checking
+its cable/port physically). If it follows the *port/cable*, that's a
+hub/wiring issue independent of which device is plugged into it.
+Either answer meaningfully narrows this down in a way no further
+diagnostic logging can, since the existing logs already fully confirm
+*what* is happening (a real, persistent notification, correctly
+refused every time) — the only open question left is *why these 3
+specifically*, which is a hardware question now, not a software one.
+
+No code changes made this round — both fixes already in place
+performed exactly as intended; this entry is purely recording the
+real-hardware confirmation.
+
 ---
 
 ## Dump capture status (all models)

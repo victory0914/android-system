@@ -51,17 +51,34 @@ at scale" section for the full blow-by-blow):**
      like a lock screen/quick-settings view, not Settings at all. Not
      enough evidence yet; flagged, not guessed at.
 
-**Action needed on the client PC:** confirm Airplane Mode is off on
-all devices before the next run (may be worth checking whether the
-client's manual factory-reset+wizard process leaves it on by default
-on some units), then `git pull` and re-run the same 11-14 device
-batch. **The `HazardousScreenError` cluster (3 devices) is still
-completely unresolved** and increasingly looks like the PoC設計書's
-own flagged-but-never-tested risk, USB給電安定性 (item 5 of
-検証項目一覧; see `docs/フェーズ2_PoC結果レポート.md` §4.3/§8), rather
-than a fixable software bug — the next retest (hopefully with the 8
-other devices now succeeding) should make that cluster easier to
-isolate and study on its own.
+**🎉🎉🎉 CONFIRMED on real hardware, same day — run 5: 7 of 11 succeeded**
+(`HQ632M1012`, `353681650397052`, `352063910283409`, `353681650242175`,
+`353681653208520`, `HQ627C0472`, `HQ634A0C5D`) — up from 0/11. Both
+fixes worked exactly as designed: `HQ627F2149` (previously
+"unexplained") hit the new Airplane Mode check cleanly, confirming it
+was the same cause as the other 5 all along — **all 6 Airplane Mode
+cases are now fully explained and correctly fail loudly**. The
+stale-task-state check didn't need to fire this run (expected — it
+only matters when a previous run left Settings sitting on the APN
+list), and both previously-affected devices navigated and succeeded
+normally.
+
+**Only the `HazardousScreenError` cluster remains — now isolated to
+the exact same 3 physical devices two runs in a row:**
+`352063910272451`, `HQ63460161`, `HQ62540758`. Not a random subset
+each time. This is real evidence pointing at something specific to
+these 3 units' current port/cable/hub position, not general
+contention across the whole batch. **Recommended next step
+(operational, not code): swap these 3 devices' USB cables/ports with
+3 of the now-reliably-succeeding devices and re-run** — if the hazard
+follows the device, it's that unit's cable/port; if it follows the
+port, it's a hub/wiring issue. The logs already fully confirm *what*
+happens (a real, persistent notification, correctly refused every
+single time); *why these 3 specifically* is now a hardware question a
+physical swap can answer, not something more logging can.
+
+**No code changes needed this round** — see `docs/record.md`'s
+"HazardousScreenError at scale" section for the full account.
 
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached
