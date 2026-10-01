@@ -15,7 +15,14 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from src.device.model_profile import ModelProfile
-from src.phase2.apn_setup import _fill_labeled_field, _log, configure_apn
+import src.phase2.apn_setup as apn_setup
+from src.phase2.apn_setup import (
+    _disable_airplane_mode,
+    _fill_labeled_field,
+    _log,
+    _navigate_apn_menu,
+    configure_apn,
+)
 from tests.fakes import FakeAdbClient
 
 
@@ -1149,17 +1156,95 @@ def test_navigate_apn_menu_logs_when_menu_path_is_empty(caplog):
     assert any("menu_path is empty" in m for m in messages)
 
 
-# --- Airplane Mode precondition check (2026-10-01) --------------------------
-# Real finding: in the same 11-device retest, 5 of 8 devices that failed
+# --- Airplane Mode precondition check + auto-disable (2026-10-01/02) -------
+# Real finding: in an 11-device retest, 5 of 8 devices that failed
 # navigation turned out (via the new all_visible_texts() diagnostics) to be
 # showing "機内モードは/が ON です" (Airplane Mode is ON) on the
 # post-WIFI_SETTINGS-intent screen — Android hides the mobile-network gear
 # icon from Wi-Fi settings entirely while airplane mode is on. Checked
-# explicitly now, rather than surfacing as a generic, misleading navigation
+# explicitly, rather than surfacing as a generic, misleading navigation
 # failure 2-3 log lines later.
+#
+# Client decision (2026-10-02): rather than just failing loudly and
+# requiring the operator to fix this by hand on every affected device, this
+# tool now turns it off itself via adb (_disable_airplane_mode()) and
+# continues navigation once confirmed off.
 
 
-def test_navigate_apn_menu_fails_loudly_when_airplane_mode_is_on(caplog):
+class _AirplaneModeTransitionClient(FakeAdbClient):
+    """Starts with airplane_mode_on == '1'; once `settings put global
+    airplane_mode_on 0` is issued, subsequent `settings get` calls report
+    '0' — simulates the real device actually applying the change, which
+    FakeAdbClient's static shell_responses can't express on its own."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._airplane_mode_disabled = False
+
+    def shell(self, command, timeout=30):
+        if command == "settings put global airplane_mode_on 0":
+            self.shell_calls.append(command)
+            self._airplane_mode_disabled = True
+            return ""
+        if command == "settings get global airplane_mode_on":
+            self.shell_calls.append(command)
+            return "0" if self._airplane_mode_disabled else "1"
+        return super().shell(command, timeout=timeout)  # appends to shell_calls itself
+
+
+def test_disable_airplane_mode_confirms_success_after_it_takes_effect():
+    client = _AirplaneModeTransitionClient()
+
+    result = _disable_airplane_mode(client, timeout_seconds=1, interval_seconds=0)
+
+    assert result is True
+    assert "settings put global airplane_mode_on 0" in client.shell_calls
+    assert (
+        "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false"
+        in client.shell_calls
+    )
+
+
+def test_disable_airplane_mode_returns_false_if_still_on_after_timeout():
+    client = FakeAdbClient(shell_responses={"settings get global airplane_mode_on": "1"})
+
+    result = _disable_airplane_mode(client, timeout_seconds=0, interval_seconds=0)
+
+    assert result is False
+
+
+def test_disable_airplane_mode_returns_false_on_adb_error(caplog):
+    client = FakeAdbClient(
+        shell_failures={"settings put global airplane_mode_on 0"},
+    )
+
+    with caplog.at_level(logging.ERROR, logger="src.phase2.apn_setup"):
+        result = _disable_airplane_mode(client, timeout_seconds=0, interval_seconds=0)
+
+    assert result is False
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("failed to disable Airplane Mode" in m for m in messages)
+
+
+def test_navigate_apn_menu_disables_airplane_mode_and_continues_navigation(monkeypatch):
+    """Once Airplane Mode is confirmed off, navigation must proceed in the
+    same call — not just report success and stop."""
+    monkeypatch.setattr(apn_setup, "_disable_airplane_mode", lambda client, **kw: True)
+    client = FakeAdbClient(
+        shell_responses={"settings get global airplane_mode_on": "1"},
+        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30,
+    )
+
+    result = _navigate_apn_menu(client, WIFI_SETTINGS_NAV_PROFILE.apn_settings())
+
+    assert result is True
+    assert "am start -a android.settings.WIFI_SETTINGS" in client.shell_calls
+    gear_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    assert gear_tap in client.shell_calls
+
+
+def test_navigate_apn_menu_fails_loudly_when_disable_cannot_be_confirmed(monkeypatch, caplog):
+    monkeypatch.setattr(apn_setup, "_disable_airplane_mode", lambda client, **kw: False)
     client = FakeAdbClient(
         shell_responses={"settings get global airplane_mode_on": "1"},
         ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 10,
@@ -1170,15 +1255,16 @@ def test_navigate_apn_menu_fails_loudly_when_airplane_mode_is_on(caplog):
 
     assert result is False
     messages = [r.getMessage() for r in caplog.records]
-    assert any("Airplane Mode" in m for m in messages)
-    # Never even attempted navigation once the precondition failed.
+    assert any("could not confirm Airplane Mode was turned off" in m for m in messages)
+    # Never even attempted navigation once the precondition couldn't be fixed.
     assert "am start -a android.settings.WIFI_SETTINGS" not in client.shell_calls
 
 
 def test_navigate_apn_menu_proceeds_normally_when_airplane_mode_is_off():
     """airplane_mode_on == '0' (the real, confirmed value on every device
     tested so far) must not be treated as "on" — only the literal '1'
-    string is. Full real navigation should proceed exactly as before."""
+    string is, and _disable_airplane_mode() must never even be called.
+    Full real navigation should proceed exactly as before."""
     client = FakeAdbClient(
         shell_responses={"settings get global airplane_mode_on": "0"},
         ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30,
@@ -1186,6 +1272,7 @@ def test_navigate_apn_menu_proceeds_normally_when_airplane_mode_is_off():
 
     result = configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
 
+    assert "settings put global airplane_mode_on 0" not in client.shell_calls
     assert "am start -a android.settings.WIFI_SETTINGS" in client.shell_calls
     gear_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
     assert gear_tap in client.shell_calls

@@ -2221,6 +2221,41 @@ No code changes made this round — both fixes already in place
 performed exactly as intended; this entry is purely recording the
 real-hardware confirmation.
 
+**Update, 2026-10-02 (client decision): Airplane Mode is now disabled
+automatically instead of just being reported.** After the above
+confirmed Airplane Mode as the real cause for all 6 affected devices,
+the client asked for the tool to fix it itself rather than requiring a
+manual per-device fix every time it recurs. `_navigate_apn_menu()`
+(`src/phase2/apn_setup.py`) now calls a new `_disable_airplane_mode()`
+when it detects `airplane_mode_on == '1'`:
+
+1. `settings put global airplane_mode_on 0` (updates the stored value)
+2. `am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false`
+   (the broadcast that makes the system actually act on it and toggle
+   the radios — same two-step mechanism Android's own Settings UI uses
+   internally; `settings put` alone doesn't reliably take effect by
+   itself)
+3. Polls `settings get global airplane_mode_on` for up to 10s (1s
+   interval) to confirm it actually took effect before continuing.
+
+If confirmed off, navigation continues in the same call (no wasted
+retry). If the adb commands themselves fail, or it's still `'1'` after
+the poll times out, fails loudly with a specific message — same
+"never guess, fail loudly" standard as everywhere else in this file,
+just one layer later (attempt the fix, then fail loudly only if the
+fix itself can't be confirmed).
+
+The 10s/1s poll timing is a reasonable bounded default, **not yet
+confirmed against real hardware** — if a real run shows it's not
+enough (or confirms it's plenty), that should come from evidence, not
+a bigger guess. New tests (`tests/test_apn_setup.py`):
+`test_disable_airplane_mode_confirms_success_after_it_takes_effect`,
+`test_disable_airplane_mode_returns_false_if_still_on_after_timeout`,
+`test_disable_airplane_mode_returns_false_on_adb_error`,
+`test_navigate_apn_menu_disables_airplane_mode_and_continues_navigation`,
+`test_navigate_apn_menu_fails_loudly_when_disable_cannot_be_confirmed`.
+277 tests passing total.
+
 ---
 
 ## Dump capture status (all models)

@@ -77,8 +77,20 @@ happens (a real, persistent notification, correctly refused every
 single time); *why these 3 specifically* is now a hardware question a
 physical swap can answer, not something more logging can.
 
-**No code changes needed this round** — see `docs/record.md`'s
+**No code changes needed that round** — see `docs/record.md`'s
 "HazardousScreenError at scale" section for the full account.
+
+**Update, 2026-10-02 (client decision): Airplane Mode is now disabled
+automatically** rather than just failing loudly and requiring a manual
+per-device fix. `_navigate_apn_menu()` now turns it off via adb
+(`settings put` + the `AIRPLANE_MODE` broadcast, the same two-step
+mechanism Android's own Settings UI uses) and polls up to 10s to
+confirm it actually took effect before continuing navigation in the
+same call. Still fails loudly — now only if the disable itself can't
+be confirmed, rather than every time airplane mode is encountered. The
+10s/1s poll timing is a reasonable default, **not yet confirmed
+against real hardware** — the next retest should show whether it's
+enough. 277 tests passing. See `docs/record.md` for the full account.
 
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached

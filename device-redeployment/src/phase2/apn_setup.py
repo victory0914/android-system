@@ -594,6 +594,53 @@ def _looks_like_apn_list_screen(ui_xml: str) -> bool:
         return False
 
 
+# Settle time after telling the device to disable Airplane Mode before
+# re-checking whether it actually took effect. `settings put` alone only
+# updates the stored value — it's the AIRPLANE_MODE broadcast afterward
+# that makes the system actually act on it and toggle the radios, same
+# two-step mechanism Android's own Settings UI uses internally — and that
+# can take a moment on a real device. Not yet confirmed against real
+# hardware timing; a reasonable bounded default, same philosophy as this
+# file's other _*_SECONDS constants. If a real retest shows this isn't
+# enough, adjust from that evidence rather than guessing higher blindly.
+_AIRPLANE_MODE_DISABLE_POLL_TIMEOUT_SECONDS = 10.0
+_AIRPLANE_MODE_DISABLE_POLL_INTERVAL_SECONDS = 1.0
+
+
+def _disable_airplane_mode(
+    client: AdbClientProtocol,
+    *,
+    timeout_seconds: float = _AIRPLANE_MODE_DISABLE_POLL_TIMEOUT_SECONDS,
+    interval_seconds: float = _AIRPLANE_MODE_DISABLE_POLL_INTERVAL_SECONDS,
+) -> bool:
+    """Turn Airplane Mode off via adb and poll `settings get global
+    airplane_mode_on` until it confirms '0', up to `timeout_seconds`
+    (overridable so tests don't need a real multi-second wait — same
+    pattern as wifi_setup.py's connect_wifi() poll parameters). Returns
+    True once confirmed off, False if the adb commands themselves fail or
+    it's still on when the poll times out — never raises, so the caller
+    can treat either outcome as a normal failure rather than a crash."""
+    try:
+        client.shell("settings put global airplane_mode_on 0")
+        client.shell(
+            "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false"
+        )
+    except AdbCommandError as exc:
+        _log(client).error("apn: failed to disable Airplane Mode via adb: %s", exc)
+        return False
+
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            if client.shell("settings get global airplane_mode_on").strip() == "0":
+                return True
+        except AdbCommandError:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(interval_seconds)
+
+
 def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
     """Reach the APN entry (list) screen.
 
@@ -647,26 +694,37 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
     # gear icon from Wi-Fi settings entirely while airplane mode is on
     # (Wi-Fi itself can still be manually re-enabled independently, which
     # is consistent with these same devices' Wi-Fi step succeeding
-    # normally just before this). Checked explicitly and failed loudly
-    # here, rather than letting it surface 2-3 log lines later as a
-    # generic, misleading navigation failure. This tool deliberately does
-    # NOT turn airplane mode off itself — that's a device-state precondition
-    # for the operator to fix, not something to silently change.
+    # normally just before this). Checked explicitly here rather than
+    # letting it surface 2-3 log lines later as a generic, misleading
+    # navigation failure.
+    #
+    # Client decision (2026-10-02): rather than just failing loudly and
+    # requiring the operator to fix this by hand on every affected device,
+    # this tool now turns Airplane Mode off itself (`_disable_airplane_mode()`
+    # below) and continues navigation in the same call once confirmed off
+    # — only failing loudly if the disable itself can't be confirmed.
     try:
         airplane_mode = client.shell("settings get global airplane_mode_on").strip()
     except AdbCommandError as exc:
         airplane_mode = None
         _log(client).info("could not check airplane_mode_on setting: %s", exc)
     if airplane_mode == "1":
-        _log(client).error(
+        _log(client).warning(
             "apn: device is in Airplane Mode (settings get global "
             "airplane_mode_on == '1') — the mobile-network settings menu "
             "(and its gear icon) isn't shown in Wi-Fi settings while "
-            "airplane mode is on, so SIM-scoped APN navigation cannot "
-            "proceed. Turn airplane mode off on the device manually "
-            "before retrying — this tool does not change it itself."
+            "airplane mode is on. Disabling it now (client decision, "
+            "2026-10-02) before continuing navigation."
         )
-        return False
+        if not _disable_airplane_mode(client):
+            _log(client).error(
+                "apn: could not confirm Airplane Mode was turned off via "
+                "adb (still '1' after %.0fs of polling) — turn it off "
+                "manually on the device before retrying",
+                _AIRPLANE_MODE_DISABLE_POLL_TIMEOUT_SECONDS,
+            )
+            return False
+        _log(client).info("apn: Airplane Mode confirmed off; continuing navigation")
 
     if apn.get("reach_via_wifi_settings_intent"):
         try:
