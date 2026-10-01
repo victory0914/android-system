@@ -2110,6 +2110,73 @@ analysis alone can.
 that removes the hazard wait and adds `all_visible_texts()` logging to
 `_navigate_apn_menu` is present), re-run the same batch, send the log.
 
+**🎉 Update, same day (2026-10-01), next retest: the diagnostics worked
+immediately — two real, distinct root causes found, both fixed.**
+Client re-ran with the hazard-wait removed and the new
+`all_visible_texts()` logging in place. This run: 0/11 succeeded, 3
+hazard failures (unchanged — see above), **8 generic navigation
+failures, but this time every single one showed exactly what screen
+the device actually landed on.**
+
+**Root cause #1 — Airplane Mode (5 of 8 devices):** `352063910283409`,
+`353681653208520`, `353681650242175`, `HQ634A0C5D`, `HQ627C0472` all
+showed `'機内モードは ON です'` / `'機内モードが ON です'`
+("Airplane Mode is ON") directly in the visible text right after the
+`WIFI_SETTINGS` intent. This explains everything cleanly: Android
+removes the mobile-network settings gear icon from the Wi-Fi screen
+entirely while airplane mode is on — there's no SIM-scoped menu to
+navigate to at all — and these same devices' Wi-Fi step succeeded
+normally just beforehand, which is consistent with Android allowing
+Wi-Fi to be manually re-enabled independently of airplane mode. **Not
+a code bug** — a genuine device-state precondition.
+
+**Root cause #2 — stale Settings task state (2 of 8 devices):**
+`HQ632M1012` and `353681650397052` landed directly on the **APN list
+itself** right after the intent — their visible text was literally
+`['rakuten.jp', 'rakuten.jp']` (a duplicate entry, left over from an
+earlier successful run the same day). `android.settings.WIFI_SETTINGS`
+resumes Settings' existing task rather than resetting it to the
+top-level screen — if that task was already sitting on the APN list
+from a previous run, the intent just brings it straight back there,
+and the old code then went hunting for a gear icon that was never
+going to be on that screen.
+
+**Still unexplained (1 of 8):** `HQ627F2149` showed
+`['17:40', '10月1日木曜日', '機内モード', '100%', '充電が完了しました']`
+— looks like a lock screen or notification shade/quick-settings view,
+not the Settings app at all. Not enough evidence yet to say why (screen
+locked? intent didn't launch? timing?) — flagged, not guessed at.
+
+**Fixed, both in `_navigate_apn_menu()` (`src/phase2/apn_setup.py`):**
+1. An explicit `settings get global airplane_mode_on` check at the top
+   of the function (applies to both navigation paths) — fails loudly
+   with a specific, actionable message if it's `'1'`, rather than
+   letting it surface as a confusing generic failure 2-3 log lines
+   later. **Deliberately does not turn airplane mode off itself** —
+   that's a device-state precondition for the operator to fix, this
+   tool doesn't silently change device settings it wasn't asked to.
+2. Right after the `WIFI_SETTINGS` intent, a `dump_ui()` +
+   `_looks_like_apn_list_screen()` check (the same, already-established
+   detection used at the end of this function) — if the intent resumed
+   directly on the APN list, treat navigation as already complete
+   instead of hunting for a step that isn't there.
+
+New tests (`tests/test_apn_setup.py`):
+`test_navigate_apn_menu_fails_loudly_when_airplane_mode_is_on`,
+`test_navigate_apn_menu_proceeds_normally_when_airplane_mode_is_off`,
+`test_navigate_apn_menu_detects_already_on_apn_list_after_intent`.
+273 tests passing total.
+
+**Not yet confirmed on real hardware** — next retest should show far
+fewer (ideally zero) devices failing with Airplane-Mode or
+stale-task-state causes, now that both fail loudly/skip correctly
+instead of silently going through a misleading generic failure. The 3
+`HazardousScreenError` devices and the still-unexplained `HQ627F2149`
+remain open. **Operationally: please confirm Airplane Mode is off on
+all devices before a real run** — if this keeps recurring, it may be
+worth checking whether the client's factory-reset+wizard process
+(performed manually) leaves airplane mode on by default on some units.
+
 ---
 
 ## Dump capture status (all models)

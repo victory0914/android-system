@@ -639,6 +639,35 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
     the full multi-step `menu_path` only if that fails or doesn't land
     correctly.
     """
+    # Real finding (2026-10-01, 11-device batch retest): with the new
+    # all_visible_texts() diagnostics below, 5 of 8 devices that failed
+    # with the generic "apn menu navigation failed" turned out to be
+    # showing "機内モードは/が ON です" (Airplane Mode is ON) on the
+    # post-WIFI_SETTINGS-intent screen — Android hides the mobile-network
+    # gear icon from Wi-Fi settings entirely while airplane mode is on
+    # (Wi-Fi itself can still be manually re-enabled independently, which
+    # is consistent with these same devices' Wi-Fi step succeeding
+    # normally just before this). Checked explicitly and failed loudly
+    # here, rather than letting it surface 2-3 log lines later as a
+    # generic, misleading navigation failure. This tool deliberately does
+    # NOT turn airplane mode off itself — that's a device-state precondition
+    # for the operator to fix, not something to silently change.
+    try:
+        airplane_mode = client.shell("settings get global airplane_mode_on").strip()
+    except AdbCommandError as exc:
+        airplane_mode = None
+        _log(client).info("could not check airplane_mode_on setting: %s", exc)
+    if airplane_mode == "1":
+        _log(client).error(
+            "apn: device is in Airplane Mode (settings get global "
+            "airplane_mode_on == '1') — the mobile-network settings menu "
+            "(and its gear icon) isn't shown in Wi-Fi settings while "
+            "airplane mode is on, so SIM-scoped APN navigation cannot "
+            "proceed. Turn airplane mode off on the device manually "
+            "before retrying — this tool does not change it itself."
+        )
+        return False
+
     if apn.get("reach_via_wifi_settings_intent"):
         try:
             client.shell("am start -a android.settings.WIFI_SETTINGS")
@@ -648,6 +677,26 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
                 "the SIM-scoped path): %s", exc
             )
             return False
+
+        # Real finding, same retest: 2 devices landed directly on the APN
+        # list itself instead of the expected Wi-Fi settings screen —
+        # their visible text was literally APN entries (e.g. 'rakuten.jp'
+        # appearing twice, from an earlier successful run today). The
+        # WIFI_SETTINGS intent resumes Settings' existing task rather than
+        # resetting it to the top-level screen, so if that task was left
+        # sitting on the APN list from a previous run, it just comes back
+        # exactly there. Detect and treat that as already-navigated
+        # instead of blindly hunting for a gear icon that was never going
+        # to be on this screen.
+        ui_xml_after_intent = dump_ui(client)
+        if _looks_like_apn_list_screen(ui_xml_after_intent):
+            _log(client).info(
+                "apn: WIFI_SETTINGS intent resumed directly on the APN "
+                "list screen (Settings' task was already there from a "
+                "previous run) — treating navigation as already complete"
+            )
+            return True
+
         menu_path = apn.get("menu_path")
         if not menu_path:
             _log(client).error(

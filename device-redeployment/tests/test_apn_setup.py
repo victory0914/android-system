@@ -972,6 +972,19 @@ WIFI_SETTINGS_NAV_SCREEN_XML = """<hierarchy>
   <node resource-id="android:id/button1" bounds="[0,800][100,900]" />
 </hierarchy>"""
 
+# The screen immediately after the WIFI_SETTINGS intent, before any of
+# menu_path's own steps run — has the gear icon but none of the
+# destination APN screen's own markers (no content-desc, no field rows).
+# Needed as the FIRST dump for reach_via_wifi_settings_intent tests since
+# 2026-10-01: _navigate_apn_menu() now dump_ui()s right after the intent
+# to detect "already on the APN list" (real finding — see its own
+# comment), and WIFI_SETTINGS_NAV_SCREEN_XML's content-desc would
+# otherwise make that check fire immediately, before real navigation
+# ever runs.
+WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML = """<hierarchy>
+  <node resource-id="com.android.settings:id/settings_button" bounds="[0,0][100,100]" />
+</hierarchy>"""
+
 WIFI_SETTINGS_NAV_PROFILE = ModelProfile(
     {
         "model": "SHG07-like WIFI_SETTINGS-nav Test",
@@ -997,7 +1010,9 @@ def test_configure_apn_reaches_list_via_wifi_settings_intent_and_menu_path():
     android.settings.WIFI_SETTINGS (never APN_SETTINGS), then complete
     the full menu_path (gear icon, then the real "アクセス ポイント名"
     tap) before field-filling starts."""
-    client = FakeAdbClient(ui_dumps=[WIFI_SETTINGS_NAV_SCREEN_XML] * 30)
+    client = FakeAdbClient(
+        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30
+    )
 
     result = configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
 
@@ -1039,7 +1054,9 @@ def test_configure_apn_scrolls_before_tapping_the_final_sim_scoped_step():
     checked so far, risking a tap swallowed by the system
     navigation/gesture bar. Must scroll down once before tapping it, same
     defensive pattern as MCC/MNC's below-the-fold field rows."""
-    client = FakeAdbClient(ui_dumps=[WIFI_SETTINGS_NAV_SCREEN_XML] * 30)
+    client = FakeAdbClient(
+        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30
+    )
 
     configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
 
@@ -1120,7 +1137,9 @@ def test_navigate_apn_menu_logs_when_menu_path_is_empty(caplog):
             },
         }
     )
-    client = FakeAdbClient(ui_dumps=[WIFI_SETTINGS_NAV_SCREEN_XML] * 10)
+    client = FakeAdbClient(
+        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 10
+    )
 
     with caplog.at_level(logging.ERROR, logger="src.phase2.apn_setup"):
         result = configure_apn(client, empty_menu_path_profile, "rakuten.jp", "440", "11")
@@ -1128,6 +1147,84 @@ def test_navigate_apn_menu_logs_when_menu_path_is_empty(caplog):
     assert result is False
     messages = [r.getMessage() for r in caplog.records]
     assert any("menu_path is empty" in m for m in messages)
+
+
+# --- Airplane Mode precondition check (2026-10-01) --------------------------
+# Real finding: in the same 11-device retest, 5 of 8 devices that failed
+# navigation turned out (via the new all_visible_texts() diagnostics) to be
+# showing "機内モードは/が ON です" (Airplane Mode is ON) on the
+# post-WIFI_SETTINGS-intent screen — Android hides the mobile-network gear
+# icon from Wi-Fi settings entirely while airplane mode is on. Checked
+# explicitly now, rather than surfacing as a generic, misleading navigation
+# failure 2-3 log lines later.
+
+
+def test_navigate_apn_menu_fails_loudly_when_airplane_mode_is_on(caplog):
+    client = FakeAdbClient(
+        shell_responses={"settings get global airplane_mode_on": "1"},
+        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 10,
+    )
+
+    with caplog.at_level(logging.ERROR, logger="src.phase2.apn_setup"):
+        result = configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is False
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("Airplane Mode" in m for m in messages)
+    # Never even attempted navigation once the precondition failed.
+    assert "am start -a android.settings.WIFI_SETTINGS" not in client.shell_calls
+
+
+def test_navigate_apn_menu_proceeds_normally_when_airplane_mode_is_off():
+    """airplane_mode_on == '0' (the real, confirmed value on every device
+    tested so far) must not be treated as "on" — only the literal '1'
+    string is. Full real navigation should proceed exactly as before."""
+    client = FakeAdbClient(
+        shell_responses={"settings get global airplane_mode_on": "0"},
+        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30,
+    )
+
+    result = configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
+
+    assert "am start -a android.settings.WIFI_SETTINGS" in client.shell_calls
+    gear_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    assert gear_tap in client.shell_calls
+    # Still fails at the (unresolved) save step, not navigation — same
+    # baseline as test_configure_apn_reaches_list_via_wifi_settings_intent_
+    # and_menu_path above.
+    assert result is False
+
+
+# --- Already-on-the-APN-list detection (2026-10-01) -------------------------
+# Real finding, same retest: 2 devices landed directly on the APN list
+# itself right after the WIFI_SETTINGS intent, instead of the expected
+# Wi-Fi settings screen — their visible text was literally APN entries
+# (e.g. 'rakuten.jp' appearing twice, left over from an earlier successful
+# run the same day). android.settings.WIFI_SETTINGS resumes Settings'
+# existing task rather than resetting it to the top-level screen, so if
+# that task was already sitting on the APN list, it just comes right back
+# there — and the old code then went hunting for a gear icon that was
+# never going to be on that screen.
+
+
+def test_navigate_apn_menu_detects_already_on_apn_list_after_intent():
+    """If the WIFI_SETTINGS intent resumes directly on the APN list
+    (content-desc marker already present), treat navigation as complete
+    immediately — never try to tap a leading step that isn't there."""
+    already_on_apn_list_xml = """<hierarchy>
+  <node content-desc="アクセスポイント名" bounds="[0,0][1080,100]" />
+  <node resource-id="android:id/title" text="rakuten.jp" bounds="[0,100][100,200]" />
+</hierarchy>"""
+    client = FakeAdbClient(ui_dumps=[already_on_apn_list_xml])
+
+    from src.phase2.apn_setup import _navigate_apn_menu
+
+    result = _navigate_apn_menu(client, WIFI_SETTINGS_NAV_PROFILE.apn_settings())
+
+    assert result is True
+    # Only the intent itself ran — no gear-icon tap, since there's no gear
+    # icon on this screen to find.
+    assert not any(c.startswith("input tap") for c in client.shell_calls)
 
 
 def test_configure_apn_reach_via_wifi_settings_rejects_non_text_final_step():
@@ -1152,7 +1249,9 @@ def test_configure_apn_reach_via_wifi_settings_rejects_non_text_final_step():
             },
         }
     )
-    client = FakeAdbClient(ui_dumps=[WIFI_SETTINGS_NAV_SCREEN_XML] * 30)
+    client = FakeAdbClient(
+        ui_dumps=[WIFI_SETTINGS_SCREEN_BEFORE_NAV_XML] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30
+    )
     with pytest.raises(ValueError):
         configure_apn(client, bad_profile, "rakuten.jp", "440", "11")
 
