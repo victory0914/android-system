@@ -48,6 +48,7 @@ from src.device.device_logging import tagged as _tagged_logger
 from src.device.model_profile import ModelProfile
 from src.device.ui_automator import (
     AmbiguousResourceIdError,
+    all_visible_texts,
     dump_ui,
     find_by_content_desc,
     find_by_text,
@@ -649,8 +650,32 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
             return False
         menu_path = apn.get("menu_path")
         if not menu_path:
+            _log(client).error(
+                "apn: reach_via_wifi_settings_intent is set but "
+                "apn_settings.menu_path is empty — nothing to navigate"
+            )
             return False
+        # Real finding (2026-10-01): this was a silent `return False` with
+        # no log line at all — in an 11-device parallel run, every device
+        # that failed here looked identical from the log (a multi-second
+        # gap, then just the generic "apn menu navigation failed" a few
+        # lines down), with no way to tell this step apart from the final
+        # tap failing below or the post-navigation screen check failing
+        # further down, both of which already log clearly. Fixed: log
+        # exactly which step failed, same granularity as the rest of this
+        # function. `navigate_menu_path()` itself deliberately logs
+        # nothing on a missed step (it's shared by wizard/wifi navigation
+        # too, where "not found" isn't always an error) — this is the
+        # right layer to say so, since here it always is one.
         if len(menu_path) > 1 and not navigate_menu_path(client, menu_path[:-1]):
+            _log(client).error(
+                "apn: could not navigate the SIM-scoped menu_path's "
+                "leading step(s) (everything before the final tap) — a "
+                "step's resource_id/text/content_desc wasn't found on the "
+                "post-WIFI_SETTINGS screen. menu_path (leading steps): %r. "
+                "Visible text on the screen it actually landed on: %s",
+                menu_path[:-1], all_visible_texts(dump_ui(client)),
+            )
             return False
 
         # Real finding (2026-09-18): the final step's target
@@ -676,7 +701,8 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
         if not tap_by_text(client, step_value):
             _log(client).error(
                 "apn: could not find/tap the final SIM-scoped menu_path "
-                "step (%r) even after scrolling", step_value,
+                "step (%r) even after scrolling. Visible text on screen: %s",
+                step_value, all_visible_texts(dump_ui(client)),
             )
             return False
 

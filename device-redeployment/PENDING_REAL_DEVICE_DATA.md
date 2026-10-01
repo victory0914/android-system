@@ -6,43 +6,59 @@ outstanding. See `docs/record.md` for the full session notes (test logs,
 navigation paths, capture methodology, judgment calls) behind every entry
 here — this file is the checklist; that one is the evidence.
 
-**⚠️ Status as of 2026-10-01: a 14-device batch (11 matched + 3 correctly
-unmatched) exposed a new, scale-specific problem — most devices hit
-`HazardousScreenError` (the "USB debugging disable notification"
-tap-safety guard) across two independent runs, only 1/11 succeeding each
-time.** No device was harmed (the guard worked exactly as designed —
-every failure was a clean refusal, never a wrong tap) but this is a real
-regression in success rate at this scale compared to the clean 4-device
-runs. Root cause not confirmed; leading hypothesis is USB/ADB connection
-churn under heavy simultaneous load on one hub, re-triggering Android's
-notification. Fix applied: `run_init_apn()` now waits 20s after this
-specific error before the next retry (previously ~0s gap), to give the
-notification a real chance to clear — see `docs/record.md`'s
-"HazardousScreenError at scale" section for the full account, including
-the explicit caveat that this is an unconfirmed hypothesis, not a proven
-fix. **Next step: retest this same batch and report back** — if the
-hazard still recurs across all 3 retries, the wait theory is disproven
-and a different approach (e.g. direct USB hub power investigation) is
-needed instead. A separate, unrelated issue on one new SOG07 unit
-(`HQ627F2149`, `apn menu navigation failed`, no hazard involved) remains
-unresolved — not enough evidence yet to diagnose.
+**⚠️ Status as of 2026-10-01 (3 retests so far, 14-device batch: 11
+matched + 3 correctly unmatched): scale-specific failures are real and
+still unresolved, but the picture is now much clearer thanks to two
+rounds of fixes/diagnostics.** No device has ever been harmed in any of
+these runs — every `HazardousScreenError` is a clean, correct refusal
+to tap, never a wrong tap.
 
-**🚨 Update, 2026-10-01 (client-supplied retest): the 20s fix above was
-NOT actually active during the retest — please confirm `git pull`
-before testing again.** The retest log shows zero occurrences of the
-fix's own log line and retry gaps of ~5-8s (not ~20s), which proves the
-code running predated commit `659e12b`. Separately, that same retest
-log revealed `apn_setup.py`/`wifi_setup.py` have no per-device log
-tagging at all, which blocked diagnosing why 7 of 11 devices failed
-with a different, generic `apn menu navigation failed` error (not the
-hazard) this time — **fixed**: every log line in both modules now
-starts with `device <serial>:` (new `src/device/device_logging.py`).
-**Action needed on the client PC: `git pull`, confirm `git log -1`
-shows this log-tagging commit or later, then re-run the same 11-14
-device batch and send the log back.** This will be the first retest that actually exercises
-both the wait fix and gives per-device-traceable output for anything
-that still fails. See `docs/record.md`'s "HazardousScreenError at
-scale" section for the full account.
+**Timeline of findings:**
+1. Runs 1-2 (09-30, 10-01 16:19): dominated by `HazardousScreenError`
+   (8-10/11 devices), only 1/11 succeeding each time. Added a 20s wait
+   after this error before retrying (hypothesis: just needs time to
+   clear).
+2. Run 3 (10-01 16:59): retest ran **old code** (fix not deployed) —
+   proved this from the log itself (no wait-fix log line, ~5-8s retry
+   gaps). Added per-device log tagging (`device <serial>:` on every
+   `apn_setup.py`/`wifi_setup.py` line) since that same log also
+   revealed a different, untraceable failure mode on most devices.
+3. Run 4 (10-01 17:18, this update): **both fixes confirmed genuinely
+   active** (wait-fix log line fired 9 times; gaps measured at
+   ~20-28s; every module line now tagged). **The wait hypothesis is
+   now cleanly RULED OUT** — the hazard still recurred 3/3 for every
+   affected device despite the full wait. **Removed** per this
+   project's standing rule (same as the SOG07 commit-delay precedent)
+   — `slot.py` no longer special-cases this error. Meanwhile, the
+   per-device tagging immediately explained the *other* dominant
+   failure mode (8/11 devices, generic `apn menu navigation failed`):
+   two early-return paths inside `_navigate_apn_menu()` were logging
+   *nothing at all* on failure. Fixed — both now log clearly, and the
+   two most likely paths also capture the screen's actual visible text
+   at the moment of failure (`all_visible_texts()`), which the next
+   retest should finally make diagnosable.
+
+**Run 4's result: 0 of 11 succeeded** — worse than runs 1-3, but this
+reflects better detection/logging, not a regression in the underlying
+automation (the same core flow still works fine at 1-4 devices).
+
+**Reframing:** 3 different runs, 3 different dominant failure-mode
+distributions, one hypothesis now directly disproven — together this
+increasingly points at the PoC設計書's own flagged-but-never-tested
+risk, **USB給電安定性** (item 5 of 検証項目一覧; see
+`docs/フェーズ2_PoC結果レポート.md` §4.3/§8), rather than one fixable
+software bug. The next retest's visible-text diagnostics should help
+confirm or rule that out more directly.
+
+**Action needed on the client PC:** `git pull`, re-run the same 11-14
+device batch, send the log. This will be the first retest with the
+hazard-wait cleanly removed and real screen-content diagnostics for
+the navigation-failure devices. See `docs/record.md`'s "HazardousScreenError
+at scale" section for the full account.
+
+A separate, still-unrelated issue on one new SOG07 unit (`HQ627F2149`,
+also `apn menu navigation failed`) remains open — the new diagnostics
+should help here too if it recurs.
 
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached

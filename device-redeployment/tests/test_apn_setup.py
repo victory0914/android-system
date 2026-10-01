@@ -1057,6 +1057,79 @@ def test_configure_apn_scrolls_before_tapping_the_final_sim_scoped_step():
     )
 
 
+# --- Diagnostic logging for silent navigation failures (2026-10-01) --------
+# Real finding: in an 11-device parallel batch run, every device that
+# failed to navigate the SIM-scoped menu_path's leading steps produced
+# IDENTICAL logs — a multi-second gap, then just the generic "apn menu
+# navigation failed" — because this specific failure path used to be a
+# silent `return False`. Fixed: log exactly which step failed, plus the
+# screen's actual visible text (all_visible_texts()), same precedent as
+# wizard_walkthrough.py's "unrecognized screen" logging.
+
+
+def test_navigate_apn_menu_logs_when_leading_steps_not_found(caplog):
+    screen_without_gear_icon_xml = """<hierarchy>
+  <node resource-id="android:id/title" text="何か別の画面" bounds="[0,0][100,100]" />
+</hierarchy>"""
+    client = FakeAdbClient(ui_dumps=[screen_without_gear_icon_xml] * 10)
+
+    with caplog.at_level(logging.ERROR, logger="src.phase2.apn_setup"):
+        result = configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is False
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(
+        "could not navigate the SIM-scoped menu_path's leading step(s)" in m
+        and "何か別の画面" in m
+        for m in messages
+    )
+
+
+def test_navigate_apn_menu_logs_when_final_step_not_found(caplog):
+    screen_with_gear_but_not_final_step_xml = """<hierarchy>
+  <node resource-id="com.android.settings:id/settings_button" bounds="[0,0][100,100]" />
+  <node resource-id="android:id/title" text="別の項目" bounds="[0,100][100,200]" />
+</hierarchy>"""
+    client = FakeAdbClient(ui_dumps=[screen_with_gear_but_not_final_step_xml] * 10)
+
+    with caplog.at_level(logging.ERROR, logger="src.phase2.apn_setup"):
+        result = configure_apn(client, WIFI_SETTINGS_NAV_PROFILE, "rakuten.jp", "440", "11")
+
+    assert result is False
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(
+        "could not find/tap the final SIM-scoped menu_path step" in m
+        and "別の項目" in m
+        for m in messages
+    )
+
+
+def test_navigate_apn_menu_logs_when_menu_path_is_empty(caplog):
+    empty_menu_path_profile = ModelProfile(
+        {
+            "model": "Empty menu_path Test",
+            "model_number": "TST14",
+            "manufacturer": "Test",
+            "android_version": 13,
+            "wizard_steps": [{"screen": "x", "resource_id": "y", "action": "tap"}],
+            "wifi_settings": {"toggle_resource_id": "t", "network_list_resource_id": "n"},
+            "apn_settings": {
+                **LABELED_PROFILE.apn_settings(),
+                "reach_via_wifi_settings_intent": True,
+                "menu_path": [],
+            },
+        }
+    )
+    client = FakeAdbClient(ui_dumps=[WIFI_SETTINGS_NAV_SCREEN_XML] * 10)
+
+    with caplog.at_level(logging.ERROR, logger="src.phase2.apn_setup"):
+        result = configure_apn(client, empty_menu_path_profile, "rakuten.jp", "440", "11")
+
+    assert result is False
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("menu_path is empty" in m for m in messages)
+
+
 def test_configure_apn_reach_via_wifi_settings_rejects_non_text_final_step():
     """reach_via_wifi_settings_intent's menu_path must end with a
     {'type': 'text', ...} step — anything else is a real config mistake

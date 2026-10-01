@@ -2035,6 +2035,81 @@ retest will, for the first time, actually exercise the 20s wait *and*
 produce per-device-traceable logs for whatever still fails — both
 needed before any further diagnosis or fix.
 
+**🎯 Update, same day (2026-10-01), client-supplied retest: both fixes
+confirmed genuinely active this time — and the wait hypothesis is now
+cleanly RULED OUT.** The retest log (`logs/main_phase2.log`, run
+starting 17:18:59) shows the fix's own log line firing 9 times, and
+every device-module log line now carries `device <serial>:`, so this
+is the first retest that actually exercised both changes.
+
+**Hazard-wait result: disproven by direct evidence, not just
+"still failing."** For all 3 devices that hit the hazard this time
+(`352063910272451`, `HQ63460161`, `HQ62540758`), the gaps between
+retries were measured directly from the log at **~20-28s** (e.g.
+`352063910272451`: retry 1→2 = 24.5s, retry 2→3 = 24.6s) — confirming
+the wait really did fire as coded. **The hazard still recurred 3/3 for
+every one of them regardless.** A 20s+ wait that's consistently long
+enough to measure but never once lets the notification clear rules out
+"it just needs a bit more time" as the explanation. Per this project's
+own standing rule (ruling out and removing the SOG07 commit-delay
+hypothesis, 2026-09-18, is the direct precedent), **the wait has been
+removed** — `src/orchestration/slot.py` no longer special-cases
+`HazardousScreenError` at all; it's handled exactly like any other
+failure now, with no retry delay. Keeping a wait that demonstrably
+doesn't help would only slow down every real run that hits this
+condition, for zero benefit. The underlying hazard-at-scale problem
+remains open, and increasingly looks less like something a retry delay
+of any length can fix — see the non-functional-requirements note below.
+
+**Second result: the per-device log tagging immediately paid off.**
+With `device <serial>:` now on every `apn_setup.py`/`wifi_setup.py`
+line, the dominant failure this run (8 of 11 devices, all generic `apn
+menu navigation failed`, matching run 3's pattern from the previous
+retest) could finally be traced per-device. Every one of them showed
+the *exact same shape*: `apn: current input method is '...'` (the
+first real log line inside `configure_apn()`), then a 2-3 second gap
+with **no further log line from this module at all**, then directly
+`apn menu navigation failed`. Reading `_navigate_apn_menu()` explained
+why: the `reach_via_wifi_settings_intent` branch has 2 early-return
+paths (`menu_path` empty; `navigate_menu_path(client,
+menu_path[:-1])` — the gear-icon tap — failing) that logged *nothing
+at all* before today, unlike the other 3 return paths in the same
+function (final-tap-not-found, didn't-land-on-APN-list, success),
+which all log clearly. **Fixed** (`src/phase2/apn_setup.py`): both
+silent paths now log a specific error, and the two most likely
+real-world culprits (leading-step failure, final-tap failure) now also
+call the existing `all_visible_texts()` helper (same precedent as
+`wizard_walkthrough.py`'s "unrecognized screen" logging) to show
+exactly what was actually on screen at the moment of failure — this
+will tell us, for the first time, whether these devices landed on the
+wrong screen, a stale/unrendered screen, or something else entirely.
+New tests (`tests/test_apn_setup.py`):
+`test_navigate_apn_menu_logs_when_leading_steps_not_found`,
+`test_navigate_apn_menu_logs_when_final_step_not_found`,
+`test_navigate_apn_menu_logs_when_menu_path_is_empty`.
+
+**This run's bottom line: 0 of 11 succeeded** (worse than either prior
+run) — but between the hazard-wait removal and the new navigation
+diagnostics, the *next* retest should finally produce a log detailed
+enough to tell us what's actually happening on these devices' screens,
+rather than another round of inferring from timing gaps and generic
+messages alone.
+
+**Reframing note:** three 11-device runs, three different dominant
+failure modes, two different "fixes" that either didn't move the
+needle (log tagging helped diagnose, didn't change outcomes) or were
+cleanly disproven (the wait) — taken together this continues to point
+toward the PoC設計書's own flagged-but-never-tested-at-scale risk,
+USB給電安定性 (item 5 of its 検証項目一覧; see
+`docs/フェーズ2_PoC結果レポート.md` §4.3/§8), rather than any single
+fixable software bug. The next retest's visible-text diagnostics
+should help confirm or rule that out more directly than timing
+analysis alone can.
+
+**Action needed on the client PC:** `git pull` (confirm the commit
+that removes the hazard wait and adds `all_visible_texts()` logging to
+`_navigate_apn_menu` is present), re-run the same batch, send the log.
+
 ---
 
 ## Dump capture status (all models)
