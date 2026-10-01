@@ -6,4 +6,4 @@ __pycache__/
 *.pyc
 
 # Logs — keep the directory (via logs/.gitkeep) but not actual log output
-logs/*.log
+
