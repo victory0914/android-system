@@ -1876,6 +1876,109 @@ ro.product.model` reports each real unit's plain `model_number` exactly
 no model has needed it). All 4 devices went on to reach `SUCCESS: ...
 reached LOGIN_INSTALL` in the same run.
 
+**Update, 2026-09-30/10-01: auto-detection scales correctly to a much
+larger, mixed batch, but surfaced a real, scale-specific problem.** Client
+connected 14 physical units (several new, never-run-before devices of
+each of the 4 known models, plus 3 unrecognized ones). Auto-detection
+handled all 14 correctly: 11 matched to known profiles (including every
+new unit, confirming `getprop ro.product.model` generalizes beyond the
+original 4 specific units), and 3 were correctly refused rather than
+guessed:
+```
+device 356659111963982: could not match to a known model profile (getprop ro.product.model = 'SHG05')
+device 357015386489626: could not match to a known model profile (getprop ro.product.model = 'SH-53C')
+device HQ63622931: could not match to a known model profile (getprop ro.product.model = 'XQ-DC44')
+```
+These 3 are real, distinct model strings (not noise) — whether they're
+models that should be supported is a client question, not something to
+guess at; no `adb_identifiers` were added speculatively.
+
+See "HazardousScreenError at scale" below for what happened when the 11
+matched devices actually ran, and the SOG07 unit (`HQ627F2149`) that
+failed differently from the rest.
+
+---
+
+## HazardousScreenError at scale (2026-10-01)
+
+**Real finding, two independent 11-device parallel batch runs
+(2026-09-30 23:45, 2026-10-01 16:19), same symptom both times: 8-10 of
+11 devices failed, all with the same error:**
+```
+refusing to tap: current screen contains the USB-debugging disable
+notification (matched '無効にするにはここをタップ' in the dump). A
+mistargeted tap here would disable ADB and strand the device.
+```
+This is `HazardousScreenError` (`src/device/ui_automator.py`,
+2026-09-04's finding — see "UI hazard" section above) doing exactly what
+it was built to do: refuse to tap anything on a screen showing this
+notification, rather than risk disabling ADB. **No device was harmed in
+either run** — every failure was a clean refusal, correctly caught by
+the existing retry/escalation machinery, never a wrong tap.
+
+**What's new is the frequency.** This guard barely fired at all across
+every previous session (isolated, one-off occurrences — see
+2026-09-10's and 2026-09-18's entries above). Here it hit most of an
+11-device batch, including units that have succeeded cleanly dozens of
+times before in 1- and 4-device runs (`352063910272451`, `HQ632M1012`,
+`HQ63460161`). Only one device (`353681650397052`, SHG07) succeeded in
+either run.
+
+**Timing pattern, directly from both logs:** retries previously had
+*no deliberate wait at all* — `scheduler.py`'s retry loop calls
+`run_init_apn()` again immediately, so consecutive attempts landed only
+~4-5s apart (just normal dispatch overhead). All 3 retries, across both
+runs, kept hitting the identical hazard — the gap was never long enough
+to see it clear.
+
+**Hypothesis (not yet confirmed):** running ~11 devices at once on one
+USB hub causes enough simultaneous USB/ADB activity (heavy parallel
+`uiautomator dump`/`input tap` traffic) that a device's connection
+blips and reconnects, which re-shows Android's "USB debugging
+connected" notification as a fresh heads-up banner — this would also
+explain why it recurred on devices that have never shown it before.
+This is exactly the real-world condition item 5 of the PoC's own
+検証項目一覧 ("USB 給電安定性") was meant to test at 20-device scale —
+see `docs/フェーズ2_PoC結果レポート.md` §4.3/§8, where it was flagged as
+not yet tested. No direct evidence yet on the notification's actual
+clear time, or on whether this is truly a USB-hub/host-controller power
+issue vs. something else — only that the previous near-zero gap wasn't
+enough.
+
+**Fix applied (`src/orchestration/slot.py`):** `run_init_apn()` now
+waits `_HAZARD_RECOVERY_WAIT_SECONDS` (20s) specifically after a
+`HazardousScreenError`, before returning control to the scheduler for
+the next retry — turning the error's own stated remediation ("Clear the
+notification shade before retrying") into an actual wait instead of
+just a log message. Only waits when a retry will actually follow
+(`self.retry_count < self.max_retry`), so it never wastes time right
+before an escalation that's happening anyway (e.g. `--max-retries 0`).
+Does **not** touch the tap-refusal safety logic itself, which is
+correct and must stay exactly as strict as it is.
+
+**Explicitly labeled as an unconfirmed hypothesis, same as this
+project's established pattern** (e.g. the commit-delay hypothesis for
+SOG07, ruled out and removed 2026-09-18): if a real retest of this same
+11-14 device batch still shows the hazard recurring across all retries,
+that disproves the "it just needs time to clear" theory and this wait
+should be removed or replaced with a different approach (e.g.
+investigating USB hub power delivery/host controller capacity directly)
+rather than blindly lengthened.
+
+New tests (`tests/test_slot.py`):
+`test_run_init_apn_hazardous_screen_waits_before_a_retry_will_follow`,
+`test_run_init_apn_hazardous_screen_skips_wait_when_no_retry_will_follow`,
+`test_run_slot_with_retries_waits_between_hazard_retries_then_succeeds`.
+
+**Separate, unresolved issue on this same run — do not conflate with
+the above:** `HQ627F2149` (a SOG07 unit never run individually before)
+failed differently in both runs — Wi-Fi connected fine (via the slower
+UI fallback), but `apn menu navigation failed` with no specific
+sub-reason logged, 3/3 retries, no hazard notification involved. Not
+enough evidence to diagnose further from logs alone — needs a real
+`uiautomator dump` from this specific unit at the point of failure if
+it recurs. Not touched by today's fix.
+
 ---
 
 ## Dump capture status (all models)

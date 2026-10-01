@@ -7,6 +7,8 @@ import pytest
 
 from src.device.adb_client import AdbCommandError
 from src.device.model_profile import ModelProfile
+from src.device.ui_automator import HazardousScreenError
+from src.orchestration import slot as slot_module
 from src.orchestration.scheduler import run_slot_with_retries
 from src.orchestration.slot import Slot, SlotState
 from tests.fakes import FakeAdbClient
@@ -223,6 +225,89 @@ def test_run_slot_with_retries_recovers_after_a_transient_failure(monkeypatch):
 
     assert final_state == SlotState.LOGIN_INSTALL
     assert slot.retry_count == 1
+
+
+# --- HazardousScreenError recovery wait (2026-10-01) -----------------------
+# Real finding: two independent 11-device parallel batch runs (2026-09-30,
+# 2026-10-01) showed HazardousScreenError firing on 8-10 of 11 devices every
+# time, including units that had succeeded cleanly dozens of times before.
+# Retries previously happened with no wait at all (~4-5s apart, just the
+# normal dispatch overhead) and kept hitting the same hazard on every one of
+# the 3 attempts. run_init_apn() now waits _HAZARD_RECOVERY_WAIT_SECONDS
+# before returning False specifically for this error, but only when the
+# scheduler will actually retry — never wastes time waiting right before an
+# escalation that's happening regardless (e.g. --max-retries 0).
+
+
+def test_run_init_apn_hazardous_screen_waits_before_a_retry_will_follow(monkeypatch):
+    def _raise_hazard(*args, **kwargs):
+        raise HazardousScreenError(
+            "refusing to tap: current screen contains the USB-debugging "
+            "disable notification"
+        )
+
+    monkeypatch.setattr(slot_module, "connect_wifi", _raise_hazard)
+    sleep_calls = []
+    monkeypatch.setattr(slot_module.time, "sleep", lambda s: sleep_calls.append(s))
+
+    client = FakeAdbClient(connected=True)
+    slot = Slot("slot-hazard", client, max_retry=3)  # retry_count=0 < max_retry=3
+
+    result = slot.run_init_apn(_profile(), NETWORK_CONFIG, skip_wizard=True)
+
+    assert result is False
+    assert slot.state == SlotState.FAILED
+    assert "USB-debugging" in slot.last_error
+    assert sleep_calls == [slot_module._HAZARD_RECOVERY_WAIT_SECONDS]
+
+
+def test_run_init_apn_hazardous_screen_skips_wait_when_no_retry_will_follow(monkeypatch):
+    def _raise_hazard(*args, **kwargs):
+        raise HazardousScreenError("refusing to tap: ...")
+
+    monkeypatch.setattr(slot_module, "connect_wifi", _raise_hazard)
+    sleep_calls = []
+    monkeypatch.setattr(slot_module.time, "sleep", lambda s: sleep_calls.append(s))
+
+    client = FakeAdbClient(connected=True)
+    slot = Slot("slot-hazard-last", client, max_retry=0)  # retry_count=0, not < 0
+
+    result = slot.run_init_apn(_profile(), NETWORK_CONFIG, skip_wizard=True)
+
+    assert result is False
+    assert sleep_calls == []
+
+
+def test_run_slot_with_retries_waits_between_hazard_retries_then_succeeds(monkeypatch):
+    """End-to-end through the scheduler: two hazard failures (each followed
+    by the recovery wait, since a retry follows both) then success on the
+    third attempt."""
+    calls = {"n": 0}
+
+    def _flaky_connect_wifi(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise HazardousScreenError("refusing to tap: ...")
+        return True
+
+    monkeypatch.setattr(slot_module, "connect_wifi", _flaky_connect_wifi)
+    sleep_calls = []
+    monkeypatch.setattr(slot_module.time, "sleep", lambda s: sleep_calls.append(s))
+
+    client = FakeAdbClient(
+        ui_dumps=[FULL_SCREEN_XML],
+        shell_responses={"dumpsys wifi": DUMPSYS_WIFI_CONNECTED},
+        connected=True,
+    )
+    slot = Slot("slot-hazard-recover", client, max_retry=3)
+
+    final_state = run_slot_with_retries(
+        slot, _profile(), NETWORK_CONFIG, skip_wizard=True
+    )
+
+    assert final_state == SlotState.LOGIN_INSTALL
+    assert slot.retry_count == 2
+    assert sleep_calls == [slot_module._HAZARD_RECOVERY_WAIT_SECONDS] * 2
 
 
 def test_run_slot_with_retries_forwards_skip_wizard():

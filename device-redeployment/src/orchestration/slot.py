@@ -9,15 +9,38 @@ stops there.
 from __future__ import annotations
 
 import logging
+import time
 from enum import Enum, auto
 
 from src.device.adb_client import AdbClientProtocol, AdbCommandError
 from src.device.model_profile import ModelProfile
+from src.device.ui_automator import HazardousScreenError
 from src.phase2.apn_setup import configure_apn
 from src.phase2.wifi_setup import connect_wifi
 from src.phase2.wizard_walkthrough import run_wizard
 
 logger = logging.getLogger(__name__)
+
+# Real finding (2026-09-30 and 2026-10-01, two independent 11-device parallel
+# batch runs, same symptom both times): HazardousScreenError (see
+# ui_automator.py — the device's own "USBデバッグが接続されました" notification
+# is on screen, and tapping near it risks disabling ADB) fired on 8-10 of 11
+# devices in every large-batch run, including units that have succeeded
+# cleanly dozens of times before in 1- and 4-device runs. It did not recur on
+# the very next retry either — all 3 retries (previously fired back-to-back,
+# ~4-5s apart, no wait at all) hit the same hazard every time, then escalated.
+# Hypothesis (not yet confirmed): running many devices at once on one USB hub
+# causes enough simultaneous USB/ADB activity that a device's connection
+# blips and reconnects, which re-shows this notification — and the previous
+# near-zero gap between retries never gave it a chance to actually clear, as
+# its own error message says to do ("Clear the notification shade before
+# retrying"). This constant makes that wait real instead of just a log
+# message. Only applied when a retry will actually follow (never wastes time
+# waiting right before escalating with --max-retries 0). If a real retest
+# still shows the hazard recurring after this wait, that disproves the
+# hypothesis and this should be removed rather than lengthened blindly — see
+# docs/record.md.
+_HAZARD_RECOVERY_WAIT_SECONDS = 20.0
 
 
 def _prep_device(client: AdbClientProtocol, slot_id: str) -> None:
@@ -133,6 +156,21 @@ class Slot:
             ):
                 raise RuntimeError("apn configuration failed")
 
+        except HazardousScreenError as exc:
+            self.state = SlotState.FAILED
+            self.last_error = str(exc)
+            logger.error("slot %s: run_init_apn failed: %s", self.slot_id, self.last_error)
+            if self.retry_count < self.max_retry:
+                logger.warning(
+                    "slot %s: waiting %.0fs before the next retry to give the "
+                    "transient USB-debugging notification a real chance to "
+                    "clear (real finding, 2026-09-30/10-01 large-batch runs — "
+                    "see slot.py's _HAZARD_RECOVERY_WAIT_SECONDS comment; "
+                    "unconfirmed whether this wait alone is enough)",
+                    self.slot_id, _HAZARD_RECOVERY_WAIT_SECONDS,
+                )
+                time.sleep(_HAZARD_RECOVERY_WAIT_SECONDS)
+            return False
         except Exception as exc:
             self.state = SlotState.FAILED
             self.last_error = str(exc)

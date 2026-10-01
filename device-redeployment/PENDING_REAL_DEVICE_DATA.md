@@ -6,6 +6,27 @@ outstanding. See `docs/record.md` for the full session notes (test logs,
 navigation paths, capture methodology, judgment calls) behind every entry
 here — this file is the checklist; that one is the evidence.
 
+**⚠️ Status as of 2026-10-01: a 14-device batch (11 matched + 3 correctly
+unmatched) exposed a new, scale-specific problem — most devices hit
+`HazardousScreenError` (the "USB debugging disable notification"
+tap-safety guard) across two independent runs, only 1/11 succeeding each
+time.** No device was harmed (the guard worked exactly as designed —
+every failure was a clean refusal, never a wrong tap) but this is a real
+regression in success rate at this scale compared to the clean 4-device
+runs. Root cause not confirmed; leading hypothesis is USB/ADB connection
+churn under heavy simultaneous load on one hub, re-triggering Android's
+notification. Fix applied: `run_init_apn()` now waits 20s after this
+specific error before the next retry (previously ~0s gap), to give the
+notification a real chance to clear — see `docs/record.md`'s
+"HazardousScreenError at scale" section for the full account, including
+the explicit caveat that this is an unconfirmed hypothesis, not a proven
+fix. **Next step: retest this same batch and report back** — if the
+hazard still recurs across all 3 retries, the wait theory is disproven
+and a different approach (e.g. direct USB hub power investigation) is
+needed instead. A separate, unrelated issue on one new SOG07 unit
+(`HQ627F2149`, `apn menu navigation failed`, no hazard involved) remains
+unresolved — not enough evidence yet to diagnose.
+
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached
 `SUCCESS: ... reached LOGIN_INSTALL`, invoked with nothing but
