@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from src.device.model_profile import ModelProfile
-from src.phase2.apn_setup import _fill_labeled_field, configure_apn
+from src.phase2.apn_setup import _fill_labeled_field, _log, configure_apn
 from tests.fakes import FakeAdbClient
 
 
@@ -1368,6 +1368,26 @@ def test_configure_apn_gives_up_softly_without_any_renavigation(monkeypatch, cap
     assert "am force-stop com.android.settings" not in client.shell_calls
     assert client.shell_calls.count("am start -a android.settings.APN_SETTINGS") == 1
     assert "am start -a android.settings.WIFI_SETTINGS" not in client.shell_calls
+
+
+# --- Per-device log tagging (2026-10-01) ------------------------------------
+# Real finding: in an 11-device parallel batch run, this module's own log
+# lines carried no identifying info at all — once failures started
+# interleaving across threads, it was impossible to tell which device a
+# given line belonged to (src/orchestration/slot.py's own lines already
+# include slot_id; this module's never did). Every logger.*() call in this
+# file now goes through _log(client) instead, which prefixes "device
+# <serial>: " — see src/device/device_logging.py.
+
+
+def test_log_helper_tags_messages_with_the_devices_serial(caplog):
+    client = FakeAdbClient("MYSERIAL123")
+
+    with caplog.at_level(logging.ERROR, logger="src.phase2.apn_setup"):
+        _log(client).error("apn menu navigation failed")
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert "device MYSERIAL123: apn menu navigation failed" in messages
 
 
 def test_configure_apn_taps_estimated_add_button_position_when_unresolved():

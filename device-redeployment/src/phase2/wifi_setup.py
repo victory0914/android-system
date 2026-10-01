@@ -12,6 +12,7 @@ import re
 import time
 
 from src.device.adb_client import AdbClientProtocol, AdbCommandError
+from src.device.device_logging import tagged as _tagged_logger
 from src.device.model_profile import ModelProfile
 from src.device.ui_automator import (
     AmbiguousResourceIdError,
@@ -25,6 +26,15 @@ from src.device.ui_automator import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _log(client: AdbClientProtocol) -> logging.LoggerAdapter:
+    """Every log call in this module goes through this instead of the bare
+    module `logger`, so each line is tagged with the device's serial — see
+    apn_setup.py's `_log()` for the real finding behind this (2026-10-01,
+    docs/record.md's "Per-device log tagging")."""
+    return _tagged_logger(logger, client)
+
 
 CONNECT_POLL_TIMEOUT_SECONDS = 30
 CONNECT_POLL_INTERVAL_SECONDS = 2.0
@@ -74,7 +84,7 @@ def _try_shell_connect(client: AdbClientProtocol, ssid: str, password: str) -> b
         client.shell(f'cmd wifi connect-network "{escaped_ssid}" wpa2 "{escaped_password}"')
         return True
     except AdbCommandError as exc:
-        logger.info("shell wifi connect-network unavailable/failed: %s", exc)
+        _log(client).info("shell wifi connect-network unavailable/failed: %s", exc)
         return False
 
 
@@ -88,14 +98,14 @@ def _ensure_wifi_toggle_on(client: AdbClientProtocol, toggle_resource_id: str) -
     ui_xml = dump_ui(client)
     checked = node_is_checked(ui_xml, toggle_resource_id)
     if checked is None:
-        logger.warning(
+        _log(client).warning(
             "wifi toggle %r not found in current dump; cannot confirm on/off "
             "state, skipping toggle tap to avoid guessing",
             toggle_resource_id,
         )
         return
     if checked:
-        logger.debug("wifi toggle %r already on; not tapping it", toggle_resource_id)
+        _log(client).debug("wifi toggle %r already on; not tapping it", toggle_resource_id)
         return
     tap_resource_id(client, toggle_resource_id)
 
@@ -116,13 +126,13 @@ def _tap_connect_button(client: AdbClientProtocol, wifi: dict) -> bool:
     if connect_text:
         if tap_by_text(client, connect_text):
             return True
-        logger.warning("wifi connect button (text %r) not found on screen", connect_text)
+        _log(client).warning("wifi connect button (text %r) not found on screen", connect_text)
 
     connect_button = wifi.get("connect_button_resource_id")
     if connect_button:
         if tap_resource_id(client, connect_button):
             return True
-        logger.warning(
+        _log(client).warning(
             "wifi connect button %r (unresolved/best-guess id) not found either",
             connect_button,
         )
@@ -163,12 +173,12 @@ def _navigate_to_wifi_settings(client: AdbClientProtocol, wifi: dict) -> bool:
     try:
         client.shell("am start -a android.settings.WIFI_SETTINGS")
     except AdbCommandError as exc:
-        logger.info("am start WIFI_SETTINGS intent failed: %s", exc)
+        _log(client).info("am start WIFI_SETTINGS intent failed: %s", exc)
     else:
         if _looks_like_wifi_settings_screen(client, wifi):
-            logger.info("reached Wi-Fi settings via android.settings.WIFI_SETTINGS intent")
+            _log(client).info("reached Wi-Fi settings via android.settings.WIFI_SETTINGS intent")
             return True
-        logger.info(
+        _log(client).info(
             "WIFI_SETTINGS intent didn't land on a recognizable Wi-Fi "
             "screen; falling back to menu_path navigation"
         )
@@ -189,7 +199,7 @@ def _try_ui_connect(
     wifi = profile.wifi_settings()
 
     if not _navigate_to_wifi_settings(client, wifi):
-        logger.warning("wifi UI fallback: could not navigate to Wi-Fi settings screen")
+        _log(client).warning("wifi UI fallback: could not navigate to Wi-Fi settings screen")
         return
 
     _ensure_wifi_toggle_on(client, wifi["toggle_resource_id"])
@@ -199,12 +209,12 @@ def _try_ui_connect(
     # internally on its next call.
     selected = tap_resource_id(client, wifi["network_list_resource_id"], text=ssid)
     if not selected:
-        logger.warning("wifi UI fallback: network %r not found in scanned list", ssid)
+        _log(client).warning("wifi UI fallback: network %r not found in scanned list", ssid)
         return
 
     password_field = wifi.get("password_field_resource_id")
     if password_field and not tap_resource_id(client, password_field):
-        logger.warning(
+        _log(client).warning(
             "wifi password field %r (unresolved/best-guess id) not found; "
             "attempting text entry anyway in case it's already focused — "
             "the join-network dialog typically auto-focuses the password "
@@ -252,26 +262,26 @@ def connect_wifi(
     ever reaching that screen when there's nothing to do.
     """
     if _is_wifi_connected(client, ssid):
-        logger.info("already connected to %r; nothing to do", ssid)
+        _log(client).info("already connected to %r; nothing to do", ssid)
         return True
 
     try:
         client.shell("svc wifi enable")
     except AdbCommandError as exc:
-        logger.warning("could not explicitly enable wifi radio: %s", exc)
+        _log(client).warning("could not explicitly enable wifi radio: %s", exc)
 
     shell_attempted = _try_shell_connect(client, ssid, password)
     if shell_attempted:
         if _wait_for_connection(client, ssid, poll_timeout_seconds, poll_interval_seconds):
-            logger.info("connected to %r via shell command", ssid)
+            _log(client).info("connected to %r via shell command", ssid)
             return True
-        logger.info("shell connect-network ran but connection not confirmed; falling back to UI")
+        _log(client).info("shell connect-network ran but connection not confirmed; falling back to UI")
 
     _try_ui_connect(client, profile, ssid, password)
 
     if _wait_for_connection(client, ssid, poll_timeout_seconds, poll_interval_seconds):
-        logger.info("connected to %r via UI fallback", ssid)
+        _log(client).info("connected to %r via UI fallback", ssid)
         return True
 
-    logger.error("failed to connect to %r via shell command or UI fallback", ssid)
+    _log(client).error("failed to connect to %r via shell command or UI fallback", ssid)
     return False

@@ -1979,6 +1979,62 @@ enough evidence to diagnose further from logs alone — needs a real
 `uiautomator dump` from this specific unit at the point of failure if
 it recurs. Not touched by today's fix.
 
+**🚨 Update, 2026-10-01 (client-supplied retest log): the 20s
+hazard-recovery wait above was confirmed NOT actually active during
+the retest.** The retest log (`logs/main_phase2.log`, run starting
+16:59:16) shows the identical pre-fix behavior: zero occurrences of the
+new "waiting Xs before the next retry..." log line, and every
+hazard-retry gap measured directly from the log is ~5-8s (e.g.
+`352063910272451`: 23.772→29.001 = 5.2s; `HQ63460161`: 24.146→28.856 =
+4.7s) — nowhere close to the 20s the fix calls for. Since
+`time.sleep()` blocks only the calling thread regardless of what other
+threads are doing, a genuinely-active fix could not produce gaps this
+short no matter how many other devices are contending for the USB bus.
+**Conclusion: this retest ran code that predates commit `659e12b`** —
+almost certainly a `git pull` was missed before running, not a bug in
+the fix itself. The wait is still unconfirmed and needs an actual
+retest with the current code before drawing any conclusion about it.
+
+**Second real finding from the same retest log, independent of the
+above:** the failure-mode mix was notably different from both prior
+runs. Only 3 of 10 failing devices showed the hazard text this time
+(`352063910272451`, `HQ63460161`, `HQ62540758`); the other 7
+(`352063910283409`, `353681650242175`, `353681650397052`→ wait, that
+one succeeded; `353681653208520`, `HQ627C0472`, `HQ634A0C5D`,
+`HQ627F2149`) all failed with the generic `apn menu navigation failed`
+instead — no hazard notification involved. Three separate 11-device
+runs, three different failure-mode distributions (run 1: hazard-
+dominated; run 2: hazard-dominated; run 3: nav-failure-dominated) is
+itself real evidence that whatever's happening at this scale is
+non-deterministic — consistent with a resource-contention family of
+causes (USB bus bandwidth, ADB server throughput, or device-side timing
+under heavy simultaneous load) rather than one fixed, reproducible
+software bug.
+
+**New problem hit while trying to diagnose the nav-failure devices
+further: `apn_setup.py`/`wifi_setup.py`'s own log lines carry no
+identifying information at all** — unlike `slot.py`'s lines (which all
+start with `slot %s:`), these modules just log generic text like `apn
+menu navigation failed` with no serial. In an 11-thread run with lines
+interleaving, there was no way to even confirm which device's thread
+produced a given line. **Fixed**: every `logger.*()` call in both
+modules now goes through a new `_log(client)` wrapper
+(`src/device/device_logging.py`'s `tagged()` — a `LoggerAdapter` that
+prefixes `"device <serial>: "`), using each function's own existing
+`client` parameter — no new plumbing needed, and the underlying logger
+name/handlers/formatters are untouched. This is a pure logging change,
+not a behavior change, verified by the full test suite passing
+unchanged (269 passed, 5 new: `test_log_helper_tags_messages_...` in
+`test_apn_setup.py`/`test_wifi_setup.py`, plus
+`tests/test_device_logging.py`'s 3 tests for the shared helper).
+
+**Status: both findings need the SAME next step.** Retest the same
+11-14 device batch with the current code (confirm `git pull` first —
+e.g. check `git log -1` shows `659e12b` or later before running). This
+retest will, for the first time, actually exercise the 20s wait *and*
+produce per-device-traceable logs for whatever still fails — both
+needed before any further diagnosis or fix.
+
 ---
 
 ## Dump capture status (all models)

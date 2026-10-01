@@ -27,6 +27,23 @@ needed instead. A separate, unrelated issue on one new SOG07 unit
 (`HQ627F2149`, `apn menu navigation failed`, no hazard involved) remains
 unresolved — not enough evidence yet to diagnose.
 
+**🚨 Update, 2026-10-01 (client-supplied retest): the 20s fix above was
+NOT actually active during the retest — please confirm `git pull`
+before testing again.** The retest log shows zero occurrences of the
+fix's own log line and retry gaps of ~5-8s (not ~20s), which proves the
+code running predated commit `659e12b`. Separately, that same retest
+log revealed `apn_setup.py`/`wifi_setup.py` have no per-device log
+tagging at all, which blocked diagnosing why 7 of 11 devices failed
+with a different, generic `apn menu navigation failed` error (not the
+hazard) this time — **fixed**: every log line in both modules now
+starts with `device <serial>:` (new `src/device/device_logging.py`).
+**Action needed on the client PC: `git pull`, confirm `git log -1`
+shows this log-tagging commit or later, then re-run the same 11-14
+device batch and send the log back.** This will be the first retest that actually exercises
+both the wait fix and gives per-device-traceable output for anything
+that still fails. See `docs/record.md`'s "HazardousScreenError at
+scale" section for the full account.
+
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached
 `SUCCESS: ... reached LOGIN_INSTALL`, invoked with nothing but

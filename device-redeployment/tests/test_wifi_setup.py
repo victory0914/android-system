@@ -6,8 +6,10 @@ after a real client-PC run showed menu_path text navigation (tapping "設定")
 fails whenever the device isn't already sitting on a screen where that text
 is visible — e.g. the home screen, reached via --skip-wizard testing."""
 
+import logging
+
 from src.device.model_profile import ModelProfile
-from src.phase2.wifi_setup import connect_wifi
+from src.phase2.wifi_setup import _log, connect_wifi
 from tests.fakes import FakeAdbClient
 
 PROFILE_WITH_MENU_PATH = ModelProfile(
@@ -324,3 +326,23 @@ def test_connect_wifi_skips_everything_when_already_connected():
 
     assert result is True
     assert client.shell_calls == ["dumpsys wifi"]
+
+
+# --- Per-device log tagging (2026-10-01) ------------------------------------
+# See test_apn_setup.py's equivalent test / src/device/device_logging.py for
+# the real finding behind this: this module's own log lines carried no
+# identifying info at all, which made an 11-device parallel batch run's
+# failures untraceable per-device.
+
+
+def test_log_helper_tags_messages_with_the_devices_serial(caplog):
+    client = FakeAdbClient("MYSERIAL123")
+
+    with caplog.at_level(logging.WARNING, logger="src.phase2.wifi_setup"):
+        _log(client).warning("wifi UI fallback: could not navigate to Wi-Fi settings screen")
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert (
+        "device MYSERIAL123: wifi UI fallback: could not navigate to Wi-Fi settings screen"
+        in messages
+    )

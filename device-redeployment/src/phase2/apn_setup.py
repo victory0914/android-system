@@ -44,6 +44,7 @@ import re
 import time
 
 from src.device.adb_client import AdbClientProtocol, AdbCommandError
+from src.device.device_logging import tagged as _tagged_logger
 from src.device.model_profile import ModelProfile
 from src.device.ui_automator import (
     AmbiguousResourceIdError,
@@ -66,6 +67,17 @@ from src.device.ui_automator import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _log(client: AdbClientProtocol) -> logging.LoggerAdapter:
+    """Every log call in this module goes through this instead of the bare
+    module `logger`, so each line is tagged with the device's serial (real
+    finding, 2026-10-01: in an 11-device parallel batch run, untagged lines
+    from interleaving threads made it impossible to tell which device a
+    given log line belonged to — see docs/record.md, "Per-device log
+    tagging"). `client` is already a parameter of every function in this
+    module, so this needs no new plumbing."""
+    return _tagged_logger(logger, client)
 
 _REQUIRED_LEGACY_FIELDS = (
     "name_field_resource_id",
@@ -158,7 +170,7 @@ def _cleanup_mismatched_field_dialog(client: AdbClientProtocol, apn: dict, label
     cleanup in the first place."""
     cancel_button = apn.get("dialog_cancel_button_resource_id")
     if cancel_button and not tap_resource_id(client, cancel_button):
-        logger.warning(
+        _log(client).warning(
             "apn field %r: also could not tap the cancel button %r to "
             "back out of the mismatched dialog — the device may be left "
             "showing it; check before the next run.",
@@ -166,7 +178,7 @@ def _cleanup_mismatched_field_dialog(client: AdbClientProtocol, apn: dict, label
         )
     navigate_up_content_desc = apn.get("navigate_up_content_desc")
     if navigate_up_content_desc and not tap_by_content_desc(client, navigate_up_content_desc):
-        logger.warning(
+        _log(client).warning(
             "apn field %r: also could not tap the navigate-up icon "
             "(content-desc %r) to exit the abandoned new-entry form — "
             "the device may be left showing it; check before the next run.",
@@ -291,7 +303,7 @@ def _fill_labeled_field(
 
     edit_field = apn.get("dialog_edit_field_resource_id")
     if edit_field and not tap_resource_id(client, edit_field):
-        logger.error(
+        _log(client).error(
             "apn field %r: dialog edit-field %r not found (real, confirmed "
             "id — see tests/fixtures/apn_accesshost_okbtn_SHG10.xml; a "
             "miss here means something about this specific dialog's state "
@@ -304,7 +316,7 @@ def _fill_labeled_field(
     def _tap_confirm() -> bool:
         confirm_button = apn.get("dialog_confirm_button_resource_id")
         if confirm_button and not tap_resource_id(client, confirm_button):
-            logger.error(
+            _log(client).error(
                 "apn field %r: dialog confirm button %r not found (real, "
                 "confirmed id — see tests/fixtures/apn_accesshost_okbtn_SHG10.xml) "
                 "— the value was typed but NOT committed, and the dialog is "
@@ -335,7 +347,7 @@ def _fill_labeled_field(
         ui_xml = dump_ui(client)
         current = get_node_text(ui_xml, edit_field)
         if current:
-            logger.info(
+            _log(client).info(
                 "apn field %r: already shows %r (auto-populated by the "
                 "device, presumably from the SIM) — leaving it as-is, "
                 "not typing %r over it",
@@ -471,7 +483,7 @@ def _fill_labeled_field(
         return False, actual
 
     def _fail_mismatch(typed: str, actual: str | None, attempts: int) -> None:
-        logger.error(
+        _log(client).error(
             "apn field %r: typed %r but the field now reads %r after %d "
             "toggle attempt(s) — the active input method appears to have "
             "transformed it every time (see docs/record.md, 2026-09-17). "
@@ -630,7 +642,7 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
         try:
             client.shell("am start -a android.settings.WIFI_SETTINGS")
         except AdbCommandError as exc:
-            logger.info(
+            _log(client).info(
                 "am start WIFI_SETTINGS intent failed (APN navigation via "
                 "the SIM-scoped path): %s", exc
             )
@@ -662,7 +674,7 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
             )
         scroll_down(client)
         if not tap_by_text(client, step_value):
-            logger.error(
+            _log(client).error(
                 "apn: could not find/tap the final SIM-scoped menu_path "
                 "step (%r) even after scrolling", step_value,
             )
@@ -670,9 +682,9 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
 
         ui_xml = dump_ui(client)
         if _looks_like_apn_list_screen(ui_xml):
-            logger.info("reached APN list via the SIM-scoped menu_path")
+            _log(client).info("reached APN list via the SIM-scoped menu_path")
             return True
-        logger.error(
+        _log(client).error(
             "apn: navigated the full SIM-scoped menu_path but didn't land "
             "on a recognizable APN list screen"
         )
@@ -681,13 +693,13 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
     try:
         client.shell("am start -a android.settings.APN_SETTINGS")
     except AdbCommandError as exc:
-        logger.info("am start APN_SETTINGS intent failed: %s", exc)
+        _log(client).info("am start APN_SETTINGS intent failed: %s", exc)
     else:
         ui_xml = dump_ui(client)
         if _looks_like_apn_list_screen(ui_xml):
-            logger.info("reached APN list via android.settings.APN_SETTINGS intent")
+            _log(client).info("reached APN list via android.settings.APN_SETTINGS intent")
             return True
-        logger.info(
+        _log(client).info(
             "APN_SETTINGS intent didn't land on a recognizable APN list "
             "screen; falling back to menu_path navigation"
         )
@@ -755,14 +767,14 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
 
     if overflow_content_desc:
         if not tap_by_content_desc(client, overflow_content_desc):
-            logger.error(
+            _log(client).error(
                 "apn overflow menu (content-desc %r) not found", overflow_content_desc
             )
             return False
 
         save_label = apn.get("save_menu_item_text", "保存")
         if not tap_by_text(client, save_label):
-            logger.error(
+            _log(client).error(
                 "apn save menu item (text %r) not found in overflow menu", save_label
             )
             return False
@@ -770,7 +782,7 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
         ui_xml = dump_ui(client)
         message = get_node_text(ui_xml, _DIALOG_MESSAGE_RESOURCE_ID)
         if message is not None:
-            logger.error(
+            _log(client).error(
                 "apn save blocked by validation dialog: %r — a required "
                 "field was missing or invalid. Not tapping OK and retrying "
                 "blindly (see docs/record.md, 'VALIDATION IS SEQUENTIAL AND "
@@ -809,9 +821,9 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
         # returns True, exactly as it did before 2026-09-15's addition.
 
         if entry_visible:
-            logger.info("apn: new entry %r confirmed visible on the APN list", apn_name)
+            _log(client).info("apn: new entry %r confirmed visible on the APN list", apn_name)
         else:
-            logger.warning(
+            _log(client).warning(
                 "apn: save reported no validation error, but %r wasn't "
                 "spotted back on the APN list (soft check only — not "
                 "treated as a failure; could be scroll position or list "
@@ -823,14 +835,14 @@ def _save_apn(client: AdbClientProtocol, apn: dict, apn_name: str) -> bool:
 
     save_button = apn.get("save_button_resource_id")
     if not save_button:
-        logger.error(
+        _log(client).error(
             "apn_settings has neither overflow_menu_content_desc nor "
             "save_button_resource_id configured — configure_apn() cannot "
             "complete. See PENDING_REAL_DEVICE_DATA.md."
         )
         return False
     if not tap_resource_id(client, save_button):
-        logger.error("apn save button %r not found", save_button)
+        _log(client).error("apn save button %r not found", save_button)
         return False
     return True
 
@@ -856,10 +868,10 @@ def configure_apn(
     round-trip.
     """
     if not _MCC_PATTERN.fullmatch(mcc):
-        logger.error("apn mcc %r is not exactly 3 digits — device will reject this", mcc)
+        _log(client).error("apn mcc %r is not exactly 3 digits — device will reject this", mcc)
         return False
     if not _MNC_PATTERN.fullmatch(mnc):
-        logger.error("apn mnc %r is not 2 or 3 digits — device will reject this", mnc)
+        _log(client).error("apn mnc %r is not 2 or 3 digits — device will reject this", mnc)
         return False
 
     apn = profile.apn_settings()
@@ -872,17 +884,17 @@ def configure_apn(
     # this line in its log is the first thing to check.
     current_ime = get_current_ime(client)
     if current_ime is not None:
-        logger.info("apn: current input method is %r", current_ime)
+        _log(client).info("apn: current input method is %r", current_ime)
 
     if not _navigate_apn_menu(client, apn):
-        logger.error("apn menu navigation failed")
+        _log(client).error("apn menu navigation failed")
         return False
 
     add_button = apn.get("add_button_resource_id")
     add_button_content_desc = apn.get("add_button_content_desc")
     if add_button:
         if not tap_resource_id(client, add_button):
-            logger.warning(
+            _log(client).warning(
                 "apn add-new button %r not found; assuming a blank entry is "
                 "already open (e.g. this screen has no existing APNs yet)",
                 add_button,
@@ -893,7 +905,7 @@ def configure_apn(
         # content-desc "新しい APN" ("New APN") — no estimate needed once
         # this is set; prefer it over the position-estimate fallback below.
         if not tap_by_content_desc(client, add_button_content_desc):
-            logger.warning(
+            _log(client).warning(
                 "apn add-new button (content-desc %r) not found; assuming "
                 "a blank entry is already open (e.g. this screen has no "
                 "existing APNs yet)",
@@ -911,13 +923,13 @@ def configure_apn(
         # "+"; a wrong estimate here fails loudly a few lines later when
         # the expected field rows aren't found.
         if not tap_left_of_content_desc(client, apn["overflow_menu_content_desc"]):
-            logger.warning(
+            _log(client).warning(
                 "apn add-new button: could not even find the overflow menu "
                 "(content-desc %r) to estimate its position from",
                 apn["overflow_menu_content_desc"],
             )
     else:
-        logger.debug(
+        _log(client).debug(
             "apn_settings.add_button_resource_id not configured for this "
             "model — see PENDING_REAL_DEVICE_DATA.md"
         )
@@ -927,7 +939,7 @@ def configure_apn(
     if uses_labeled_fields:
         missing = [f for f in _REQUIRED_LABELED_FIELDS if not apn.get(f)]
         if missing:
-            logger.error("apn_settings missing required field(s) %s", missing)
+            _log(client).error("apn_settings missing required field(s) %s", missing)
             return False
 
         # Fill ALL fields before ever tapping save — confirmed on real
@@ -945,19 +957,19 @@ def configure_apn(
         ]
         for label, value, numeric_only in fields:
             if not _fill_labeled_field(client, apn, label, value, numeric_only=numeric_only):
-                logger.error("apn field labeled %r not found/could not be filled", label)
+                _log(client).error("apn field labeled %r not found/could not be filled", label)
                 return False
     else:
         missing = [f for f in _REQUIRED_LEGACY_FIELDS if f not in apn]
         if missing:
-            logger.error("apn_settings missing required field(s) %s", missing)
+            _log(client).error("apn_settings missing required field(s) %s", missing)
             return False
 
         if not _fill_legacy_field(client, apn["name_field_resource_id"], apn_name):
-            logger.error("apn name field %r not found", apn["name_field_resource_id"])
+            _log(client).error("apn name field %r not found", apn["name_field_resource_id"])
             return False
         if not _fill_legacy_field(client, apn["apn_field_resource_id"], apn_name):
-            logger.error("apn value field %r not found", apn["apn_field_resource_id"])
+            _log(client).error("apn value field %r not found", apn["apn_field_resource_id"])
             return False
 
         mcc_field = apn.get("mcc_field_resource_id")
@@ -970,5 +982,5 @@ def configure_apn(
     if not _save_apn(client, apn, apn_name):
         return False
 
-    logger.info("apn %r configured successfully", apn_name)
+    _log(client).info("apn %r configured successfully", apn_name)
     return True
