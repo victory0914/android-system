@@ -2480,7 +2480,42 @@ against real hardware** — this is the first real retest's evidence that
 motivated the change, but the fix itself still needs its own retest. 279
 tests passing.
 
----
+**Update, 2026-10-01 20:37-20:38 retest: 7/11 succeeded — the best
+result yet — plus a client finding that pins down `HQ627F2149`'s real
+nature.**
+
+- **`HazardousScreenError` cluster: 5th consecutive confirmation, same
+  exact 3 devices** (`352063910272451`, `HQ63460161`, `HQ62540758`).
+  Still the one fully open item needing the physical USB cable/port
+  swap test.
+- **`HQ634A0C5D` succeeded this run** — the "skip leading steps when the
+  final step is already visible" fix (previous update) appears to be
+  working; no regression.
+- **No device hit the Airplane Mode banner at all this run** — inconclusive on whether the new screen-based
+  `_disable_airplane_mode()` mechanism itself works (never triggered),
+  but confirms Airplane Mode wasn't the blocker for anyone this time.
+- **Client finding, directly relevant to `HQ627F2149`:** checking the
+  devices against the actual Settings menu, Airplane Mode was genuinely
+  *inactive* — but the airplane icon in the status bar (next to the
+  clock/battery) remained visibly showing regardless. A stale/stuck
+  status-bar icon, independent of the real underlying state.
+- **`HQ627F2149` failed a 5th consecutive run, with the *exact same*
+  screen content every single time across all 5 runs spanning ~3 hours**
+  (e.g. `['20:37', '10月1日木曜日', '機内モード', '100%',
+  '充電が完了しました']`) — never once the real Airplane-Mode-on banner
+  (`'機内モードが ON です'` + actual Wi-Fi network names) seen on other
+  devices. Combined with the client's stale-icon finding above, this
+  reinforces last update's correction: this screen is very likely a
+  stale/stuck icon artifact (lock screen or stuck notification/
+  quick-settings view), not a real Airplane Mode indicator — so
+  `_airplane_mode_banner_present()` correctly does NOT treat it as
+  Airplane Mode, consistent with the client's direct observation. The
+  real, still fully open question for this one device is *why* Settings
+  never actually comes to the foreground when the WIFI_SETTINGS intent
+  fires — candidate explanation worth checking physically: is the
+  device's screen locked, or its notification shade stuck pulled down,
+  at the moment the script runs? Not yet checked; no code change made
+  on this without that evidence.
 
 ## Dump capture status (all models)
 

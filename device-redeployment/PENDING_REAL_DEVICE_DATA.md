@@ -169,6 +169,23 @@ against real screens all session. 279 tests passing. **Not yet confirmed
 against real hardware** — needs its own retest. See `docs/record.md` for
 the full account.
 
+**🎉 Update, 2026-10-01 20:37-20:38 retest: 7/11 succeeded — best result
+yet.** `HazardousScreenError` cluster: 5th consecutive confirmation,
+same exact 3 devices — still the one open item (USB swap test).
+`HQ634A0C5D` now succeeds (the "skip leading steps" fix holds). No
+device hit the Airplane Mode banner this run, so the new screen-based
+disable mechanism is still unexercised/unconfirmed either way. **Client
+finding**: checked against the actual Settings menu, Airplane Mode was
+genuinely off on the devices, but the status bar's airplane icon stayed
+visibly stuck showing anyway — confirms the status bar icon alone can't
+be trusted as evidence of real state. This reinforces `HQ627F2149`'s
+recurring screen (identical across all 5 runs/~3 hours now) being a
+stale-icon artifact, not real Airplane Mode — its actual blocker (why
+Settings never reaches the foreground on this one device) is still
+fully open; recommended next check is physical (is its screen locked or
+notification shade stuck open when the script runs?), not a code
+change. See `docs/record.md` for the full account.
+
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached
 `SUCCESS: ... reached LOGIN_INSTALL`, invoked with nothing but
