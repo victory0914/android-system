@@ -2372,6 +2372,61 @@ one fully open item — see the operational recommendation (USB
 port/cable swap test) above, now backed by a third consecutive
 confirmation of the same 3 devices.
 
+**Update, 2026-10-01 19:55-19:57 retest: 6/11 succeeded, one new root
+cause found and fixed, and one genuinely new open problem found on
+`HQ627F2149`.**
+
+- **`HazardousScreenError` cluster: 4th consecutive confirmation, same
+  exact 3 devices** — `352063910272451`, `HQ63460161`, `HQ62540758`.
+  Still the one fully open item needing a physical USB port/cable swap
+  test, not a code change.
+- **No device was in Airplane Mode this run at all** (no
+  `airplane_mode_on` activity anywhere in the run's log) — so this run
+  is **inconclusive** on whether `cmd connectivity airplane-mode
+  disable` actually works; still not yet confirmed either way.
+- **`HQ634A0C5D` failed for a genuinely new reason — a sibling of the
+  already-on-APN-list bug, landing one step earlier.** Its
+  `WIFI_SETTINGS` intent resumed directly on the carrier-specific
+  mobile-network-settings screen itself (visible text included `'SMS の
+  設定'`, `'モバイルデータ'`, `'ローミング'`, `'ネットワーク'`, ...,
+  `'アクセス ポイント名'`) — one step *past* the leading steps (no gear
+  icon on this screen, since that's the screen the gear icon leads to)
+  but one step *before* the APN list. Same root cause as the
+  already-on-APN-list case (`WIFI_SETTINGS` resumes Settings' existing
+  task from wherever a previous run left it, not a fresh state) — this
+  device's task was just left one screen further back. **Fixed**
+  (`src/phase2/apn_setup.py`): generalized rather than special-cased —
+  before attempting the leading steps, check whether the menu_path's
+  *final* step is already visible/tappable on the screen the intent
+  landed on; if so, skip the leading steps and tap it directly. New
+  test: `test_navigate_apn_menu_skips_leading_steps_when_final_step_
+  already_visible`. 279 tests passing total.
+- **`HQ627F2149` failed again — but now for a different, still-open
+  reason: the stored `airplane_mode_on` setting itself looks stale.**
+  Its screen showed the *exact same* quick-settings/status view on every
+  retry this run (`['19:55', '10月1日木曜日', '機内モード', '100%',
+  '充電が完了しました']`) as the identical screen that, in the
+  `18:27:58` run, co-occurred with `settings get global
+  airplane_mode_on` genuinely reading `'1'`. But this run, **no
+  Airplane Mode warning was logged for this device at all** — the
+  precondition check's `settings get` must have read something other
+  than `'1'` (no error was logged either, so it didn't throw — almost
+  certainly it read `'0'`), despite the device's real screen still
+  showing the same airplane-mode view it's shown for 3 consecutive runs
+  over ~90 minutes now. This is consistent with the stored setting
+  having been left at `'0'` by an earlier run's `settings put` (the
+  broadcast — now replaced — never actually applied it to the real
+  radio), and that stale `'0'` now permanently convincing every
+  subsequent run's precondition check that this device isn't in
+  Airplane Mode, so the fix never even gets attempted. **Not fixed
+  yet** — this needs either a quick manual fix on the device itself
+  (toggle Airplane Mode on then off by hand once, to resync the real
+  state with a correct stored flag) or a code change to stop trusting
+  the stored value alone and check the screen content instead, which
+  hasn't been implemented this round since it's a materially different,
+  riskier change than today's other two fixes and deserves its own
+  confirmation cycle rather than being bundled in speculatively.
+
 ---
 
 ## Dump capture status (all models)

@@ -125,6 +125,29 @@ new command actually succeeds where the broadcast was blocked. 278
 tests passing. See `docs/record.md` for the full account, including the
 exact device list and timestamps.
 
+**Update, 2026-10-01 19:55-19:57 retest: 6/11 succeeded. One new root
+cause found and fixed; one new problem found and still open.**
+`HazardousScreenError` cluster: 4th consecutive confirmation, same exact
+3 devices (`352063910272451`, `HQ63460161`, `HQ62540758`) — still open,
+still needs the physical USB swap test. No device hit Airplane Mode this
+run at all, so the `cmd connectivity` fix above remains unconfirmed
+either way. **Fixed**: `HQ634A0C5D` landed on the mobile-network-
+settings screen one step earlier than the already-on-APN-list case
+(same root cause — Settings' task resumed from a previous run's leftover
+state) — `_navigate_apn_menu()` now checks whether the menu_path's final
+step is already visible and skips the leading steps if so, instead of
+failing to find a gear icon that was never going to be there. 279 tests
+passing. **Still open**: `HQ627F2149` failed again, but now because the
+*stored* `airplane_mode_on` setting itself looks stale — the device's
+screen has shown the identical Airplane Mode quick-settings view for 3
+consecutive runs over ~90 minutes, yet the precondition check reads
+something other than `'1'` and never even attempts the fix. Likely
+caused by an earlier run's `settings put` landing without the (now-
+replaced) broadcast ever actually applying it. Needs either a manual
+on-device toggle to resync, or a code change to stop trusting the stored
+value and check the screen content instead — not implemented yet, see
+`docs/record.md` for the full account.
+
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached
 `SUCCESS: ... reached LOGIN_INSTALL`, invoked with nothing but

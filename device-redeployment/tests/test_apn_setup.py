@@ -1109,6 +1109,35 @@ def test_navigate_apn_menu_logs_when_leading_steps_not_found(caplog):
     )
 
 
+def test_navigate_apn_menu_skips_leading_steps_when_final_step_already_visible(caplog):
+    """Real finding, 2026-10-02 (same retest as the already-on-APN-list
+    case above): HQ634A0C5D's WIFI_SETTINGS intent resumed directly on
+    the mobile-network-settings screen itself (Settings' task left there
+    by a previous run) — one step past the leading steps (no gear icon on
+    this screen) but one step before the APN list, with the final
+    menu_path step ("アクセス ポイント名") already visible/tappable. Must
+    detect this and tap it directly instead of failing to find a gear
+    icon that was never going to be there."""
+    already_past_gear_xml = """<hierarchy>
+  <node resource-id="android:id/title" text="モバイルデータ" bounds="[0,0][100,100]" />
+  <node resource-id="android:id/title" text="アクセス ポイント名" bounds="[0,700][100,800]" />
+</hierarchy>"""
+    client = FakeAdbClient(
+        ui_dumps=[already_past_gear_xml] + [WIFI_SETTINGS_NAV_SCREEN_XML] * 30,
+    )
+
+    with caplog.at_level(logging.INFO, logger="src.phase2.apn_setup"):
+        result = _navigate_apn_menu(client, WIFI_SETTINGS_NAV_PROFILE.apn_settings())
+
+    assert result is True
+    gear_tap = "input tap {} {}".format((0 + 100) // 2, (0 + 100) // 2)
+    assert gear_tap not in client.shell_calls
+    final_tap = "input tap {} {}".format((0 + 100) // 2, (100 + 200) // 2)
+    assert final_tap in client.shell_calls
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("skipping the leading step(s)" in m for m in messages)
+
+
 def test_navigate_apn_menu_logs_when_final_step_not_found(caplog):
     screen_with_gear_but_not_final_step_xml = """<hierarchy>
   <node resource-id="com.android.settings:id/settings_button" bounds="[0,0][100,100]" />

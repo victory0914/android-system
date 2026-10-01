@@ -806,6 +806,39 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
                 "apn_settings.menu_path is empty — nothing to navigate"
             )
             return False
+
+        last_step = menu_path[-1]
+        step_type = last_step.get("type", "text") if isinstance(last_step, dict) else "text"
+        step_value = last_step["value"] if isinstance(last_step, dict) else last_step
+        if step_type != "text":
+            raise ValueError(
+                "reach_via_wifi_settings_intent's menu_path must end with "
+                f"a {{'type': 'text', ...}} step, got {step_type!r}"
+            )
+
+        # Real finding (2026-10-02, same retest as the already-on-APN-list
+        # check above): one device (HQ634A0C5D) landed directly on the
+        # SIM-scoped mobile-network-settings screen itself — one step
+        # *past* the leading steps (the gear icon) but one step *before*
+        # the APN list — with "アクセス ポイント名" already visible and
+        # tappable (visible text included 'SMS の設定', 'モバイルデータ',
+        # 'ローミング', 'ネットワーク', ..., 'アクセス ポイント名'). Same
+        # root cause as the already-on-APN-list case just above (the
+        # WIFI_SETTINGS intent resumes Settings' existing task from
+        # wherever a previous run left it, not a fresh state) — just a
+        # different leftover screen. Rather than special-case this one
+        # specific screen too, check generally: if the final step is
+        # already tappable on the screen the intent landed on, the
+        # leading steps have nothing to do — skip straight to it.
+        already_at_final_step = find_by_text(ui_xml_after_intent, step_value) is not None
+        if already_at_final_step:
+            _log(client).info(
+                "apn: WIFI_SETTINGS intent resumed on a screen where the "
+                "final menu_path step (%r) is already visible (Settings' "
+                "task was already further along from a previous run) — "
+                "skipping the leading step(s) and tapping it directly",
+                step_value,
+            )
         # Real finding (2026-10-01): this was a silent `return False` with
         # no log line at all — in an 11-device parallel run, every device
         # that failed here looked identical from the log (a multi-second
@@ -818,7 +851,7 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
         # nothing on a missed step (it's shared by wizard/wifi navigation
         # too, where "not found" isn't always an error) — this is the
         # right layer to say so, since here it always is one.
-        if len(menu_path) > 1 and not navigate_menu_path(client, menu_path[:-1]):
+        elif len(menu_path) > 1 and not navigate_menu_path(client, menu_path[:-1]):
             _log(client).error(
                 "apn: could not navigate the SIM-scoped menu_path's "
                 "leading step(s) (everything before the final tap) — a "
@@ -840,14 +873,6 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
         # once first so the row settles comfortably clear of the edge —
         # same defensive pattern already used for MCC/MNC's
         # below-the-fold rows (_fill_labeled_field()).
-        last_step = menu_path[-1]
-        step_type = last_step.get("type", "text") if isinstance(last_step, dict) else "text"
-        step_value = last_step["value"] if isinstance(last_step, dict) else last_step
-        if step_type != "text":
-            raise ValueError(
-                "reach_via_wifi_settings_intent's menu_path must end with "
-                f"a {{'type': 'text', ...}} step, got {step_type!r}"
-            )
         scroll_down(client)
         if not tap_by_text(client, step_value):
             _log(client).error(
