@@ -2256,6 +2256,63 @@ a bigger guess. New tests (`tests/test_apn_setup.py`):
 `test_navigate_apn_menu_fails_loudly_when_disable_cannot_be_confirmed`.
 277 tests passing total.
 
+**Update, same day (2026-10-02), first real retest of the auto-disable
+fix: 7/11 succeeded again, and one real half-failure bug found and
+fixed.** Client re-ran the same 11-device batch. Result composition
+changed in an informative way:
+
+- **The same 3 `HazardousScreenError` devices failed a 3rd consecutive
+  run** — `352063910272451`, `HQ63460161`, `HQ62540758`, identical to
+  the previous two runs. Three runs in a row, same exact 3 physical
+  units, strengthens the port/cable/hub-position hypothesis
+  considerably — this is no longer "probably reproducible," it's now
+  directly observed three times.
+- **`HQ627F2149` failed for a genuinely new reason — a real bug in the
+  disable logic itself, not Airplane Mode being hard to fix.** Its
+  first attempt's `am broadcast -a android.intent.action.AIRPLANE_MODE
+  --ez state false` failed with an `AdbCommandError` (plausibly
+  transient contention — 11 devices sharing one adb server) — but the
+  *preceding* `settings put global airplane_mode_on 0` on that same
+  attempt had already succeeded. That left the **stored** setting at
+  `'0'` while the **actual radio state** never changed (the broadcast
+  is what makes the system act on it). Every subsequent retry then read
+  the stored value, saw `'0'`, concluded Airplane Mode was already off,
+  and skipped the whole fix path — while the device's screen kept
+  showing the exact same Airplane Mode quick-settings view on every
+  retry, confirmed directly from the log's `all_visible_texts()` output
+  (`['18:28', '10月1日木曜日', '機内モード', '100%', '充電が完了しました']`,
+  identical on all 3 retries). **This was the worst possible outcome of
+  a transient command failure** — a silent, self-reinforcing false
+  "it's already off" that no retry could ever correct on its own.
+
+**Fixed** (`src/phase2/apn_setup.py`): `_disable_airplane_mode()` now
+retries the `settings put` + `am broadcast` pair up to
+`_AIRPLANE_MODE_DISABLE_COMMAND_MAX_ATTEMPTS` (3) times on an
+`AdbCommandError` before giving up, with a short delay between
+attempts — so a single transient command failure (the likely cause,
+matching this project's other findings about 11-device parallel adb
+contention) doesn't get a chance to leave this half-applied,
+self-masking state behind. Also tightened the outer failure message in
+`_navigate_apn_menu()`, which previously always said "still '1' after
+Ns of polling" even when the real cause was an immediate command
+failure, not a timeout — it now just points at
+`_disable_airplane_mode()`'s own more specific message instead of
+potentially misstating the reason. New tests:
+`test_disable_airplane_mode_returns_false_on_adb_error` (now asserts
+all 3 attempts actually happened before giving up),
+`test_disable_airplane_mode_succeeds_on_a_retry_after_one_transient_failure`
+(reproduces the exact real scenario above — first broadcast fails,
+retry succeeds — and confirms the function doesn't give up after just
+the one failure). 278 tests passing total.
+
+**Not yet confirmed on real hardware** — the next retest should show
+`HQ627F2149` (and any other device that happens to hit a transient
+command failure) recovering via the retry instead of being left in the
+silent half-applied state. The `HazardousScreenError` cluster remains
+the one fully open item — see the operational recommendation (USB
+port/cable swap test) above, now backed by a third consecutive
+confirmation of the same 3 devices.
+
 ---
 
 ## Dump capture status (all models)

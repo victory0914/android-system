@@ -1214,16 +1214,68 @@ def test_disable_airplane_mode_returns_false_if_still_on_after_timeout():
 
 
 def test_disable_airplane_mode_returns_false_on_adb_error(caplog):
+    """Real finding, 2026-10-02: a single `am broadcast` failure under
+    heavy parallel load left the stored setting at '0' with the radios
+    never actually toggled — command_max_attempts retries the pair before
+    giving up, so a lone transient failure doesn't need to be the end of
+    it."""
     client = FakeAdbClient(
         shell_failures={"settings put global airplane_mode_on 0"},
     )
 
-    with caplog.at_level(logging.ERROR, logger="src.phase2.apn_setup"):
-        result = _disable_airplane_mode(client, timeout_seconds=0, interval_seconds=0)
+    with caplog.at_level(logging.WARNING, logger="src.phase2.apn_setup"):
+        result = _disable_airplane_mode(
+            client,
+            timeout_seconds=0,
+            interval_seconds=0,
+            command_max_attempts=3,
+            command_retry_delay_seconds=0,
+        )
 
     assert result is False
+    # Retried the full command_max_attempts before giving up.
+    assert client.shell_calls.count("settings put global airplane_mode_on 0") == 3
     messages = [r.getMessage() for r in caplog.records]
-    assert any("failed to disable Airplane Mode" in m for m in messages)
+    assert any("attempt 1/3 to disable Airplane Mode via adb failed" in m for m in messages)
+    assert any("giving up disabling Airplane Mode via adb after 3 attempts" in m for m in messages)
+
+
+def test_disable_airplane_mode_succeeds_on_a_retry_after_one_transient_failure():
+    """The exact real scenario found 2026-10-02: the first attempt's
+    `am broadcast` fails, a later attempt succeeds — must not give up
+    after just the one failure."""
+    from src.device.adb_client import AdbCommandError
+
+    class _FlakyThenOkClient(FakeAdbClient):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._broadcast_calls = 0
+            self._disabled = False
+
+        def shell(self, command, timeout=30):
+            if command == "settings put global airplane_mode_on 0":
+                self.shell_calls.append(command)
+                return ""
+            if command == "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false":
+                self.shell_calls.append(command)
+                self._broadcast_calls += 1
+                if self._broadcast_calls == 1:
+                    raise AdbCommandError(command, "Exception occurred while executing 'broadcast':")
+                self._disabled = True
+                return ""
+            if command == "settings get global airplane_mode_on":
+                self.shell_calls.append(command)
+                return "0" if self._disabled else "1"
+            return super().shell(command, timeout=timeout)
+
+    client = _FlakyThenOkClient()
+
+    result = _disable_airplane_mode(
+        client, timeout_seconds=1, interval_seconds=0,
+        command_max_attempts=3, command_retry_delay_seconds=0,
+    )
+
+    assert result is True
 
 
 def test_navigate_apn_menu_disables_airplane_mode_and_continues_navigation(monkeypatch):
@@ -1255,7 +1307,7 @@ def test_navigate_apn_menu_fails_loudly_when_disable_cannot_be_confirmed(monkeyp
 
     assert result is False
     messages = [r.getMessage() for r in caplog.records]
-    assert any("could not confirm Airplane Mode was turned off" in m for m in messages)
+    assert any("could not confirm Airplane Mode is off" in m for m in messages)
     # Never even attempted navigation once the precondition couldn't be fixed.
     assert "am start -a android.settings.WIFI_SETTINGS" not in client.shell_calls
 

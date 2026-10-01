@@ -606,27 +606,74 @@ def _looks_like_apn_list_screen(ui_xml: str) -> bool:
 _AIRPLANE_MODE_DISABLE_POLL_TIMEOUT_SECONDS = 10.0
 _AIRPLANE_MODE_DISABLE_POLL_INTERVAL_SECONDS = 1.0
 
+# Real finding (2026-10-02, 11-device retest): under heavy parallel adb
+# load, `am broadcast` failed once with no further detail
+# ("Exception occurred while executing 'broadcast':") while the preceding
+# `settings put` on the very same device had already succeeded — leaving
+# the *stored* setting at '0' even though the broadcast that makes the
+# system actually act on it never completed, so the device's real radio
+# state never changed. That's the worst possible half-failure: the next
+# attempt's precondition check reads the stored value, sees '0', and
+# wrongly concludes Airplane Mode is already off — skipping the fix
+# entirely while the device is still actually in Airplane Mode (confirmed
+# the same device's screen still showed the Airplane Mode quick-settings
+# view on every subsequent retry). A single bounded retry on the two
+# commands themselves (not yet confirmed to be enough — this is reasoning
+# from "11 devices contending for one adb server" being the likely cause
+# of a transient single-command failure, matching this project's other
+# findings at this scale, not a guess at a different mechanism) should
+# make a one-off command failure much less likely to leave this
+# inconsistent half-applied state behind.
+_AIRPLANE_MODE_DISABLE_COMMAND_MAX_ATTEMPTS = 3
+_AIRPLANE_MODE_DISABLE_COMMAND_RETRY_DELAY_SECONDS = 1.0
+
 
 def _disable_airplane_mode(
     client: AdbClientProtocol,
     *,
     timeout_seconds: float = _AIRPLANE_MODE_DISABLE_POLL_TIMEOUT_SECONDS,
     interval_seconds: float = _AIRPLANE_MODE_DISABLE_POLL_INTERVAL_SECONDS,
+    command_max_attempts: int = _AIRPLANE_MODE_DISABLE_COMMAND_MAX_ATTEMPTS,
+    command_retry_delay_seconds: float = _AIRPLANE_MODE_DISABLE_COMMAND_RETRY_DELAY_SECONDS,
 ) -> bool:
     """Turn Airplane Mode off via adb and poll `settings get global
     airplane_mode_on` until it confirms '0', up to `timeout_seconds`
-    (overridable so tests don't need a real multi-second wait — same
-    pattern as wifi_setup.py's connect_wifi() poll parameters). Returns
-    True once confirmed off, False if the adb commands themselves fail or
-    it's still on when the poll times out — never raises, so the caller
-    can treat either outcome as a normal failure rather than a crash."""
-    try:
-        client.shell("settings put global airplane_mode_on 0")
-        client.shell(
-            "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false"
+    (overridable so tests don't need a real multi-wait — same pattern as
+    wifi_setup.py's connect_wifi() poll parameters). Returns True once
+    confirmed off, False if the adb commands themselves fail on every
+    attempt or it's still on when the poll times out — never raises, so
+    the caller can treat either outcome as a normal failure rather than a
+    crash.
+
+    Retries the `settings put` + `am broadcast` pair up to
+    `command_max_attempts` times on an AdbCommandError before giving up —
+    see this constant's own comment for the real failure this guards
+    against (a lone transient command failure leaving the stored setting
+    at '0' without the broadcast that actually applies it, which would
+    otherwise make a *later* attempt's precondition check wrongly think
+    Airplane Mode is already off)."""
+    last_exc: AdbCommandError | None = None
+    for attempt in range(1, command_max_attempts + 1):
+        try:
+            client.shell("settings put global airplane_mode_on 0")
+            client.shell(
+                "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false"
+            )
+            last_exc = None
+            break
+        except AdbCommandError as exc:
+            last_exc = exc
+            _log(client).warning(
+                "apn: attempt %d/%d to disable Airplane Mode via adb "
+                "failed: %s", attempt, command_max_attempts, exc,
+            )
+            if attempt < command_max_attempts:
+                time.sleep(command_retry_delay_seconds)
+    if last_exc is not None:
+        _log(client).error(
+            "apn: giving up disabling Airplane Mode via adb after %d "
+            "attempts: %s", command_max_attempts, last_exc,
         )
-    except AdbCommandError as exc:
-        _log(client).error("apn: failed to disable Airplane Mode via adb: %s", exc)
         return False
 
     deadline = time.monotonic() + timeout_seconds
@@ -717,11 +764,15 @@ def _navigate_apn_menu(client: AdbClientProtocol, apn: dict) -> bool:
             "2026-10-02) before continuing navigation."
         )
         if not _disable_airplane_mode(client):
+            # _disable_airplane_mode() already logged exactly why (a
+            # command failure on every attempt, or still '1' after
+            # polling) — this doesn't restate which, just that this
+            # attempt is giving up because of it.
             _log(client).error(
-                "apn: could not confirm Airplane Mode was turned off via "
-                "adb (still '1' after %.0fs of polling) — turn it off "
-                "manually on the device before retrying",
-                _AIRPLANE_MODE_DISABLE_POLL_TIMEOUT_SECONDS,
+                "apn: could not confirm Airplane Mode is off after "
+                "attempting to disable it via adb (see the error above "
+                "for why) — turn it off manually on the device before "
+                "retrying"
             )
             return False
         _log(client).info("apn: Airplane Mode confirmed off; continuing navigation")

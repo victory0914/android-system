@@ -92,6 +92,22 @@ be confirmed, rather than every time airplane mode is encountered. The
 against real hardware** — the next retest should show whether it's
 enough. 277 tests passing. See `docs/record.md` for the full account.
 
+**Update, same day — first real retest: 7/11 succeeded again, one real
+bug found and fixed.** The same 3 `HazardousScreenError` devices
+(`352063910272451`, `HQ63460161`, `HQ62540758`) failed a **3rd
+consecutive run** — no longer just "probably reproducible," directly
+confirmed 3 times now. `HQ627F2149` failed for a new reason: a
+transient `am broadcast` failure on its first attempt left the
+*stored* Airplane Mode setting at `'0'` without the radios actually
+toggling (the broadcast is what applies it) — every retry then read
+the stored value, wrongly concluded it was already off, and skipped
+the fix while the device stayed in Airplane Mode. **Fixed**:
+`_disable_airplane_mode()` now retries the put+broadcast pair up to 3
+times before giving up, so one transient command failure can't leave
+this silent, self-masking half-applied state behind. 278 tests
+passing. See `docs/record.md` for the full account, including the
+exact log evidence.
+
 **🎉🎉🎉🎉 Status as of 2026-09-22: a real, auto-detected 4-device parallel
 run succeeded end-to-end — SHG10, SHG07, SOG07, and SOG08 all reached
 `SUCCESS: ... reached LOGIN_INSTALL`, invoked with nothing but
